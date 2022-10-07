@@ -16,11 +16,4 @@ extern crate bump;
 
 use bump::*;
 
-fn main() {
-    let bp = BumpAllocator::new();
-    let i1 = bp.alloc::<i32>();
-    let i2 = bp.alloc::<i32>();
-    *i1 = 1;
-    *i2 = 1;
-    println!("{} {}", i1, i2);
-}
+fn main() {}

@@ -82,3 +82,48 @@ impl Drop for BumpAllocator {
             .push((unsafe { alloc::alloc(layout) }, 0, STARTING_SIZE));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn alloc_uniform() {
+        let bp = BumpAllocator::new();
+        let num = 10000;
+        let mut ptrs = vec![];
+        for i in 0..num {
+            let a = bp.alloc::<usize>();
+            *a = i;
+            ptrs.push(a);
+        }
+        for i in 0..num {
+            println!("{} {}", *ptrs[i], i);
+            assert!(*ptrs[i] == i);
+        }
+    }
+
+    #[test]
+    fn alloc_non_uniform() {
+        let bp = BumpAllocator::new();
+        let num = 10000;
+        let mut ptrs1 = vec![];
+        let mut ptrs2 = vec![];
+        for i in 0..num {
+            let a = bp.alloc::<usize>();
+            *a = i;
+            ptrs1.push(a);
+        }
+        for i in 0..num {
+            let a = bp.alloc::<f32>();
+            *a = i as f32;
+            ptrs2.push(a);
+        }
+        for i in 0..num {
+            assert!(*ptrs1[i] == i);
+        }
+        for i in 0..num {
+            assert!(*ptrs2[i] == i as f32);
+        }
+    }
+}
