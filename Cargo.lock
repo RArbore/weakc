@@ -3,5 +3,12 @@
 version = 3
 
 [[package]]
+name = "bump"
+version = "0.1.0"
+
+[[package]]
 name = "weakc"
 version = "0.1.0"
+dependencies = [
+ "bump",
+]
