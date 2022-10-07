@@ -71,8 +71,10 @@ impl BumpAllocator {
                 .0 as *mut T)
         }
     }
+}
 
-    pub fn dealloc(&mut self) {
+impl Drop for BumpAllocator {
+    fn drop(&mut self) {
         self.blocks.clear();
         let layout = alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
             .expect("ERROR: Couldn't create layout for initial bump allocator block.");
