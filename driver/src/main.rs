@@ -12,8 +12,6 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-extern crate bump;
-
-use bump::*;
-
-fn main() {}
+fn main() {
+    println!("{}", std::mem::size_of::<&[u8]>());
+}
