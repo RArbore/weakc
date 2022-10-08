@@ -12,4 +12,8 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-fn main() {}
+pub mod combi;
+pub mod lex;
+
+pub use combi::*;
+pub use lex::*;

@@ -1,0 +1,8 @@
+[package]
+name = "parse"
+description = "Parser for weak-lang"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bump = { path = "../bump" }

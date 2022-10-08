@@ -12,10 +12,12 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub enum Token {
+use super::combi::*;
+
+pub enum Token<'a> {
     Number(f64),
-    String(&[u8]),
-    Identifier(&[u8]),
+    String(&'a [u8]),
+    Identifier(&'a [u8]),
     False,
     True,
 
@@ -66,5 +68,5 @@ impl Lexer {
         Lexer {}
     }
 
-    pub fn lex(line: &[u8]) {}
+    pub fn lex(chunk: &[u8]) {}
 }

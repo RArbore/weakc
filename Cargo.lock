@@ -7,8 +7,12 @@ name = "bump"
 version = "0.1.0"
 
 [[package]]
-name = "weakc"
+name = "parse"
 version = "0.1.0"
 dependencies = [
  "bump",
 ]
+
+[[package]]
+name = "weakc"
+version = "0.1.0"
