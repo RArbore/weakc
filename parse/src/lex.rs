@@ -129,7 +129,7 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
     let mut tokens = vec![];
     let mut current = clear_whitespace(chunk);
 
-    while current.len() > 0 {
+    'consume: while current.len() > 0 {
         let non_alpha_numeric = combi::parse_any_of(current, NON_ALPHA_TOKENS);
         if let Some((token, rest)) = non_alpha_numeric {
             tokens.push(token);
@@ -144,7 +144,7 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
                 tokens.push(Token::Number(parse_f64(number, decimal)));
                 current = clear_whitespace(rest);
                 continue;
-            } else if let Some((_, rest)) = combi::parse_char(rest, &combi::pred_alpha) {
+            } else if let Some(_) = combi::parse_char(rest, &combi::pred_alpha) {
                 return None;
             } else {
                 tokens.push(Token::Number(parse_f64(number, &[])));
@@ -152,6 +152,22 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
                 continue;
             }
         }
+
+        let (identifier, rest) = combi::parse_seq_char(current, &pred_identifier);
+        if identifier.len() > 0 {
+            for (repr, token) in ALPHA_TOKENS {
+                if *repr == identifier {
+                    tokens.push(*token);
+                    current = clear_whitespace(rest);
+                    continue 'consume;
+                }
+            }
+            tokens.push(Token::Identifier(identifier));
+            current = clear_whitespace(rest);
+            continue;
+        }
+
+        return None;
     }
 
     Some(tokens)
