@@ -62,7 +62,7 @@ pub enum Token<'a> {
     Semicolon,
 }
 
-const SIMPLE_TOKENS: &[(&[u8], Token)] = &[
+const ALPHA_TOKENS: &[(&[u8], Token)] = &[
     (b"F", Token::False),
     (b"T", Token::True),
     (b"p", Token::Print),
@@ -76,6 +76,15 @@ const SIMPLE_TOKENS: &[(&[u8], Token)] = &[
     (b"r", Token::Return),
     (b"N", Token::Nil),
     (b"v", Token::Assert),
+    (b"A", Token::And),
+    (b"O", Token::Or),
+];
+
+const NON_ALPHA_TOKENS: &[(&[u8], Token)] = &[
+    (b"!=", Token::ExclamationEquals),
+    (b"==", Token::EqualsEquals),
+    (b">=", Token::GreaterEquals),
+    (b"<=", Token::LesserEquals),
     (b"+", Token::Plus),
     (b"-", Token::Minus),
     (b"*", Token::Star),
@@ -86,12 +95,6 @@ const SIMPLE_TOKENS: &[(&[u8], Token)] = &[
     (b"=", Token::Equals),
     (b">", Token::Greater),
     (b"<", Token::Lesser),
-    (b"!=", Token::ExclamationEquals),
-    (b"==", Token::EqualsEquals),
-    (b">=", Token::GreaterEquals),
-    (b"<=", Token::LesserEquals),
-    (b"A", Token::And),
-    (b"O", Token::Or),
     (b"(", Token::LeftParen),
     (b")", Token::RightParen),
     (b"{", Token::LeftBrace),
@@ -102,17 +105,52 @@ const SIMPLE_TOKENS: &[(&[u8], Token)] = &[
     (b";", Token::Semicolon),
 ];
 
-pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
-    let mut tokens = vec![];
-    let mut current = chunk;
+fn parse_f64(integral: &[u8], decimal: &[u8]) -> f64 {
+    let mut int = 0.0;
 
-    loop {
-        let attempt = combi::parse_any_of(current, SIMPLE_TOKENS);
-        if let Some((token, rest)) = attempt {
+    for c in integral {
+        int = int * 10.0 + (c - 48) as f64;
+    }
+
+    let mut dec = 0.0;
+    let mut dig = 1.0 / 10.0;
+    for c in decimal {
+        dec += (c - 48) as f64 * dig;
+        dig *= 1.0 / 10.0;
+    }
+
+    int + dec
+}
+
+pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
+    let clear_whitespace = |chunk| combi::parse_seq_char(chunk, &combi::pred_whitespace).1;
+    let pred_identifier = |c| combi::pred_alpha(c) || combi::pred_number(c) || c == b'_';
+
+    let mut tokens = vec![];
+    let mut current = clear_whitespace(chunk);
+
+    while current.len() > 0 {
+        let non_alpha_numeric = combi::parse_any_of(current, NON_ALPHA_TOKENS);
+        if let Some((token, rest)) = non_alpha_numeric {
             tokens.push(token);
-            current = rest;
-        } else {
-            break;
+            current = clear_whitespace(rest);
+            continue;
+        }
+
+        let (number, rest) = combi::parse_seq_char(current, &combi::pred_number);
+        if number.len() > 0 {
+            if let Some((_, rest)) = combi::parse_char(rest, &|c| c == b'.') {
+                let (decimal, rest) = combi::parse_seq_char(rest, &combi::pred_number);
+                tokens.push(Token::Number(parse_f64(number, decimal)));
+                current = clear_whitespace(rest);
+                continue;
+            } else if let Some((_, rest)) = combi::parse_char(rest, &combi::pred_alpha) {
+                return None;
+            } else {
+                tokens.push(Token::Number(parse_f64(number, &[])));
+                current = clear_whitespace(rest);
+                continue;
+            }
         }
     }
 
