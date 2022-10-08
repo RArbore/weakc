@@ -14,7 +14,7 @@
 
 use super::combi;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Token<'a> {
     Number(f64),
     String(&'a [u8]),
@@ -194,4 +194,23 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
     }
 
     Some(tokens)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn simple_lex1() {
+        let tokens = lex(b"This is an english sentence!");
+        let true_tokens = Some(vec![
+            Token::Identifier(b"This"),
+            Token::Identifier(b"is"),
+            Token::Identifier(b"an"),
+            Token::Identifier(b"english"),
+            Token::Identifier(b"sentence"),
+            Token::Exclamation,
+        ]);
+        assert!(tokens == true_tokens);
+    }
 }

@@ -36,12 +36,13 @@ pub fn parse_char<'a>(chunk: &'a [u8], pred: &dyn Fn(u8) -> bool) -> Option<(u8,
 }
 
 pub fn parse_seq_char<'a>(chunk: &'a [u8], pred: &dyn Fn(u8) -> bool) -> (&'a [u8], &'a [u8]) {
-    let i = 0;
+    let mut i = 0;
     while i < chunk.len() {
         let c = chunk[i];
         if !pred(c) {
             return (&chunk[0..i], &chunk[i..]);
         }
+        i += 1;
     }
     (chunk, &[])
 }
