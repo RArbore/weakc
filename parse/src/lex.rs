@@ -167,6 +167,29 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
             continue;
         }
 
+        let quote = combi::parse_char(current, &|c| c == b'"');
+        if let Some((_, rest)) = quote {
+            let (contents, rest) = combi::parse_seq_char(rest, &|c| c != b'"');
+            if let Some((_, rest)) = combi::parse_char(rest, &|c| c == b'"') {
+                tokens.push(Token::String(contents));
+                current = clear_whitespace(rest);
+                continue;
+            } else {
+                return None;
+            }
+        }
+
+        let comment = combi::parse_char(current, &|c| c == b'#');
+        if let Some((_, rest)) = comment {
+            let (_, rest) = combi::parse_seq_char(rest, &|c| c != b'\n');
+            if let Some((_, rest)) = combi::parse_char(rest, &|c| c == b'\n') {
+                current = clear_whitespace(rest);
+                continue;
+            } else {
+                break;
+            }
+        }
+
         return None;
     }
 
