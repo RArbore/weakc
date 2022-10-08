@@ -141,10 +141,14 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
         if number.len() > 0 {
             if let Some((_, rest)) = combi::parse_char(rest, &|c| c == b'.') {
                 let (decimal, rest) = combi::parse_seq_char(rest, &combi::pred_number);
+                if let Some(_) = combi::parse_char(rest, &|c| combi::pred_alpha(c) || c == b'_') {
+                    return None;
+                }
                 tokens.push(Token::Number(parse_f64(number, decimal)));
                 current = clear_whitespace(rest);
                 continue;
-            } else if let Some(_) = combi::parse_char(rest, &combi::pred_alpha) {
+            } else if let Some(_) = combi::parse_char(rest, &|c| combi::pred_alpha(c) || c == b'_')
+            {
                 return None;
             } else {
                 tokens.push(Token::Number(parse_f64(number, &[])));
@@ -211,6 +215,41 @@ mod tests {
             Token::Identifier(b"sentence"),
             Token::Exclamation,
         ]);
-        assert!(tokens == true_tokens);
+        assert_eq!(tokens, true_tokens);
+    }
+
+    #[test]
+    fn simple_lex2() {
+        let tokens = lex(b"f my_func() { r 1 + 2.1; }");
+        let true_tokens = Some(vec![
+            Token::Function,
+            Token::Identifier(b"my_func"),
+            Token::LeftParen,
+            Token::RightParen,
+            Token::LeftBrace,
+            Token::Return,
+            Token::Number(1.0),
+            Token::Plus,
+            Token::Number(2.1),
+            Token::Semicolon,
+            Token::RightBrace,
+        ]);
+        assert_eq!(tokens, true_tokens);
+    }
+
+    #[test]
+    fn simple_lex3() {
+        let tokens = lex(b"100 234.1 487.1 12487.45@");
+        let true_tokens = Some(vec![
+            Token::Number(100.0),
+            Token::Number(234.1),
+            Token::Number(487.1),
+            Token::Number(12487.45),
+            Token::At,
+        ]);
+        assert_eq!(tokens, true_tokens);
+
+        let tokens = lex(b"100 234.1 487.1_ 12487.45@");
+        assert_eq!(tokens, None);
     }
 }

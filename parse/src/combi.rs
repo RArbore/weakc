@@ -26,7 +26,10 @@ pub fn pred_alpha(c: u8) -> bool {
     (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
 }
 
-pub fn parse_char<'a>(chunk: &'a [u8], pred: &dyn Fn(u8) -> bool) -> Option<(u8, &'a [u8])> {
+pub fn parse_char<'a, T: Copy + PartialEq>(
+    chunk: &'a [T],
+    pred: &dyn Fn(T) -> bool,
+) -> Option<(T, &'a [T])> {
     let c = *chunk.get(0)?;
     if pred(c) {
         Some((c, &chunk[1..]))
@@ -35,7 +38,10 @@ pub fn parse_char<'a>(chunk: &'a [u8], pred: &dyn Fn(u8) -> bool) -> Option<(u8,
     }
 }
 
-pub fn parse_seq_char<'a>(chunk: &'a [u8], pred: &dyn Fn(u8) -> bool) -> (&'a [u8], &'a [u8]) {
+pub fn parse_seq_char<'a, T: Copy + PartialEq>(
+    chunk: &'a [T],
+    pred: &dyn Fn(T) -> bool,
+) -> (&'a [T], &'a [T]) {
     let mut i = 0;
     while i < chunk.len() {
         let c = chunk[i];
@@ -47,7 +53,10 @@ pub fn parse_seq_char<'a>(chunk: &'a [u8], pred: &dyn Fn(u8) -> bool) -> (&'a [u
     (chunk, &[])
 }
 
-pub fn parse_string<'a>(chunk: &'a [u8], string: &[u8]) -> Option<(&'a [u8], &'a [u8])> {
+pub fn parse_string<'a, T: Copy + PartialEq>(
+    chunk: &'a [T],
+    string: &[T],
+) -> Option<(&'a [T], &'a [T])> {
     if chunk.len() < string.len() {
         return None;
     }
@@ -59,11 +68,11 @@ pub fn parse_string<'a>(chunk: &'a [u8], string: &[u8]) -> Option<(&'a [u8], &'a
     Some((&chunk[0..string.len()], &chunk[string.len()..]))
 }
 
-pub fn parse_seq<'a, 'b, T>(
-    chunk: &'a [u8],
-    parse: &dyn Fn(&'a [u8], &'b bump::BumpAllocator) -> Option<(&'b T, &'a [u8])>,
+pub fn parse_seq<'a, 'b, T: Copy + PartialEq, R>(
+    chunk: &'a [T],
+    parse: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
     bump: &'b bump::BumpAllocator,
-) -> (Vec<&'b T>, &'a [u8]) {
+) -> (Vec<&'b R>, &'a [T]) {
     let mut xs = vec![];
     let mut current = chunk;
 
@@ -80,12 +89,12 @@ pub fn parse_seq<'a, 'b, T>(
     (xs, current)
 }
 
-pub fn parse_or<'a, 'b, T>(
-    chunk: &'a [u8],
-    parse1: &dyn Fn(&'a [u8], &'b bump::BumpAllocator) -> Option<(&'b T, &'a [u8])>,
-    parse2: &dyn Fn(&'a [u8], &'b bump::BumpAllocator) -> Option<(&'b T, &'a [u8])>,
+pub fn parse_or<'a, 'b, T: Copy + PartialEq, R>(
+    chunk: &'a [T],
+    parse1: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
+    parse2: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
     bump: &'b bump::BumpAllocator,
-) -> Option<(&'b T, &'a [u8])> {
+) -> Option<(&'b R, &'a [T])> {
     if let Some(success) = parse1(chunk, bump) {
         Some(success)
     } else if let Some(success) = parse2(chunk, bump) {
@@ -95,21 +104,21 @@ pub fn parse_or<'a, 'b, T>(
     }
 }
 
-pub fn parse_and<'a, 'b, T1, T2>(
-    chunk: &'a [u8],
-    parse1: &dyn Fn(&'a [u8], &'b bump::BumpAllocator) -> Option<(&'b T1, &'a [u8])>,
-    parse2: &dyn Fn(&'a [u8], &'b bump::BumpAllocator) -> Option<(&'b T2, &'a [u8])>,
+pub fn parse_and<'a, 'b, T: Copy + PartialEq, R1, R2>(
+    chunk: &'a [T],
+    parse1: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R1, &'a [T])>,
+    parse2: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R2, &'a [T])>,
     bump: &'b bump::BumpAllocator,
-) -> Option<(&'b T1, &'b T2, &'a [u8])> {
+) -> Option<(&'b R1, &'b R2, &'a [T])> {
     let (first, rest) = parse1(chunk, bump)?;
     let (second, rest) = parse2(rest, bump)?;
     Some((first, second, rest))
 }
 
-pub fn parse_any_of<'a, T: Copy>(
-    chunk: &'a [u8],
-    assoc_list: &[(&[u8], T)],
-) -> Option<(T, &'a [u8])> {
+pub fn parse_any_of<'a, T: Copy + PartialEq, R: Copy>(
+    chunk: &'a [T],
+    assoc_list: &[(&[T], R)],
+) -> Option<(R, &'a [T])> {
     for (string, token) in assoc_list {
         if let Some((_, rest)) = parse_string(chunk, string) {
             return Some((*token, rest));
