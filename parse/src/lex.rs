@@ -63,12 +63,12 @@ pub enum Token<'a> {
 }
 
 const ALPHA_TOKENS: &[(&[u8], Token)] = &[
+    (b"sa", Token::ShapedAs),
     (b"F", Token::False),
     (b"T", Token::True),
     (b"p", Token::Print),
     (b"a", Token::Variable),
     (b"s", Token::Shape),
-    (b"sa", Token::ShapedAs),
     (b"i", Token::If),
     (b"w", Token::While),
     (b"f", Token::Function),

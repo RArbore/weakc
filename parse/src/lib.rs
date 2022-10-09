@@ -14,6 +14,8 @@
 
 pub mod combi;
 pub mod lex;
+pub mod parse;
 
 pub use combi::*;
 pub use lex::*;
+pub use parse::*;
