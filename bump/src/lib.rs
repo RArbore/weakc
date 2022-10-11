@@ -30,7 +30,7 @@ impl BumpAllocator {
         }
     }
 
-    pub fn alloc<T: Sized>(&self) -> &mut T {
+    pub fn alloc<T: Sized>(&self, to_alloc: T) -> &mut T {
         let layout = alloc::Layout::new::<T>();
         let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
 
@@ -42,7 +42,9 @@ impl BumpAllocator {
             if *size + align_offset + layout.size() <= *alloc {
                 let base = *size + align_offset;
                 *size += align_offset + layout.size();
-                return unsafe { &mut *(((*ptr).offset(base as isize)) as *mut T) };
+                let alloc = unsafe { &mut *(((*ptr).offset(base as isize)) as *mut T) };
+                *alloc = to_alloc;
+                return alloc;
             }
         }
 
@@ -63,13 +65,15 @@ impl BumpAllocator {
         );
         mut_self.blocks.push(new_block);
 
-        unsafe {
+        let alloc = unsafe {
             &mut *(mut_self
                 .blocks
                 .last()
                 .expect("ERROR: Bump allocator block list is erroneously empty.")
                 .0 as *mut T)
-        }
+        };
+        *alloc = to_alloc;
+        return alloc;
     }
 }
 
@@ -93,8 +97,7 @@ mod tests {
         let num = 10000;
         let mut ptrs = vec![];
         for i in 0..num {
-            let a = bp.alloc::<usize>();
-            *a = i;
+            let a = bp.alloc::<usize>(i);
             ptrs.push(a);
         }
         for i in 0..num {
@@ -110,13 +113,11 @@ mod tests {
         let mut ptrs1 = vec![];
         let mut ptrs2 = vec![];
         for i in 0..num {
-            let a = bp.alloc::<usize>();
-            *a = i;
+            let a = bp.alloc::<usize>(i);
             ptrs1.push(a);
         }
         for i in 0..num {
-            let a = bp.alloc::<f32>();
-            *a = i as f32;
+            let a = bp.alloc::<f32>(i as f32);
             ptrs2.push(a);
         }
         for i in 0..num {

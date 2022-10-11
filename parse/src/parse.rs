@@ -69,3 +69,32 @@ pub enum ASTBinaryOp {
 pub fn parse<'a>(tokens: &[lex::Token], bump: &'a bump::BumpAllocator) -> ASTStmt<'a> {
     ASTStmt::Block(&[])
 }
+
+pub fn parse_boolean<'a, 'b>(
+    tokens: &'a [lex::Token<'a>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'a>])> {
+    combi::parse_token(
+        tokens,
+        &|c| match c {
+            lex::Token::True => Some(ASTExpr::Boolean(true)),
+            lex::Token::False => Some(ASTExpr::Boolean(false)),
+            _ => None,
+        },
+        bump,
+    )
+}
+
+pub fn parse_nil<'a, 'b>(
+    tokens: &'a [lex::Token<'a>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'a>])> {
+    combi::parse_token(
+        tokens,
+        &|c| match c {
+            lex::Token::Nil => Some(ASTExpr::Nil),
+            _ => None,
+        },
+        bump,
+    )
+}
