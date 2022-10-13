@@ -14,6 +14,7 @@
 
 use std::alloc;
 use std::cmp::max;
+use std::slice;
 
 const STARTING_SIZE: usize = 4096;
 
@@ -30,20 +31,18 @@ impl BumpAllocator {
         }
     }
 
-    pub fn alloc<T: Sized>(&self, to_alloc: T) -> &mut T {
-        let layout = alloc::Layout::new::<T>();
+    fn alloc_impl(&self, layout_size: usize, layout_align: usize) -> *mut u8 {
         let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
 
         for (ptr, size, alloc) in mut_self.blocks.iter_mut().rev() {
             let mut align_offset = 0;
-            if (*ptr as usize + *size) % layout.align() != 0 {
-                align_offset = layout.align() - ((*ptr as usize + *size) % layout.align());
+            if (*ptr as usize + *size) % layout_align != 0 {
+                align_offset = layout_align - ((*ptr as usize + *size) % layout_align);
             }
-            if *size + align_offset + layout.size() <= *alloc {
+            if *size + align_offset + layout_size <= *alloc {
                 let base = *size + align_offset;
-                *size += align_offset + layout.size();
-                let alloc = unsafe { &mut *(((*ptr).offset(base as isize)) as *mut T) };
-                *alloc = to_alloc;
+                *size += align_offset + layout_size;
+                let alloc = unsafe { (*ptr).offset(base as isize) } as *mut u8;
                 return alloc;
             }
         }
@@ -54,25 +53,42 @@ impl BumpAllocator {
                 .last()
                 .expect("ERROR: Bump allocator block list is erroneously empty.")
                 .2,
-            layout.size(),
+            layout_size,
         );
-        let new_block_layout = alloc::Layout::from_size_align(new_size, layout.align())
+        let new_block_layout = alloc::Layout::from_size_align(new_size, layout_align)
             .expect("ERROR: Couldn't create layout for new bump allocator block.");
         let new_block = (
             unsafe { alloc::alloc(new_block_layout) },
-            layout.size(),
+            layout_size,
             new_size,
         );
         mut_self.blocks.push(new_block);
 
-        let alloc = unsafe {
-            &mut *(mut_self
-                .blocks
-                .last()
-                .expect("ERROR: Bump allocator block list is erroneously empty.")
-                .0 as *mut T)
-        };
+        let alloc = mut_self
+            .blocks
+            .last()
+            .expect("ERROR: Bump allocator block list is erroneously empty.")
+            .0 as *mut u8;
+        return alloc;
+    }
+
+    pub fn alloc<T: Sized>(&self, to_alloc: T) -> &mut T {
+        let layout = alloc::Layout::new::<T>();
+        let alloc = self.alloc_impl(layout.size(), layout.align()) as *mut T;
+        let alloc = unsafe { &mut *alloc };
         *alloc = to_alloc;
+        return alloc;
+    }
+
+    pub fn alloc_slice<'a, 'b, T: Sized + Clone>(&'a self, to_alloc: &'b [T]) -> &'a mut [T] {
+        assert!(
+            to_alloc.len() > 0,
+            "ERROR: Cannot allocate a slice of size 0."
+        );
+        let layout = alloc::Layout::new::<T>();
+        let alloc = self.alloc_impl(layout.size() * to_alloc.len(), layout.align()) as *mut T;
+        let alloc = unsafe { slice::from_raw_parts_mut(alloc, to_alloc.len()) };
+        alloc.clone_from_slice(to_alloc);
         return alloc;
     }
 }

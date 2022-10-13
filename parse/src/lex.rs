@@ -122,7 +122,7 @@ fn parse_f64(integral: &[u8], decimal: &[u8]) -> f64 {
     int + dec
 }
 
-pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
+pub fn lex<'a, 'b>(chunk: &'a [u8], bump: &'b bump::BumpAllocator) -> Option<Vec<Token<'b>>> {
     let clear_whitespace = |chunk| combi::parse_seq_char(chunk, &combi::pred_whitespace).1;
     let pred_identifier = |c| combi::pred_alpha(c) || combi::pred_number(c) || c == b'_';
 
@@ -166,7 +166,7 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
                     continue 'consume;
                 }
             }
-            tokens.push(Token::Identifier(identifier));
+            tokens.push(Token::Identifier(bump.alloc_slice(identifier)));
             current = clear_whitespace(rest);
             continue;
         }
@@ -175,7 +175,7 @@ pub fn lex(chunk: &[u8]) -> Option<Vec<Token>> {
         if let Some((_, rest)) = quote {
             let (contents, rest) = combi::parse_seq_char(rest, &|c| c != b'"');
             if let Some((_, rest)) = combi::parse_char(rest, &|c| c == b'"') {
-                tokens.push(Token::String(contents));
+                tokens.push(Token::String(bump.alloc_slice(contents)));
                 current = clear_whitespace(rest);
                 continue;
             } else {
@@ -206,7 +206,8 @@ mod tests {
 
     #[test]
     fn simple_lex1() {
-        let tokens = lex(b"This is an english sentence!");
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"This is an english sentence!", &bump);
         let true_tokens = Some(vec![
             Token::Identifier(b"This"),
             Token::Identifier(b"is"),
@@ -220,7 +221,8 @@ mod tests {
 
     #[test]
     fn simple_lex2() {
-        let tokens = lex(b"f my_func() { r 1 + 2.1; }");
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"f my_func() { r 1 + 2.1; }", &bump);
         let true_tokens = Some(vec![
             Token::Function,
             Token::Identifier(b"my_func"),
@@ -239,7 +241,8 @@ mod tests {
 
     #[test]
     fn simple_lex3() {
-        let tokens = lex(b"100 234.1 487.1 12487.45@");
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"100 234.1 487.1 12487.45@", &bump);
         let true_tokens = Some(vec![
             Token::Number(100.0),
             Token::Number(234.1),
@@ -249,7 +252,7 @@ mod tests {
         ]);
         assert_eq!(tokens, true_tokens);
 
-        let tokens = lex(b"100 234.1 487.1_ 12487.45@");
+        let tokens = lex(b"100 234.1 487.1_ 12487.45@", &bump);
         assert_eq!(tokens, None);
     }
 }
