@@ -124,29 +124,9 @@ fn parse_parentheses<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    let (_, rest) = combi::parse_token(
-        tokens,
-        &|c| {
-            if c == lex::Token::LeftParen {
-                Some(())
-            } else {
-                None
-            }
-        },
-        bump,
-    )?;
+    let rest = combi::parse_token_consume(tokens, lex::Token::LeftParen)?;
     let (expr, rest) = parse_expr(rest, bump)?;
-    let (_, rest) = combi::parse_token(
-        rest,
-        &|c| {
-            if c == lex::Token::RightParen {
-                Some(())
-            } else {
-                None
-            }
-        },
-        bump,
-    )?;
+    let rest = combi::parse_token_consume(rest, lex::Token::RightParen)?;
     Some((expr, rest))
 }
 

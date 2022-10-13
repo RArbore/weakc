@@ -81,6 +81,18 @@ pub fn parse_token<'a, 'b, T: Copy + PartialEq, R>(
     }
 }
 
+pub fn parse_token_consume<'a, 'b, T: Copy + PartialEq>(
+    chunk: &'a [T],
+    pred: T,
+) -> Option<&'a [T]> {
+    let c = *chunk.get(0)?;
+    if pred == c {
+        Some(&chunk[1..])
+    } else {
+        None
+    }
+}
+
 pub fn parse_seq<'a, 'b, T: Copy + PartialEq, R>(
     chunk: &'a [T],
     parse: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
@@ -113,6 +125,18 @@ pub fn parse_or<'a, 'b, T: Copy + PartialEq, R>(
         }
     }
     None
+}
+
+pub fn parse_maybe<'a, 'b, T: Copy + PartialEq, R>(
+    chunk: &'a [T],
+    parse: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
+    bump: &'b bump::BumpAllocator,
+) -> (Option<&'b R>, &'a [T]) {
+    if let Some((parsed, rest)) = parse(chunk, bump) {
+        (Some(parsed), rest)
+    } else {
+        (None, chunk)
+    }
 }
 
 pub fn parse_any_of<'a, T: Copy + PartialEq, R: Copy>(
