@@ -27,6 +27,7 @@ pub enum ASTStmt<'a> {
     Return(ASTExpr<'a>),
     Verify(ASTExpr<'a>),
     Variable(&'a [u8], ASTExpr<'a>),
+    Expression(ASTExpr<'a>),
 }
 
 pub enum ASTExpr<'a> {
@@ -87,14 +88,24 @@ const LEFT_ASSOC_BINARY_PRECEDENCE: &[&[ASTBinaryOp]] = &[
     ],
 ];
 
-pub fn parse<'a>(tokens: &[lex::Token], bump: &'a bump::BumpAllocator) -> ASTStmt<'a> {
-    ASTStmt::Block(&[])
-}
-
-pub fn parse_primary<'a, 'b>(
+pub fn parse_stmt<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
-) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'a>])> {
+) -> Option<(&'b ASTStmt<'b>, &'a [lex::Token<'b>])> {
+    None
+}
+
+fn parse_expr<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    None
+}
+
+fn parse_primary<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
     combi::parse_or(
         tokens,
         &[
@@ -103,14 +114,45 @@ pub fn parse_primary<'a, 'b>(
             &parse_number,
             &parse_boolean,
             &parse_nil,
+            &parse_parentheses,
         ],
         bump,
     )
 }
 
+fn parse_parentheses<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    let (_, rest) = combi::parse_token(
+        tokens,
+        &|c| {
+            if c == lex::Token::LeftParen {
+                Some(())
+            } else {
+                None
+            }
+        },
+        bump,
+    )?;
+    let (expr, rest) = parse_expr(rest, bump)?;
+    let (_, rest) = combi::parse_token(
+        rest,
+        &|c| {
+            if c == lex::Token::RightParen {
+                Some(())
+            } else {
+                None
+            }
+        },
+        bump,
+    )?;
+    Some((expr, rest))
+}
+
 macro_rules! define_simple_expr_parse {
     ($x:ident, $y: expr) => {
-        pub fn $x<'a, 'b>(
+        fn $x<'a, 'b>(
             tokens: &'a [lex::Token<'b>],
             bump: &'b bump::BumpAllocator,
         ) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
