@@ -39,6 +39,7 @@ pub enum ASTExpr<'a> {
     Index(&'a [u8], &'a [&'a ASTExpr<'a>]),
     Unary(ASTUnaryOp, &'a ASTExpr<'a>),
     Binary(ASTBinaryOp, &'a ASTExpr<'a>, &'a ASTExpr<'a>),
+    CustomBinary(&'a [u8], &'a ASTExpr<'a>, &'a ASTExpr<'a>),
 }
 
 pub enum ASTUnaryOp {
@@ -90,39 +91,56 @@ pub fn parse<'a>(tokens: &[lex::Token], bump: &'a bump::BumpAllocator) -> ASTStm
     ASTStmt::Block(&[])
 }
 
-macro_rules! define_parse_expr_function {
+pub fn parse_primary<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'a>])> {
+    combi::parse_or(
+        tokens,
+        &[
+            &parse_identifier,
+            &parse_string,
+            &parse_number,
+            &parse_boolean,
+            &parse_nil,
+        ],
+        bump,
+    )
+}
+
+macro_rules! define_simple_expr_parse {
     ($x:ident, $y: expr) => {
         pub fn $x<'a, 'b>(
             tokens: &'a [lex::Token<'b>],
             bump: &'b bump::BumpAllocator,
-        ) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'a>])> {
+        ) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
             combi::parse_token(tokens, $y, bump)
         }
     };
 }
 
-define_parse_expr_function!(parse_identifier, &|c| match c {
+define_simple_expr_parse!(parse_identifier, &|c| match c {
     lex::Token::Identifier(i) => Some(ASTExpr::Identifier(i)),
     _ => None,
 });
 
-define_parse_expr_function!(parse_string, &|c| match c {
+define_simple_expr_parse!(parse_string, &|c| match c {
     lex::Token::String(s) => Some(ASTExpr::String(s)),
     _ => None,
 });
 
-define_parse_expr_function!(parse_number, &|c| match c {
+define_simple_expr_parse!(parse_number, &|c| match c {
     lex::Token::Number(n) => Some(ASTExpr::Number(n)),
     _ => None,
 });
 
-define_parse_expr_function!(parse_boolean, &|c| match c {
+define_simple_expr_parse!(parse_boolean, &|c| match c {
     lex::Token::True => Some(ASTExpr::Boolean(true)),
     lex::Token::False => Some(ASTExpr::Boolean(false)),
     _ => None,
 });
 
-define_parse_expr_function!(parse_nil, &|c| match c {
+define_simple_expr_parse!(parse_nil, &|c| match c {
     lex::Token::Nil => Some(ASTExpr::Nil),
     _ => None,
 });

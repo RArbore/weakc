@@ -104,17 +104,15 @@ pub fn parse_seq<'a, 'b, T: Copy + PartialEq, R>(
 
 pub fn parse_or<'a, 'b, T: Copy + PartialEq, R>(
     chunk: &'a [T],
-    parse1: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
-    parse2: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
+    parse: &[&dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(&'b R, &'a [T])> {
-    if let Some(success) = parse1(chunk, bump) {
-        Some(success)
-    } else if let Some(success) = parse2(chunk, bump) {
-        Some(success)
-    } else {
-        None
+    for parse in parse {
+        if let Some(success) = parse(chunk, bump) {
+            return Some(success);
+        }
     }
+    None
 }
 
 pub fn parse_and<'a, 'b, T: Copy + PartialEq, R1, R2>(
