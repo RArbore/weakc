@@ -14,12 +14,23 @@
 
 use std::alloc;
 use std::cmp::max;
+use std::mem;
 use std::slice;
 
 const STARTING_SIZE: usize = 4096;
 
+#[derive(Debug, PartialEq, Eq)]
 pub struct BumpAllocator {
-    blocks: Vec<(*mut u8, usize, usize)>,
+    blocks: Vec<(*mut u8, usize, alloc::Layout)>,
+    snapshots: Vec<usize>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct Checkpoint<'a> {
+    snapshot: &'a [usize],
+    position: usize,
+    bump: &'a BumpAllocator,
+    commit: bool,
 }
 
 impl BumpAllocator {
@@ -27,19 +38,20 @@ impl BumpAllocator {
         let layout = alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
             .expect("ERROR: Couldn't create layout for initial bump allocator block.");
         BumpAllocator {
-            blocks: vec![(unsafe { alloc::alloc(layout) }, 0, STARTING_SIZE)],
+            blocks: vec![(unsafe { alloc::alloc(layout) }, 0, layout)],
+            snapshots: vec![],
         }
     }
 
     fn alloc_impl(&self, layout_size: usize, layout_align: usize) -> *mut u8 {
         let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
 
-        for (ptr, size, alloc) in mut_self.blocks.iter_mut().rev() {
+        for (ptr, size, layout) in mut_self.blocks.iter_mut().rev() {
             let mut align_offset = 0;
             if (*ptr as usize + *size) % layout_align != 0 {
                 align_offset = layout_align - ((*ptr as usize + *size) % layout_align);
             }
-            if *size + align_offset + layout_size <= *alloc {
+            if *size + align_offset + layout_size <= layout.size() {
                 let base = *size + align_offset;
                 *size += align_offset + layout_size;
                 let alloc = unsafe { (*ptr).offset(base as isize) } as *mut u8;
@@ -52,7 +64,9 @@ impl BumpAllocator {
                 .blocks
                 .last()
                 .expect("ERROR: Bump allocator block list is erroneously empty.")
-                .2,
+                .2
+                .size()
+                * 2,
             layout_size,
         );
         let new_block_layout = alloc::Layout::from_size_align(new_size, layout_align)
@@ -60,7 +74,7 @@ impl BumpAllocator {
         let new_block = (
             unsafe { alloc::alloc(new_block_layout) },
             layout_size,
-            new_size,
+            new_block_layout,
         );
         mut_self.blocks.push(new_block);
 
@@ -91,15 +105,57 @@ impl BumpAllocator {
         alloc.clone_from_slice(to_alloc);
         return alloc;
     }
+
+    pub fn create_checkpoint<'a>(&'a self) -> Checkpoint<'a> {
+        let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
+
+        let before_len = mut_self.snapshots.len();
+        for (_, size, _) in mut_self.blocks.iter() {
+            mut_self.snapshots.push(*size);
+        }
+
+        return Checkpoint {
+            snapshot: &mut_self.snapshots[before_len..],
+            position: mut_self.snapshots.len(),
+            bump: self,
+            commit: false,
+        };
+    }
+
+    fn drop_snapshots(&self, drop_num: usize, commit: bool) {
+        let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
+
+        if !commit {
+            for block_num in mut_self.snapshots.len() - drop_num..mut_self.snapshots.len() {
+                let block_size = mut_self.snapshots[block_num];
+                mut_self.blocks[block_num].1 = block_size;
+            }
+        }
+
+        mut_self
+            .snapshots
+            .truncate(mut_self.snapshots.len() - drop_num);
+    }
 }
 
 impl Drop for BumpAllocator {
     fn drop(&mut self) {
-        self.blocks.clear();
-        let layout = alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
-            .expect("ERROR: Couldn't create layout for initial bump allocator block.");
-        self.blocks
-            .push((unsafe { alloc::alloc(layout) }, 0, STARTING_SIZE));
+        for (mem, _, layout) in self.blocks.iter() {
+            unsafe { alloc::dealloc(*mem, *layout) };
+        }
+    }
+}
+
+impl Checkpoint<'_> {
+    pub fn commit(&mut self) {
+        self.commit = true;
+    }
+}
+
+impl Drop for Checkpoint<'_> {
+    fn drop(&mut self) {
+        assert_eq!(self.position, self.bump.snapshots.len());
+        self.bump.drop_snapshots(self.snapshot.len(), self.commit);
     }
 }
 
@@ -141,6 +197,45 @@ mod tests {
         }
         for i in 0..num {
             assert!(*ptrs2[i] == i as f32);
+        }
+    }
+
+    #[test]
+    fn take_snapshot() {
+        let bp = BumpAllocator::new();
+
+        let num = 12387;
+        for i in 0..num {
+            bp.alloc::<usize>(i);
+        }
+
+        let mut cp = bp.create_checkpoint();
+        let correct = Checkpoint {
+            snapshot: &[4096, 8192, 16384, 32768, 37656],
+            position: 5,
+            bump: &bp,
+            commit: false,
+        };
+        assert_eq!(bp.snapshots.len(), 5);
+        assert_eq!(cp, correct);
+        mem::forget(correct);
+
+        cp.commit();
+        mem::drop(cp);
+        let correct_block_sizes = &[4096, 8192, 16384, 32768, 37656];
+        for i in 0..bp.blocks.len() {
+            assert_eq!(bp.blocks[i].1, correct_block_sizes[i]);
+        }
+
+        let cp = bp.create_checkpoint();
+        let num = 8742;
+        for i in 0..num {
+            bp.alloc::<f32>(i as f32);
+        }
+        mem::drop(cp);
+        let correct_block_sizes = &[4096, 8192, 16384, 32768, 37656];
+        for i in 0..correct_block_sizes.len() {
+            assert_eq!(bp.blocks[i].1, correct_block_sizes[i]);
         }
     }
 }
