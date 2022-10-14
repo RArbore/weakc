@@ -14,7 +14,6 @@
 
 use std::alloc;
 use std::cmp::max;
-use std::mem;
 use std::slice;
 
 const STARTING_SIZE: usize = 4096;
@@ -162,6 +161,7 @@ impl Drop for Checkpoint<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::mem;
 
     #[test]
     fn alloc_uniform() {

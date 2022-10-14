@@ -17,19 +17,21 @@ extern crate bump;
 use super::combi;
 use super::lex;
 
+#[derive(Debug, PartialEq)]
 pub enum ASTStmt<'a> {
     Block(&'a [ASTStmt<'a>]),
     Function(&'a [u8], &'a [&'a [u8]], &'a ASTStmt<'a>),
     Operator(&'a [u8], [&'a [u8]; 2], &'a ASTStmt<'a>),
     If(ASTExpr<'a>, &'a ASTStmt<'a>),
-    While(ASTExpr<'a>, &'a ASTStmt<'a>),
-    Print(ASTExpr<'a>),
-    Return(ASTExpr<'a>),
-    Verify(ASTExpr<'a>),
+    While(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
+    Print(&'a ASTExpr<'a>),
+    Return(&'a ASTExpr<'a>),
+    Verify(&'a ASTExpr<'a>),
     Variable(&'a [u8], ASTExpr<'a>),
-    Expression(ASTExpr<'a>),
+    Expression(&'a ASTExpr<'a>),
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ASTExpr<'a> {
     Nil,
     Boolean(bool),
@@ -43,12 +45,14 @@ pub enum ASTExpr<'a> {
     CustomBinary(&'a [u8], &'a ASTExpr<'a>, &'a ASTExpr<'a>),
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ASTUnaryOp {
     Shape,
     Negate,
     Not,
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ASTBinaryOp {
     ShapedAs,
     Add,
@@ -68,7 +72,7 @@ pub enum ASTBinaryOp {
     Assign,
 }
 
-const LEFT_ASSOC_BINARY_PRECEDENCE: &[&[ASTBinaryOp]] = &[
+/*const LEFT_ASSOC_BINARY_PRECEDENCE: &[&[ASTBinaryOp]] = &[
     &[ASTBinaryOp::Or],
     &[ASTBinaryOp::And],
     &[ASTBinaryOp::EqualsEquals, ASTBinaryOp::NotEquals],
@@ -86,7 +90,7 @@ const LEFT_ASSOC_BINARY_PRECEDENCE: &[&[ASTBinaryOp]] = &[
         ASTBinaryOp::MatrixMultiply,
         ASTBinaryOp::ShapedAs,
     ],
-];
+];*/
 
 pub fn parse_stmt<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
@@ -99,7 +103,7 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    None
+    parse_primary(tokens, bump)
 }
 
 fn parse_primary<'a, 'b>(
@@ -124,9 +128,11 @@ fn parse_parentheses<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
     let rest = combi::parse_token_consume(tokens, lex::Token::LeftParen)?;
     let (expr, rest) = parse_expr(rest, bump)?;
     let rest = combi::parse_token_consume(rest, lex::Token::RightParen)?;
+    cp.commit();
     Some((expr, rest))
 }
 
@@ -166,3 +172,35 @@ define_simple_expr_parse!(parse_nil, &|c| match c {
     lex::Token::Nil => Some(ASTExpr::Nil),
     _ => None,
 });
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_primary1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"1.22387", &bump).unwrap();
+        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        assert_eq!(ast, &ASTExpr::Number(1.22387));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_primary2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"\"This is a string!\"", &bump).unwrap();
+        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        assert_eq!(ast, &ASTExpr::String(b"This is a string!"));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_primary3() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"((((my_identifier))))", &bump).unwrap();
+        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        assert_eq!(ast, &ASTExpr::Identifier(b"my_identifier"));
+        assert_eq!(rest, &[]);
+    }
+}
