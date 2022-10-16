@@ -32,6 +32,16 @@ pub struct Checkpoint<'a> {
     commit: bool,
 }
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum List<'a, T: Sized> {
+    Empty,
+    Chunk {
+        chunk: &'a [T],
+        next: &'a List<'a, T>,
+        bump: &'a BumpAllocator,
+    },
+}
+
 impl BumpAllocator {
     pub fn new() -> BumpAllocator {
         let layout = alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
@@ -135,6 +145,8 @@ impl BumpAllocator {
             .snapshots
             .truncate(mut_self.snapshots.len() - drop_num);
     }
+
+    fn create_list<T: Sized>(&self) -> List<T> {}
 }
 
 impl Drop for BumpAllocator {
