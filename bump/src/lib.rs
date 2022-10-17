@@ -17,6 +17,7 @@ use std::cmp::max;
 use std::slice;
 
 const STARTING_SIZE: usize = 4096;
+const MINIMUM_LIST_ALLOC: usize = 4;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct BumpAllocator {
@@ -33,13 +34,11 @@ pub struct Checkpoint<'a> {
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum List<'a, T: Sized> {
-    Empty,
-    Chunk {
-        chunk: &'a [T],
-        next: &'a List<'a, T>,
-        bump: &'a BumpAllocator,
-    },
+pub struct List<'a, T: Sized + Clone> {
+    chunk: &'a mut [T],
+    size: usize,
+    next: Option<&'a mut List<'a, T>>,
+    bump: &'a BumpAllocator,
 }
 
 impl BumpAllocator {
@@ -146,7 +145,22 @@ impl BumpAllocator {
             .truncate(mut_self.snapshots.len() - drop_num);
     }
 
-    fn create_list<T: Sized>(&self) -> List<T> {}
+    fn create_list_impl<T: Sized + Clone>(&self, size: usize) -> &mut List<T> {
+        assert!(size > 0, "ERROR: Cannot allocate a slice of size 0.");
+        let layout = alloc::Layout::new::<T>();
+        let alloc = self.alloc_impl(layout.size() * size, layout.align()) as *mut T;
+        let alloc = unsafe { slice::from_raw_parts_mut(alloc, size) };
+        self.alloc(List {
+            chunk: alloc,
+            size: 0,
+            next: None,
+            bump: self,
+        })
+    }
+
+    pub fn create_list<T: Sized + Clone>(&self) -> &mut List<T> {
+        self.create_list_impl(MINIMUM_LIST_ALLOC)
+    }
 }
 
 impl Drop for BumpAllocator {
@@ -167,6 +181,37 @@ impl Drop for Checkpoint<'_> {
     fn drop(&mut self) {
         assert_eq!(self.position, self.bump.snapshots.len());
         self.bump.drop_snapshots(self.snapshot.len(), self.commit);
+    }
+}
+
+impl<T: Sized + Clone> List<'_, T> {
+    pub fn push(&mut self, item: T) {
+        match &mut self.next {
+            None => {
+                if self.size < self.chunk.len() {
+                    self.chunk[self.size] = item;
+                    self.size += 1;
+                } else {
+                    let next = self.bump.create_list_impl(self.size * 2);
+                    next.push(item);
+                    self.next = Some(next);
+                }
+            }
+            Some(next) => {
+                next.push(item);
+            }
+        }
+    }
+
+    pub fn at_mut(&mut self, idx: usize) -> &mut T {
+        if idx < self.chunk.len() {
+            &mut self.chunk[idx]
+        } else {
+            match &mut self.next {
+                Some(next) => next.at_mut(idx - self.chunk.len()),
+                None => panic!("ERROR: Index {} out of bounds.", idx),
+            }
+        }
     }
 }
 
@@ -248,6 +293,19 @@ mod tests {
         let correct_block_sizes = &[4096, 8192, 16384, 32768, 37656];
         for i in 0..correct_block_sizes.len() {
             assert_eq!(bp.blocks[i].1, correct_block_sizes[i]);
+        }
+    }
+
+    #[test]
+    fn allocate_list() {
+        let bp = BumpAllocator::new();
+        let list = bp.create_list();
+        let num = 4782;
+        for i in 0..num {
+            list.push(i);
+        }
+        for i in 0..num {
+            assert_eq!(*list.at_mut(i), i);
         }
     }
 }
