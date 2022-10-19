@@ -17,10 +17,10 @@ extern crate bump;
 use super::combi;
 use super::lex;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ASTStmt<'a> {
     Block(&'a [ASTStmt<'a>]),
-    Function(&'a [u8], &'a [&'a [u8]], &'a ASTStmt<'a>),
+    Function(&'a [u8], &'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>),
     Operator(&'a [u8], [&'a [u8]; 2], &'a ASTStmt<'a>),
     If(ASTExpr<'a>, &'a ASTStmt<'a>),
     While(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
@@ -31,28 +31,29 @@ pub enum ASTStmt<'a> {
     Expression(&'a ASTExpr<'a>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ASTExpr<'a> {
     Nil,
     Boolean(bool),
     Number(f64),
     String(&'a [u8]),
     Identifier(&'a [u8]),
-    Call(&'a [u8], &'a [&'a ASTExpr<'a>]),
-    Index(&'a [u8], &'a [&'a ASTExpr<'a>]),
+    Call(&'a [u8], &'a bump::List<'a, ASTExpr<'a>>),
+    Index(&'a ASTExpr<'a>, &'a bump::List<'a, ASTExpr<'a>>),
+    ArrayLiteral(&'a bump::List<'a, ASTExpr<'a>>),
     Unary(ASTUnaryOp, &'a ASTExpr<'a>),
     Binary(ASTBinaryOp, &'a ASTExpr<'a>, &'a ASTExpr<'a>),
     CustomBinary(&'a [u8], &'a ASTExpr<'a>, &'a ASTExpr<'a>),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ASTUnaryOp {
     Shape,
     Negate,
     Not,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum ASTBinaryOp {
     ShapedAs,
     Add,

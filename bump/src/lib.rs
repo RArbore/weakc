@@ -299,13 +299,21 @@ mod tests {
     #[test]
     fn allocate_list() {
         let bp = BumpAllocator::new();
-        let list = bp.create_list();
-        let num = 4782;
-        for i in 0..num {
-            list.push(i);
+        let list1 = bp.create_list();
+        let num1 = 47824;
+        for i in 0..num1 {
+            list1.push(i);
         }
-        for i in 0..num {
-            assert_eq!(*list.at_mut(i), i);
+        let list2 = bp.create_list();
+        let num2 = 789017;
+        for i in 0..num2 {
+            list2.push(i as f32);
+        }
+        for i in 0..num1 {
+            assert_eq!(*list1.at_mut(i), i);
+        }
+        for i in 0..num2 {
+            assert_eq!(*list2.at_mut(i), i as f32);
         }
     }
 }
