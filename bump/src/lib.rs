@@ -14,6 +14,7 @@
 
 use std::alloc;
 use std::cmp::max;
+use std::fmt;
 use std::slice;
 
 const STARTING_SIZE: usize = 4096;
@@ -33,8 +34,7 @@ pub struct Checkpoint<'a> {
     commit: bool,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct List<'a, T: Sized + Clone> {
+pub struct List<'a, T: Sized + Clone + PartialEq + fmt::Debug> {
     chunk: &'a mut [T],
     size: usize,
     next: Option<&'a mut List<'a, T>>,
@@ -145,7 +145,10 @@ impl BumpAllocator {
             .truncate(mut_self.snapshots.len() - drop_num);
     }
 
-    fn create_list_impl<T: Sized + Clone>(&self, size: usize) -> &mut List<T> {
+    fn create_list_impl<T: Sized + Clone + PartialEq + fmt::Debug>(
+        &self,
+        size: usize,
+    ) -> &mut List<T> {
         assert!(size > 0, "ERROR: Cannot allocate a slice of size 0.");
         let layout = alloc::Layout::new::<T>();
         let alloc = self.alloc_impl(layout.size() * size, layout.align()) as *mut T;
@@ -158,7 +161,7 @@ impl BumpAllocator {
         })
     }
 
-    pub fn create_list<T: Sized + Clone>(&self) -> &mut List<T> {
+    pub fn create_list<T: Sized + Clone + PartialEq + fmt::Debug>(&self) -> &mut List<T> {
         self.create_list_impl(MINIMUM_LIST_ALLOC)
     }
 }
@@ -184,7 +187,7 @@ impl Drop for Checkpoint<'_> {
     }
 }
 
-impl<T: Sized + Clone> List<'_, T> {
+impl<'a, T: Sized + Clone + PartialEq + fmt::Debug> List<'a, T> {
     pub fn push(&mut self, item: T) {
         match &mut self.next {
             None => {
@@ -212,6 +215,62 @@ impl<T: Sized + Clone> List<'_, T> {
                 None => panic!("ERROR: Index {} out of bounds.", idx),
             }
         }
+    }
+
+    pub fn len(&self) -> usize {
+        match &self.next {
+            None => self.size,
+            Some(next) => self.size + next.len(),
+        }
+    }
+
+    fn eq_impl(&self, other: &Self, idx_self: usize, idx_other: usize) -> bool {
+        let num_check_self = self.size - idx_self;
+        let num_check_other = other.size - idx_other;
+        if num_check_self < num_check_other {
+            for idx in 0..num_check_self {
+                if self.chunk[idx + idx_self] != other.chunk[idx + idx_other] {
+                    return false;
+                }
+            }
+            match &self.next {
+                None => false,
+                Some(next) => next.eq_impl(other, 0, idx_other + num_check_self),
+            }
+        } else if num_check_self > num_check_other {
+            for idx in 0..num_check_other {
+                if self.chunk[idx + idx_self] != other.chunk[idx + idx_other] {
+                    return false;
+                }
+            }
+            match &other.next {
+                None => false,
+                Some(next) => self.eq_impl(next, idx_self + num_check_other, 0),
+            }
+        } else {
+            for idx in 0..num_check_self {
+                if self.chunk[idx + idx_self] != other.chunk[idx + idx_other] {
+                    return false;
+                }
+            }
+            match (&self.next, &other.next) {
+                (None, None) => true,
+                (Some(self_next), Some(other_next)) => self_next.eq_impl(other_next, 0, 0),
+                _ => false,
+            }
+        }
+    }
+}
+
+impl<T: Sized + Clone + PartialEq + fmt::Debug> PartialEq for List<'_, T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.eq_impl(other, 0, 0)
+    }
+}
+
+impl<T: Sized + Clone + PartialEq + fmt::Debug> fmt::Debug for List<'_, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("List").field("len", &self.len()).finish()
     }
 }
 
@@ -315,5 +374,13 @@ mod tests {
         for i in 0..num2 {
             assert_eq!(*list2.at_mut(i), i as f32);
         }
+        let list3 = bp.create_list();
+        let num3 = 47824;
+        for i in 0..num3 {
+            list3.push(i);
+        }
+        assert_eq!(list1, list3);
+        list3.push(0);
+        assert_ne!(list1, list3);
     }
 }

@@ -38,9 +38,9 @@ pub enum ASTExpr<'a> {
     Number(f64),
     String(&'a [u8]),
     Identifier(&'a [u8]),
-    Call(&'a [u8], &'a bump::List<'a, ASTExpr<'a>>),
-    Index(&'a ASTExpr<'a>, &'a bump::List<'a, ASTExpr<'a>>),
-    ArrayLiteral(&'a bump::List<'a, ASTExpr<'a>>),
+    Call(&'a [u8], &'a bump::List<'a, &'a ASTExpr<'a>>),
+    Index(&'a ASTExpr<'a>, &'a bump::List<'a, &'a ASTExpr<'a>>),
+    ArrayLiteral(&'a bump::List<'a, &'a ASTExpr<'a>>),
     Unary(ASTUnaryOp, &'a ASTExpr<'a>),
     Binary(ASTBinaryOp, &'a ASTExpr<'a>, &'a ASTExpr<'a>),
     CustomBinary(&'a [u8], &'a ASTExpr<'a>, &'a ASTExpr<'a>),
@@ -120,6 +120,7 @@ fn parse_primary<'a, 'b>(
             &parse_boolean,
             &parse_nil,
             &parse_parentheses,
+            &parse_array_literal,
         ],
         bump,
     )
@@ -135,6 +136,25 @@ fn parse_parentheses<'a, 'b>(
     let rest = combi::parse_token_consume(rest, lex::Token::RightParen)?;
     cp.commit();
     Some((expr, rest))
+}
+
+fn parse_array_literal<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let rest = combi::parse_token_consume(tokens, lex::Token::LeftBracket)?;
+    let list = bump.create_list();
+    let (expr, mut rest) = parse_expr(rest, bump)?;
+    list.push(expr);
+    while let Some(rest_comma) = combi::parse_token_consume(rest, lex::Token::Comma) {
+        let (expr, rest_new) = parse_expr(rest_comma, bump)?;
+        list.push(expr);
+        rest = rest_new;
+    }
+    let rest = combi::parse_token_consume(rest, lex::Token::RightBracket)?;
+    cp.commit();
+    Some((bump.alloc(ASTExpr::ArrayLiteral(list)), rest))
 }
 
 macro_rules! define_simple_expr_parse {
@@ -202,6 +222,22 @@ mod tests {
         let tokens = lex(b"((((my_identifier))))", &bump).unwrap();
         let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
         assert_eq!(ast, &ASTExpr::Identifier(b"my_identifier"));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_primary4() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"[x, y, z]", &bump).unwrap();
+        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        let x_expr = bump.alloc(ASTExpr::Identifier(b"x")) as &_;
+        let y_expr = bump.alloc(ASTExpr::Identifier(b"y")) as &_;
+        let z_expr = bump.alloc(ASTExpr::Identifier(b"z")) as &_;
+        correct_list.push(x_expr);
+        correct_list.push(y_expr);
+        correct_list.push(z_expr);
+        assert_eq!(ast, &ASTExpr::ArrayLiteral(correct_list));
         assert_eq!(rest, &[]);
     }
 }
