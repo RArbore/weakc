@@ -12,17 +12,18 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::alloc;
-use std::cmp::max;
+extern crate alloc;
+
+use core::cmp::max;
+use core::slice;
 use std::fmt;
-use std::slice;
 
 const STARTING_SIZE: usize = 4096;
 const MINIMUM_LIST_ALLOC: usize = 4;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct BumpAllocator {
-    blocks: Vec<(*mut u8, usize, alloc::Layout)>,
+    blocks: Vec<(*mut u8, usize, alloc::alloc::Layout)>,
     snapshots: Vec<usize>,
 }
 
@@ -43,10 +44,10 @@ pub struct List<'a, T: Sized + Clone + PartialEq + fmt::Debug> {
 
 impl BumpAllocator {
     pub fn new() -> BumpAllocator {
-        let layout = alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
+        let layout = alloc::alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
             .expect("ERROR: Couldn't create layout for initial bump allocator block.");
         BumpAllocator {
-            blocks: vec![(unsafe { alloc::alloc(layout) }, 0, layout)],
+            blocks: vec![(unsafe { alloc::alloc::alloc(layout) }, 0, layout)],
             snapshots: vec![],
         }
     }
@@ -77,10 +78,10 @@ impl BumpAllocator {
                 * 2,
             layout_size,
         );
-        let new_block_layout = alloc::Layout::from_size_align(new_size, layout_align)
+        let new_block_layout = alloc::alloc::Layout::from_size_align(new_size, layout_align)
             .expect("ERROR: Couldn't create layout for new bump allocator block.");
         let new_block = (
-            unsafe { alloc::alloc(new_block_layout) },
+            unsafe { alloc::alloc::alloc(new_block_layout) },
             layout_size,
             new_block_layout,
         );
@@ -95,7 +96,7 @@ impl BumpAllocator {
     }
 
     pub fn alloc<T: Sized>(&self, to_alloc: T) -> &mut T {
-        let layout = alloc::Layout::new::<T>();
+        let layout = alloc::alloc::Layout::new::<T>();
         let alloc = self.alloc_impl(layout.size(), layout.align()) as *mut T;
         let alloc = unsafe { &mut *alloc };
         *alloc = to_alloc;
@@ -107,7 +108,7 @@ impl BumpAllocator {
             to_alloc.len() > 0,
             "ERROR: Cannot allocate a slice of size 0."
         );
-        let layout = alloc::Layout::new::<T>();
+        let layout = alloc::alloc::Layout::new::<T>();
         let alloc = self.alloc_impl(layout.size() * to_alloc.len(), layout.align()) as *mut T;
         let alloc = unsafe { slice::from_raw_parts_mut(alloc, to_alloc.len()) };
         alloc.clone_from_slice(to_alloc);
@@ -150,7 +151,7 @@ impl BumpAllocator {
         size: usize,
     ) -> &mut List<T> {
         assert!(size > 0, "ERROR: Cannot allocate a slice of size 0.");
-        let layout = alloc::Layout::new::<T>();
+        let layout = alloc::alloc::Layout::new::<T>();
         let alloc = self.alloc_impl(layout.size() * size, layout.align()) as *mut T;
         let alloc = unsafe { slice::from_raw_parts_mut(alloc, size) };
         self.alloc(List {
@@ -169,7 +170,7 @@ impl BumpAllocator {
 impl Drop for BumpAllocator {
     fn drop(&mut self) {
         for (mem, _, layout) in self.blocks.iter() {
-            unsafe { alloc::dealloc(*mem, *layout) };
+            unsafe { alloc::alloc::dealloc(*mem, *layout) };
         }
     }
 }
