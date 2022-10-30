@@ -72,10 +72,10 @@ pub fn parse_token<'a, 'b, T: Copy + PartialEq, R>(
     chunk: &'a [T],
     pred: &dyn Fn(T) -> Option<R>,
     bump: &'b bump::BumpAllocator,
-) -> Option<(&'b R, &'a [T])> {
+) -> Option<(R, &'a [T])> {
     let c = *chunk.get(0)?;
     if let Some(result) = pred(c) {
-        Some((bump.alloc(result), &chunk[1..]))
+        Some((result, &chunk[1..]))
     } else {
         None
     }
@@ -95,9 +95,9 @@ pub fn parse_token_consume<'a, 'b, T: Copy + PartialEq>(
 
 pub fn parse_seq<'a, 'b, T: Copy + PartialEq, R>(
     chunk: &'a [T],
-    parse: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
+    parse: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(R, &'a [T])>,
     bump: &'b bump::BumpAllocator,
-) -> (Vec<&'b R>, &'a [T]) {
+) -> (Vec<R>, &'a [T]) {
     let mut xs = vec![];
     let mut current = chunk;
 
@@ -116,9 +116,9 @@ pub fn parse_seq<'a, 'b, T: Copy + PartialEq, R>(
 
 pub fn parse_or<'a, 'b, T: Copy + PartialEq, R>(
     chunk: &'a [T],
-    parse: &[&dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>],
+    parse: &[&dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(R, &'a [T])>],
     bump: &'b bump::BumpAllocator,
-) -> Option<(&'b R, &'a [T])> {
+) -> Option<(R, &'a [T])> {
     for parse in parse {
         if let Some(success) = parse(chunk, bump) {
             return Some(success);
@@ -129,9 +129,9 @@ pub fn parse_or<'a, 'b, T: Copy + PartialEq, R>(
 
 pub fn parse_maybe<'a, 'b, T: Copy + PartialEq, R>(
     chunk: &'a [T],
-    parse: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(&'b R, &'a [T])>,
+    parse: &dyn Fn(&'a [T], &'b bump::BumpAllocator) -> Option<(R, &'a [T])>,
     bump: &'b bump::BumpAllocator,
-) -> (Option<&'b R>, &'a [T]) {
+) -> (Option<R>, &'a [T]) {
     if let Some((parsed, rest)) = parse(chunk, bump) {
         (Some(parsed), rest)
     } else {
