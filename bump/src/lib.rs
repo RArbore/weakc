@@ -15,15 +15,17 @@
 extern crate alloc;
 
 use core::cmp::max;
+use core::fmt;
 use core::slice;
-use std::fmt;
 
 const STARTING_SIZE: usize = 4096;
 const MINIMUM_LIST_ALLOC: usize = 4;
+const MAX_NUM_BLOCKS: usize = 20;
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct BumpAllocator {
-    blocks: Vec<(*mut u8, usize, alloc::alloc::Layout)>,
+    blocks: [(*mut u8, usize, alloc::alloc::Layout); MAX_NUM_BLOCKS],
+    num_blocks: usize,
     snapshots: Vec<usize>,
 }
 
@@ -46,8 +48,13 @@ impl BumpAllocator {
     pub fn new() -> BumpAllocator {
         let layout = alloc::alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
             .expect("ERROR: Couldn't create layout for initial bump allocator block.");
+        let mut blocks = [(0 as *mut u8, 0, unsafe {
+            alloc::alloc::Layout::from_size_align_unchecked(0, 0)
+        }); MAX_NUM_BLOCKS];
+        blocks[0] = (unsafe { alloc::alloc::alloc(layout) }, 0, layout);
         BumpAllocator {
-            blocks: vec![(unsafe { alloc::alloc::alloc(layout) }, 0, layout)],
+            blocks,
+            num_blocks: 1,
             snapshots: vec![],
         }
     }
@@ -55,7 +62,7 @@ impl BumpAllocator {
     fn alloc_impl(&self, layout_size: usize, layout_align: usize) -> *mut u8 {
         let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
 
-        for (ptr, size, layout) in mut_self.blocks.iter_mut().rev() {
+        for (ptr, size, layout) in mut_self.blocks[0..mut_self.num_blocks].iter_mut().rev() {
             let mut align_offset = 0;
             if (*ptr as usize + *size) % layout_align != 0 {
                 align_offset = layout_align - ((*ptr as usize + *size) % layout_align);
@@ -69,13 +76,7 @@ impl BumpAllocator {
         }
 
         let new_size = max(
-            mut_self
-                .blocks
-                .last()
-                .expect("ERROR: Bump allocator block list is erroneously empty.")
-                .2
-                .size()
-                * 2,
+            mut_self.blocks[mut_self.num_blocks - 1].2.size() * 2,
             layout_size,
         );
         let new_block_layout = alloc::alloc::Layout::from_size_align(new_size, layout_align)
@@ -85,13 +86,10 @@ impl BumpAllocator {
             layout_size,
             new_block_layout,
         );
-        mut_self.blocks.push(new_block);
+        mut_self.blocks[mut_self.num_blocks] = new_block;
+        mut_self.num_blocks += 1;
 
-        let alloc = mut_self
-            .blocks
-            .last()
-            .expect("ERROR: Bump allocator block list is erroneously empty.")
-            .0 as *mut u8;
+        let alloc = mut_self.blocks[mut_self.num_blocks - 1].0 as *mut u8;
         return alloc;
     }
 
@@ -119,7 +117,7 @@ impl BumpAllocator {
         let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
 
         let before_len = mut_self.snapshots.len();
-        for (_, size, _) in mut_self.blocks.iter() {
+        for (_, size, _) in mut_self.blocks[0..mut_self.num_blocks].iter() {
             mut_self.snapshots.push(*size);
         }
 
@@ -169,7 +167,7 @@ impl BumpAllocator {
 
 impl Drop for BumpAllocator {
     fn drop(&mut self) {
-        for (mem, _, layout) in self.blocks.iter() {
+        for (mem, _, layout) in self.blocks[0..self.num_blocks].iter() {
             unsafe { alloc::alloc::dealloc(*mem, *layout) };
         }
     }
@@ -340,7 +338,7 @@ mod tests {
         cp.commit();
         mem::drop(cp);
         let correct_block_sizes = &[4096, 8192, 16384, 32768, 37656];
-        for i in 0..bp.blocks.len() {
+        for i in 0..bp.num_blocks {
             assert_eq!(bp.blocks[i].1, correct_block_sizes[i]);
         }
 
