@@ -104,7 +104,48 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_primary(tokens, bump)
+    parse_call(tokens, bump)
+}
+
+fn parse_call<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    combi::parse_or(
+        tokens,
+        &[
+            &|tokens, bump| {
+                let mut cp = bump.create_checkpoint();
+                let (name, rest) = parse_identifier(tokens, bump)?;
+                let rest = combi::parse_token_consume(rest, lex::Token::LeftParen)?;
+                let (list, rest) = combi::parse_or(
+                    rest,
+                    &[
+                        &|tokens, bump| {
+                            let list = bump.create_list();
+                            let (expr, mut rest) = parse_expr(tokens, bump)?;
+                            list.push(expr);
+                            while let Some(rest_comma) =
+                                combi::parse_token_consume(rest, lex::Token::Comma)
+                            {
+                                let (expr, rest_new) = parse_expr(rest_comma, bump)?;
+                                list.push(expr);
+                                rest = rest_new;
+                            }
+                            Some((list, rest))
+                        },
+                        &|tokens, bump| Some((bump.create_list(), tokens)),
+                    ],
+                    bump,
+                )?;
+                let rest = combi::parse_token_consume(rest, lex::Token::RightParen)?;
+                cp.commit();
+                Some((ASTExpr::Call(name, list), rest))
+            },
+            &parse_primary,
+        ],
+        bump,
+    )
 }
 
 fn parse_primary<'a, 'b>(
@@ -114,10 +155,22 @@ fn parse_primary<'a, 'b>(
     combi::parse_or(
         tokens,
         &[
-            &parse_identifier,
-            &parse_string,
-            &parse_number,
-            &parse_boolean,
+            &|tokens, bump| {
+                let (expr, rest) = parse_identifier(tokens, bump)?;
+                Some((ASTExpr::Identifier(expr), rest))
+            },
+            &|tokens, bump| {
+                let (expr, rest) = parse_string(tokens, bump)?;
+                Some((ASTExpr::String(expr), rest))
+            },
+            &|tokens, bump| {
+                let (expr, rest) = parse_number(tokens, bump)?;
+                Some((ASTExpr::Number(expr), rest))
+            },
+            &|tokens, bump| {
+                let (expr, rest) = parse_boolean(tokens, bump)?;
+                Some((ASTExpr::Boolean(expr), rest))
+            },
             &parse_nil,
             &parse_parentheses,
             &parse_array_literal,
@@ -144,55 +197,85 @@ fn parse_array_literal<'a, 'b>(
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
     let mut cp = bump.create_checkpoint();
     let rest = combi::parse_token_consume(tokens, lex::Token::LeftBracket)?;
-    let list = bump.create_list();
-    let (expr, mut rest) = parse_expr(rest, bump)?;
-    list.push(expr);
-    while let Some(rest_comma) = combi::parse_token_consume(rest, lex::Token::Comma) {
-        let (expr, rest_new) = parse_expr(rest_comma, bump)?;
-        list.push(expr);
-        rest = rest_new;
-    }
+    let (list, rest) = combi::parse_or(
+        rest,
+        &[
+            &|tokens, bump| {
+                let list = bump.create_list();
+                let (expr, mut rest) = parse_expr(tokens, bump)?;
+                list.push(expr);
+                while let Some(rest_comma) = combi::parse_token_consume(rest, lex::Token::Comma) {
+                    let (expr, rest_new) = parse_expr(rest_comma, bump)?;
+                    list.push(expr);
+                    rest = rest_new;
+                }
+                Some((list, rest))
+            },
+            &|tokens, bump| Some((bump.create_list(), tokens)),
+        ],
+        bump,
+    )?;
     let rest = combi::parse_token_consume(rest, lex::Token::RightBracket)?;
     cp.commit();
     Some((ASTExpr::ArrayLiteral(list), rest))
 }
 
 macro_rules! define_simple_expr_parse {
-    ($x:ident, $y: expr) => {
+    ($x:ident, $y: expr, $z: ty) => {
         fn $x<'a, 'b>(
             tokens: &'a [lex::Token<'b>],
             bump: &'b bump::BumpAllocator,
-        ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+        ) -> Option<($z, &'a [lex::Token<'b>])> {
             combi::parse_token(tokens, $y, bump)
         }
     };
 }
 
-define_simple_expr_parse!(parse_identifier, &|c| match c {
-    lex::Token::Identifier(i) => Some(ASTExpr::Identifier(i)),
-    _ => None,
-});
+define_simple_expr_parse!(
+    parse_identifier,
+    &|c| match c {
+        lex::Token::Identifier(i) => Some(i),
+        _ => None,
+    },
+    &'b [u8]
+);
 
-define_simple_expr_parse!(parse_string, &|c| match c {
-    lex::Token::String(s) => Some(ASTExpr::String(s)),
-    _ => None,
-});
+define_simple_expr_parse!(
+    parse_string,
+    &|c| match c {
+        lex::Token::String(s) => Some(s),
+        _ => None,
+    },
+    &'b [u8]
+);
 
-define_simple_expr_parse!(parse_number, &|c| match c {
-    lex::Token::Number(n) => Some(ASTExpr::Number(n)),
-    _ => None,
-});
+define_simple_expr_parse!(
+    parse_number,
+    &|c| match c {
+        lex::Token::Number(n) => Some(n),
+        _ => None,
+    },
+    f64
+);
 
-define_simple_expr_parse!(parse_boolean, &|c| match c {
-    lex::Token::True => Some(ASTExpr::Boolean(true)),
-    lex::Token::False => Some(ASTExpr::Boolean(false)),
-    _ => None,
-});
+define_simple_expr_parse!(
+    parse_boolean,
+    &|c| match c {
+        lex::Token::True => Some(true),
+        lex::Token::False => Some(false),
+        _ => None,
+    },
+    bool
+);
 
-define_simple_expr_parse!(parse_nil, &|c| match c {
-    lex::Token::Nil => Some(ASTExpr::Nil),
-    _ => None,
-});
+define_simple_expr_parse!(
+    parse_nil,
+    &|c| match c {
+        lex::Token::Nil => Some(ASTExpr::Nil),
+        _ => None,
+    },
+    ASTExpr<'b>
+);
 
 #[cfg(test)]
 mod tests {
@@ -202,7 +285,7 @@ mod tests {
     fn parse_primary1() {
         let bump = bump::BumpAllocator::new();
         let tokens = lex(b"1.22387", &bump).unwrap();
-        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
         assert_eq!(ast, ASTExpr::Number(1.22387));
         assert_eq!(rest, &[]);
     }
@@ -211,7 +294,7 @@ mod tests {
     fn parse_primary2() {
         let bump = bump::BumpAllocator::new();
         let tokens = lex(b"\"This is a string!\"", &bump).unwrap();
-        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
         assert_eq!(ast, ASTExpr::String(b"This is a string!"));
         assert_eq!(rest, &[]);
     }
@@ -220,7 +303,7 @@ mod tests {
     fn parse_primary3() {
         let bump = bump::BumpAllocator::new();
         let tokens = lex(b"((((my_identifier))))", &bump).unwrap();
-        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
         assert_eq!(ast, ASTExpr::Identifier(b"my_identifier"));
         assert_eq!(rest, &[]);
     }
@@ -229,15 +312,45 @@ mod tests {
     fn parse_primary4() {
         let bump = bump::BumpAllocator::new();
         let tokens = lex(b"[x, y, z]", &bump).unwrap();
-        let (ast, rest) = parse_primary(&tokens, &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
         let correct_list = bump.create_list();
-        let x_expr = ASTExpr::Identifier(b"x");
-        let y_expr = ASTExpr::Identifier(b"y");
-        let z_expr = ASTExpr::Identifier(b"z");
-        correct_list.push(x_expr);
-        correct_list.push(y_expr);
-        correct_list.push(z_expr);
+        correct_list.push(ASTExpr::Identifier(b"x"));
+        correct_list.push(ASTExpr::Identifier(b"y"));
+        correct_list.push(ASTExpr::Identifier(b"z"));
         assert_eq!(ast, ASTExpr::ArrayLiteral(correct_list));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_primary5() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"[]", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        assert_eq!(ast, ASTExpr::ArrayLiteral(correct_list));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_call1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"my_func()", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        assert_eq!(ast, ASTExpr::Call(b"my_func", correct_list));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_call2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"xyz(7.4, 3.1, \"a string\")", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        correct_list.push(ASTExpr::Number(7.4));
+        correct_list.push(ASTExpr::Number(3.1));
+        correct_list.push(ASTExpr::String(b"a string"));
+        assert_eq!(ast, ASTExpr::Call(b"xyz", correct_list));
         assert_eq!(rest, &[]);
     }
 }
