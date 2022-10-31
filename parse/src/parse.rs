@@ -48,9 +48,9 @@ pub enum ASTExpr<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum ASTUnaryOp {
-    Shape,
-    Negate,
     Not,
+    Negate,
+    Shape,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -104,7 +104,35 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_index(tokens, bump)
+    parse_unary(tokens, bump)
+}
+
+fn parse_unary<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    combi::parse_or(
+        tokens,
+        &[
+            &|tokens, bump| {
+                let rest = combi::parse_token_consume(tokens, lex::Token::Exclamation)?;
+                let (expr, rest) = parse_unary(rest, bump)?;
+                Some((ASTExpr::Unary(ASTUnaryOp::Not, bump.alloc(expr)), rest))
+            },
+            &|tokens, bump| {
+                let rest = combi::parse_token_consume(tokens, lex::Token::Minus)?;
+                let (expr, rest) = parse_unary(rest, bump)?;
+                Some((ASTExpr::Unary(ASTUnaryOp::Negate, bump.alloc(expr)), rest))
+            },
+            &|tokens, bump| {
+                let rest = combi::parse_token_consume(tokens, lex::Token::Shape)?;
+                let (expr, rest) = parse_unary(rest, bump)?;
+                Some((ASTExpr::Unary(ASTUnaryOp::Shape, bump.alloc(expr)), rest))
+            },
+            &parse_index,
+        ],
+        bump,
+    )
 }
 
 fn parse_index<'a, 'b>(
@@ -407,6 +435,43 @@ mod tests {
         assert_eq!(
             ast,
             ASTExpr::Index(&ASTExpr::Identifier(b"xyz"), correct_list)
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_unary1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"-3.4", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Unary(ASTUnaryOp::Negate, &ASTExpr::Number(3.4))
+        );
+        assert_eq!(rest, &[]);
+    }
+    #[test]
+    fn parse_unary2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"!abc", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Unary(ASTUnaryOp::Not, &ASTExpr::Identifier(b"abc"))
+        );
+        assert_eq!(rest, &[]);
+    }
+    #[test]
+    fn parse_unary3() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"s []", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Unary(
+                ASTUnaryOp::Shape,
+                bump.alloc(ASTExpr::ArrayLiteral(bump.create_list()))
+            )
         );
         assert_eq!(rest, &[]);
     }
