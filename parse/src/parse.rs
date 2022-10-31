@@ -104,7 +104,36 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_call(tokens, bump)
+    parse_index(tokens, bump)
+}
+
+fn parse_index<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    combi::parse_or(
+        tokens,
+        &[
+            &|tokens, bump| {
+                let mut cp = bump.create_checkpoint();
+                let (to_index, rest) = parse_call(tokens, bump)?;
+                let rest = combi::parse_token_consume(rest, lex::Token::LeftBracket)?;
+                let list = bump.create_list();
+                let (expr, mut rest) = parse_expr(rest, bump)?;
+                list.push(expr);
+                while let Some(rest_comma) = combi::parse_token_consume(rest, lex::Token::Comma) {
+                    let (expr, rest_new) = parse_expr(rest_comma, bump)?;
+                    list.push(expr);
+                    rest = rest_new;
+                }
+                let rest = combi::parse_token_consume(rest, lex::Token::RightBracket)?;
+                cp.commit();
+                Some((ASTExpr::Index(bump.alloc(to_index), list), rest))
+            },
+            &parse_call,
+        ],
+        bump,
+    )
 }
 
 fn parse_call<'a, 'b>(
@@ -351,6 +380,34 @@ mod tests {
         correct_list.push(ASTExpr::Number(3.1));
         correct_list.push(ASTExpr::String(b"a string"));
         assert_eq!(ast, ASTExpr::Call(b"xyz", correct_list));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_index1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"xyz[]", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(ast, ASTExpr::Identifier(b"xyz"));
+        assert_eq!(
+            rest,
+            vec![lex::Token::LeftBracket, lex::Token::RightBracket]
+        );
+    }
+
+    #[test]
+    fn parse_index2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"xyz[1, 2, 3]", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        correct_list.push(ASTExpr::Number(1.0));
+        correct_list.push(ASTExpr::Number(2.0));
+        correct_list.push(ASTExpr::Number(3.0));
+        assert_eq!(
+            ast,
+            ASTExpr::Index(&ASTExpr::Identifier(b"xyz"), correct_list)
+        );
         assert_eq!(rest, &[]);
     }
 }
