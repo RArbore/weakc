@@ -46,14 +46,14 @@ pub enum ASTExpr<'a> {
     CustomBinary(&'a [u8], &'a ASTExpr<'a>, &'a ASTExpr<'a>),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ASTUnaryOp {
     Not,
     Negate,
     Shape,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum ASTBinaryOp {
     ShapedAs,
     Add,
@@ -72,6 +72,14 @@ pub enum ASTBinaryOp {
     Or,
     Assign,
 }
+
+const FACTOR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
+    (&[lex::Token::Star], ASTBinaryOp::Multiply),
+    (&[lex::Token::Slash], ASTBinaryOp::Divide),
+    (&[lex::Token::Carrot], ASTBinaryOp::Power),
+    (&[lex::Token::At], ASTBinaryOp::MatrixMultiply),
+    (&[lex::Token::ShapedAs], ASTBinaryOp::ShapedAs),
+];
 
 /*const LEFT_ASSOC_BINARY_PRECEDENCE: &[&[ASTBinaryOp]] = &[
     &[ASTBinaryOp::Or],
@@ -104,7 +112,24 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_unary(tokens, bump)
+    parse_factor(tokens, bump)
+}
+
+fn parse_factor<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let (mut expr, mut rest) = parse_unary(tokens, bump)?;
+    let mut maybe_op = combi::parse_any_of(rest, FACTOR_OPS);
+    while let Some((op, tmp_rest)) = maybe_op {
+        let (new_expr, tmp_rest) = parse_unary(tmp_rest, bump)?;
+        expr = ASTExpr::Binary(op, bump.alloc(expr), bump.alloc(new_expr));
+        rest = tmp_rest;
+        maybe_op = combi::parse_any_of(rest, FACTOR_OPS);
+    }
+    cp.commit();
+    Some((expr, rest))
 }
 
 fn parse_unary<'a, 'b>(
@@ -450,6 +475,7 @@ mod tests {
         );
         assert_eq!(rest, &[]);
     }
+
     #[test]
     fn parse_unary2() {
         let bump = bump::BumpAllocator::new();
@@ -461,6 +487,7 @@ mod tests {
         );
         assert_eq!(rest, &[]);
     }
+
     #[test]
     fn parse_unary3() {
         let bump = bump::BumpAllocator::new();
@@ -471,6 +498,62 @@ mod tests {
             ASTExpr::Unary(
                 ASTUnaryOp::Shape,
                 bump.alloc(ASTExpr::ArrayLiteral(bump.create_list()))
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_factor1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"1.4 * 3.1", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Binary(
+                ASTBinaryOp::Multiply,
+                bump.alloc(ASTExpr::Number(1.4)),
+                bump.alloc(ASTExpr::Number(3.1)),
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_factor2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"1.4 / 3.1 @ 8.1", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Binary(
+                ASTBinaryOp::MatrixMultiply,
+                bump.alloc(ASTExpr::Binary(
+                    ASTBinaryOp::Divide,
+                    bump.alloc(ASTExpr::Number(1.4)),
+                    bump.alloc(ASTExpr::Number(3.1)),
+                )),
+                bump.alloc(ASTExpr::Number(8.1))
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_factor3() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"1.4 ^ (3.1 sa 8.1)", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Binary(
+                ASTBinaryOp::Power,
+                bump.alloc(ASTExpr::Number(1.4)),
+                bump.alloc(ASTExpr::Binary(
+                    ASTBinaryOp::ShapedAs,
+                    bump.alloc(ASTExpr::Number(3.1)),
+                    bump.alloc(ASTExpr::Number(8.1)),
+                )),
             )
         );
         assert_eq!(rest, &[]);

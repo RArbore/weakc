@@ -38,7 +38,7 @@ pub enum Token<'a> {
     Minus,
     Star,
     Slash,
-    Exp,
+    Carrot,
     At,
 
     Exclamation,
@@ -89,7 +89,7 @@ const NON_ALPHA_TOKENS: &[(&[u8], Token)] = &[
     (b"-", Token::Minus),
     (b"*", Token::Star),
     (b"/", Token::Slash),
-    (b"^", Token::Exp),
+    (b"^", Token::Carrot),
     (b"@", Token::At),
     (b"!", Token::Exclamation),
     (b"=", Token::Equals),
