@@ -73,6 +73,11 @@ pub enum ASTBinaryOp {
     Assign,
 }
 
+const TERM_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
+    (&[lex::Token::Plus], ASTBinaryOp::Add),
+    (&[lex::Token::Minus], ASTBinaryOp::Subtract),
+];
+
 const FACTOR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
     (&[lex::Token::Star], ASTBinaryOp::Multiply),
     (&[lex::Token::Slash], ASTBinaryOp::Divide),
@@ -80,26 +85,6 @@ const FACTOR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
     (&[lex::Token::At], ASTBinaryOp::MatrixMultiply),
     (&[lex::Token::ShapedAs], ASTBinaryOp::ShapedAs),
 ];
-
-/*const LEFT_ASSOC_BINARY_PRECEDENCE: &[&[ASTBinaryOp]] = &[
-    &[ASTBinaryOp::Or],
-    &[ASTBinaryOp::And],
-    &[ASTBinaryOp::EqualsEquals, ASTBinaryOp::NotEquals],
-    &[
-        ASTBinaryOp::GreaterEquals,
-        ASTBinaryOp::LesserEquals,
-        ASTBinaryOp::Greater,
-        ASTBinaryOp::Lesser,
-    ],
-    &[ASTBinaryOp::Add, ASTBinaryOp::Subtract],
-    &[
-        ASTBinaryOp::Multiply,
-        ASTBinaryOp::Divide,
-        ASTBinaryOp::Power,
-        ASTBinaryOp::MatrixMultiply,
-        ASTBinaryOp::ShapedAs,
-    ],
-];*/
 
 pub fn parse_stmt<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
@@ -112,25 +97,33 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_factor(tokens, bump)
+    parse_term(tokens, bump)
 }
 
-fn parse_factor<'a, 'b>(
-    tokens: &'a [lex::Token<'b>],
-    bump: &'b bump::BumpAllocator,
-) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    let mut cp = bump.create_checkpoint();
-    let (mut expr, mut rest) = parse_unary(tokens, bump)?;
-    let mut maybe_op = combi::parse_any_of(rest, FACTOR_OPS);
-    while let Some((op, tmp_rest)) = maybe_op {
-        let (new_expr, tmp_rest) = parse_unary(tmp_rest, bump)?;
-        expr = ASTExpr::Binary(op, bump.alloc(expr), bump.alloc(new_expr));
-        rest = tmp_rest;
-        maybe_op = combi::parse_any_of(rest, FACTOR_OPS);
-    }
-    cp.commit();
-    Some((expr, rest))
+macro_rules! define_binary_expr_parse {
+    ($x: ident, $y: ident, $z: ident) => {
+        fn $x<'a, 'b>(
+            tokens: &'a [lex::Token<'b>],
+            bump: &'b bump::BumpAllocator,
+        ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+            let mut cp = bump.create_checkpoint();
+            let (mut expr, mut rest) = $z(tokens, bump)?;
+            let mut maybe_op = combi::parse_any_of(rest, $y);
+            while let Some((op, tmp_rest)) = maybe_op {
+                let (new_expr, tmp_rest) = $z(tmp_rest, bump)?;
+                expr = ASTExpr::Binary(op, bump.alloc(expr), bump.alloc(new_expr));
+                rest = tmp_rest;
+                maybe_op = combi::parse_any_of(rest, $y);
+            }
+            cp.commit();
+            Some((expr, rest))
+        }
+    };
 }
+
+define_binary_expr_parse!(parse_term, TERM_OPS, parse_factor);
+
+define_binary_expr_parse!(parse_factor, FACTOR_OPS, parse_unary);
 
 fn parse_unary<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
