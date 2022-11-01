@@ -73,6 +73,22 @@ pub enum ASTBinaryOp {
     Assign,
 }
 
+const OR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[(&[lex::Token::Or], ASTBinaryOp::Or)];
+
+const AND_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[(&[lex::Token::And], ASTBinaryOp::And)];
+
+const EQUALITY_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
+    (&[lex::Token::EqualsEquals], ASTBinaryOp::EqualsEquals),
+    (&[lex::Token::ExclamationEquals], ASTBinaryOp::NotEquals),
+];
+
+const COMPARISON_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
+    (&[lex::Token::GreaterEquals], ASTBinaryOp::GreaterEquals),
+    (&[lex::Token::Greater], ASTBinaryOp::Greater),
+    (&[lex::Token::LesserEquals], ASTBinaryOp::LesserEquals),
+    (&[lex::Token::Lesser], ASTBinaryOp::Lesser),
+];
+
 const TERM_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
     (&[lex::Token::Plus], ASTBinaryOp::Add),
     (&[lex::Token::Minus], ASTBinaryOp::Subtract),
@@ -97,7 +113,7 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_term(tokens, bump)
+    parse_or(tokens, bump)
 }
 
 macro_rules! define_binary_expr_parse {
@@ -120,6 +136,14 @@ macro_rules! define_binary_expr_parse {
         }
     };
 }
+
+define_binary_expr_parse!(parse_or, OR_OPS, parse_and);
+
+define_binary_expr_parse!(parse_and, AND_OPS, parse_equality);
+
+define_binary_expr_parse!(parse_equality, EQUALITY_OPS, parse_comparison);
+
+define_binary_expr_parse!(parse_comparison, COMPARISON_OPS, parse_term);
 
 define_binary_expr_parse!(parse_term, TERM_OPS, parse_factor);
 
