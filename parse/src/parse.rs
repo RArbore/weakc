@@ -122,16 +122,17 @@ macro_rules! define_binary_expr_parse {
             tokens: &'a [lex::Token<'b>],
             bump: &'b bump::BumpAllocator,
         ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-            let mut cp = bump.create_checkpoint();
             let (mut expr, mut rest) = $z(tokens, bump)?;
+            //let mut cp = bump.create_checkpoint();
             let mut maybe_op = combi::parse_any_of(rest, $y);
             while let Some((op, tmp_rest)) = maybe_op {
                 let (new_expr, tmp_rest) = $z(tmp_rest, bump)?;
                 expr = ASTExpr::Binary(op, bump.alloc(expr), bump.alloc(new_expr));
                 rest = tmp_rest;
+                //cp.commit();
+                //cp = bump.create_checkpoint();
                 maybe_op = combi::parse_any_of(rest, $y);
             }
-            cp.commit();
             Some((expr, rest))
         }
     };
