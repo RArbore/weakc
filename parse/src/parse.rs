@@ -630,4 +630,37 @@ mod tests {
         );
         assert_eq!(rest, &[]);
     }
+
+    #[test]
+    fn parse_assign1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"myvar = xyz", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Assign(
+                bump.alloc(ASTExpr::Identifier(b"myvar")),
+                bump.alloc(ASTExpr::Identifier(b"xyz")),
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_assign2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"myvar = xyz = abc", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::Assign(
+                bump.alloc(ASTExpr::Identifier(b"myvar")),
+                bump.alloc(ASTExpr::Assign(
+                    bump.alloc(ASTExpr::Identifier(b"xyz")),
+                    bump.alloc(ASTExpr::Identifier(b"abc")),
+                ))
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
 }
