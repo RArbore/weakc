@@ -41,6 +41,7 @@ pub enum ASTExpr<'a> {
     Call(&'a [u8], &'a bump::List<'a, ASTExpr<'a>>),
     Index(&'a ASTExpr<'a>, &'a bump::List<'a, ASTExpr<'a>>),
     ArrayLiteral(&'a bump::List<'a, ASTExpr<'a>>),
+    Assign(&'a ASTExpr<'a>, &'a ASTExpr<'a>),
     Unary(ASTUnaryOp, &'a ASTExpr<'a>),
     Binary(ASTBinaryOp, &'a ASTExpr<'a>, &'a ASTExpr<'a>),
     CustomBinary(&'a [u8], &'a ASTExpr<'a>, &'a ASTExpr<'a>),
@@ -70,7 +71,6 @@ pub enum ASTBinaryOp {
     LesserEquals,
     And,
     Or,
-    Assign,
 }
 
 const OR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[(&[lex::Token::Or], ASTBinaryOp::Or)];
@@ -113,7 +113,24 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_operation(tokens, bump)
+    parse_assignment(tokens, bump)
+}
+
+fn parse_assignment<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let (left, rest) = parse_operation(tokens, bump)?;
+    let maybe_rest = combi::parse_token_consume(rest, lex::Token::Equals);
+    if let Some(rest) = maybe_rest {
+        let (right, rest) = parse_assignment(rest, bump)?;
+        cp.commit();
+        Some((ASTExpr::Assign(bump.alloc(left), bump.alloc(right)), rest))
+    } else {
+        cp.commit();
+        Some((left, rest))
+    }
 }
 
 fn parse_operation<'a, 'b>(
@@ -198,29 +215,25 @@ fn parse_index<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    combi::parse_or(
-        tokens,
-        &[
-            &|tokens, bump| {
-                let mut cp = bump.create_checkpoint();
-                let (to_index, rest) = parse_call(tokens, bump)?;
-                let rest = combi::parse_token_consume(rest, lex::Token::LeftBracket)?;
-                let list = bump.create_list();
-                let (expr, mut rest) = parse_expr(rest, bump)?;
-                list.push(expr);
-                while let Some(rest_comma) = combi::parse_token_consume(rest, lex::Token::Comma) {
-                    let (expr, rest_new) = parse_expr(rest_comma, bump)?;
-                    list.push(expr);
-                    rest = rest_new;
-                }
-                let rest = combi::parse_token_consume(rest, lex::Token::RightBracket)?;
-                cp.commit();
-                Some((ASTExpr::Index(bump.alloc(to_index), list), rest))
-            },
-            &parse_call,
-        ],
-        bump,
-    )
+    let mut cp = bump.create_checkpoint();
+    let (to_index, rest) = parse_call(tokens, bump)?;
+    let maybe_rest = combi::parse_token_consume(rest, lex::Token::LeftBracket);
+    if let Some(rest) = maybe_rest {
+        let list = bump.create_list();
+        let (expr, mut rest) = parse_expr(rest, bump)?;
+        list.push(expr);
+        while let Some(rest_comma) = combi::parse_token_consume(rest, lex::Token::Comma) {
+            let (expr, rest_new) = parse_expr(rest_comma, bump)?;
+            list.push(expr);
+            rest = rest_new;
+        }
+        let rest = combi::parse_token_consume(rest, lex::Token::RightBracket)?;
+        cp.commit();
+        Some((ASTExpr::Index(bump.alloc(to_index), list), rest))
+    } else {
+        cp.commit();
+        Some((to_index, rest))
+    }
 }
 
 fn parse_call<'a, 'b>(
@@ -484,12 +497,7 @@ mod tests {
     fn parse_index1() {
         let bump = bump::BumpAllocator::new();
         let tokens = lex(b"xyz[]", &bump).unwrap();
-        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
-        assert_eq!(ast, ASTExpr::Identifier(b"xyz"));
-        assert_eq!(
-            rest,
-            vec![lex::Token::LeftBracket, lex::Token::RightBracket]
-        );
+        assert_eq!(parse_expr(&tokens, &bump), None);
     }
 
     #[test]
