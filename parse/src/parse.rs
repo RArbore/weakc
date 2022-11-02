@@ -113,7 +113,28 @@ fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    parse_or(tokens, bump)
+    parse_operation(tokens, bump)
+}
+
+fn parse_operation<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
+    let (mut expr, mut rest) = parse_or(tokens, bump)?;
+    let mut cp = bump.create_checkpoint();
+    let mut maybe_op = parse_identifier(rest, bump);
+    cp.commit();
+    while let Some((op, tmp_rest)) = maybe_op {
+        let (new_expr, tmp_rest) = parse_or(tmp_rest, bump)?;
+        expr = ASTExpr::CustomBinary(op, bump.alloc(expr), bump.alloc(new_expr));
+        rest = tmp_rest;
+        let mut cp = bump.create_checkpoint();
+        maybe_op = parse_identifier(rest, bump);
+        if maybe_op.is_some() {
+            cp.commit();
+        }
+    }
+    Some((expr, rest))
 }
 
 macro_rules! define_binary_expr_parse {
@@ -569,6 +590,26 @@ mod tests {
             ast,
             ASTExpr::Binary(
                 ASTBinaryOp::Power,
+                bump.alloc(ASTExpr::Number(1.4)),
+                bump.alloc(ASTExpr::Binary(
+                    ASTBinaryOp::ShapedAs,
+                    bump.alloc(ASTExpr::Number(3.1)),
+                    bump.alloc(ASTExpr::Number(8.1)),
+                )),
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_custom_operator1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"1.4 myop (3.1 sa 8.1)", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTExpr::CustomBinary(
+                b"myop",
                 bump.alloc(ASTExpr::Number(1.4)),
                 bump.alloc(ASTExpr::Binary(
                     ASTBinaryOp::ShapedAs,
