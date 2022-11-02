@@ -18,7 +18,7 @@ use core::cmp::max;
 use core::fmt;
 use core::slice;
 
-const STARTING_SIZE: usize = 4096;
+const STARTING_SIZE: usize = 512;
 const MINIMUM_LIST_ALLOC: usize = 4;
 const MAX_NUM_BLOCKS: usize = 20;
 
@@ -46,7 +46,11 @@ pub struct List<'a, T: Sized + Clone + PartialEq + fmt::Debug> {
 
 impl BumpAllocator {
     pub fn new() -> BumpAllocator {
-        let layout = alloc::alloc::Layout::from_size_align(STARTING_SIZE, STARTING_SIZE)
+        Self::new_with_start_size(STARTING_SIZE)
+    }
+
+    fn new_with_start_size(start_size: usize) -> BumpAllocator {
+        let layout = alloc::alloc::Layout::from_size_align(start_size, start_size)
             .expect("ERROR: Couldn't create layout for initial bump allocator block.");
         let mut blocks = [(0 as *mut u8, 0, unsafe {
             alloc::alloc::Layout::from_size_align_unchecked(0, 0)
@@ -318,7 +322,7 @@ mod tests {
 
     #[test]
     fn take_snapshot() {
-        let bp = BumpAllocator::new();
+        let bp = BumpAllocator::new_with_start_size(4096);
 
         let num = 12387;
         for i in 0..num {
