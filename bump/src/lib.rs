@@ -133,8 +133,9 @@ impl BumpAllocator {
         let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
 
         if !commit {
-            for block_num in mut_self.snapshots.len() - drop_num..mut_self.snapshots.len() {
-                let block_size = mut_self.snapshots[block_num];
+            for block_num in 0..drop_num {
+                let block_size =
+                    mut_self.snapshots[mut_self.snapshots.len() - drop_num + block_num];
                 mut_self.blocks[block_num].1 = block_size;
             }
         }

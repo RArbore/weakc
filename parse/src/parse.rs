@@ -120,20 +120,16 @@ fn parse_operation<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-    let (mut expr, mut rest) = parse_or(tokens, bump)?;
     let mut cp = bump.create_checkpoint();
+    let (mut expr, mut rest) = parse_or(tokens, bump)?;
     let mut maybe_op = parse_identifier(rest, bump);
-    cp.commit();
     while let Some((op, tmp_rest)) = maybe_op {
         let (new_expr, tmp_rest) = parse_or(tmp_rest, bump)?;
         expr = ASTExpr::CustomBinary(op, bump.alloc(expr), bump.alloc(new_expr));
         rest = tmp_rest;
-        let mut cp = bump.create_checkpoint();
         maybe_op = parse_identifier(rest, bump);
-        if maybe_op.is_some() {
-            cp.commit();
-        }
     }
+    cp.commit();
     Some((expr, rest))
 }
 
@@ -143,20 +139,16 @@ macro_rules! define_binary_expr_parse {
             tokens: &'a [lex::Token<'b>],
             bump: &'b bump::BumpAllocator,
         ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {
-            let (mut expr, mut rest) = $z(tokens, bump)?;
             let mut cp = bump.create_checkpoint();
+            let (mut expr, mut rest) = $z(tokens, bump)?;
             let mut maybe_op = combi::parse_any_of(rest, $y);
-            cp.commit();
             while let Some((op, tmp_rest)) = maybe_op {
                 let (new_expr, tmp_rest) = $z(tmp_rest, bump)?;
                 expr = ASTExpr::Binary(op, bump.alloc(expr), bump.alloc(new_expr));
                 rest = tmp_rest;
-                let mut cp = bump.create_checkpoint();
                 maybe_op = combi::parse_any_of(rest, $y);
-                if maybe_op.is_some() {
-                    cp.commit();
-                }
             }
+            cp.commit();
             Some((expr, rest))
         }
     };
@@ -449,6 +441,16 @@ mod tests {
     fn parse_primary5() {
         let bump = bump::BumpAllocator::new();
         let tokens = lex(b"[]", &bump).unwrap();
+        let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        assert_eq!(ast, ASTExpr::ArrayLiteral(correct_list));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_primary6() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"(((((((((((([]))))))))))))", &bump).unwrap();
         let (ast, rest) = parse_expr(&tokens, &bump).unwrap();
         let correct_list = bump.create_list();
         assert_eq!(ast, ASTExpr::ArrayLiteral(correct_list));
