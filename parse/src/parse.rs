@@ -27,7 +27,7 @@ pub enum ASTStmt<'a> {
     Print(&'a ASTExpr<'a>),
     Return(&'a ASTExpr<'a>),
     Verify(&'a ASTExpr<'a>),
-    Variable(&'a [u8], ASTExpr<'a>),
+    Variable(&'a [u8], &'a ASTExpr<'a>),
     Expression(&'a ASTExpr<'a>),
 }
 
@@ -102,11 +102,32 @@ const FACTOR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
     (&[lex::Token::ShapedAs], ASTBinaryOp::ShapedAs),
 ];
 
-pub fn parse_stmt<'a, 'b>(
+fn parse_stmt<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
-    None
+    combi::parse_or(tokens, &[&parse_var, &parse_expr_stmt], bump)
+}
+
+fn parse_var<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
+    let rest = combi::parse_token_consume(tokens, lex::Token::Variable)?;
+    let (name, rest) = parse_identifier(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::Equals)?;
+    let (expr, rest) = parse_expr(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::Semicolon)?;
+    Some((ASTStmt::Variable(name, bump.alloc(expr)), rest))
+}
+
+fn parse_expr_stmt<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
+    let (expr, rest) = parse_expr(tokens, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::Semicolon)?;
+    Some((ASTStmt::Expression(bump.alloc(expr)), rest))
 }
 
 fn parse_expr<'a, 'b>(
@@ -655,6 +676,42 @@ mod tests {
             ast,
             ASTExpr::Assign(
                 bump.alloc(ASTExpr::Identifier(b"myvar")),
+                bump.alloc(ASTExpr::Assign(
+                    bump.alloc(ASTExpr::Identifier(b"xyz")),
+                    bump.alloc(ASTExpr::Identifier(b"abc")),
+                ))
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_expr_stmt() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"myvar = xyz = abc;", &bump).unwrap();
+        let (ast, rest) = parse_stmt(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
+                bump.alloc(ASTExpr::Identifier(b"myvar")),
+                bump.alloc(ASTExpr::Assign(
+                    bump.alloc(ASTExpr::Identifier(b"xyz")),
+                    bump.alloc(ASTExpr::Identifier(b"abc")),
+                ))
+            )))
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_var() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"a myvar = xyz = abc;", &bump).unwrap();
+        let (ast, rest) = parse_stmt(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            ASTStmt::Variable(
+                b"myvar",
                 bump.alloc(ASTExpr::Assign(
                     bump.alloc(ASTExpr::Identifier(b"xyz")),
                     bump.alloc(ASTExpr::Identifier(b"abc")),
