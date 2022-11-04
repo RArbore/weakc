@@ -168,6 +168,17 @@ impl BumpAllocator {
     pub fn create_list<T: Sized + Clone + PartialEq + fmt::Debug>(&self) -> &mut List<T> {
         self.create_list_impl(MINIMUM_LIST_ALLOC)
     }
+
+    pub fn create_list_with<T: Sized + Clone + PartialEq + fmt::Debug>(
+        &self,
+        items: &[T],
+    ) -> &mut List<T> {
+        let list = self.create_list();
+        for item in items {
+            list.push(item.clone());
+        }
+        list
+    }
 }
 
 impl Drop for BumpAllocator {
@@ -206,6 +217,17 @@ impl<'a, T: Sized + Clone + PartialEq + fmt::Debug> List<'a, T> {
             }
             Some(next) => {
                 next.push(item);
+            }
+        }
+    }
+
+    pub fn at(&self, idx: usize) -> &T {
+        if idx < self.chunk.len() {
+            &self.chunk[idx]
+        } else {
+            match &self.next {
+                Some(next) => next.at(idx - self.chunk.len()),
+                None => panic!("ERROR: Index {} out of bounds.", idx),
             }
         }
     }
@@ -274,7 +296,11 @@ impl<T: Sized + Clone + PartialEq + fmt::Debug> PartialEq for List<'_, T> {
 
 impl<T: Sized + Clone + PartialEq + fmt::Debug> fmt::Debug for List<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("List").field("len", &self.len()).finish()
+        let mut fmt_list = f.debug_list();
+        for i in 0..self.len() {
+            fmt_list.entry(self.at(i));
+        }
+        fmt_list.finish()
     }
 }
 

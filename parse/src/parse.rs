@@ -102,6 +102,21 @@ const FACTOR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
     (&[lex::Token::ShapedAs], ASTBinaryOp::ShapedAs),
 ];
 
+fn parse_program<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(&'b bump::List<'b, ASTStmt<'b>>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let mut rest = tokens;
+    let list = bump.create_list();
+    while let Some((stmt, new_rest)) = parse_stmt(rest, bump) {
+        list.push(stmt);
+        rest = new_rest;
+    }
+    cp.commit();
+    Some((list, rest))
+}
+
 fn parse_stmt<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
@@ -1008,6 +1023,251 @@ mod tests {
             bump.alloc(ASTExpr::Identifier(b"y")),
         ))));
         assert_eq!(ast, ASTStmt::Block(correct_list));
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_program1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);", &bump).unwrap();
+        let (ast, rest) = parse_program(&tokens, &bump).unwrap();
+        assert_eq!(
+            ast,
+            bump.create_list_with(&[
+                ASTStmt::Function(
+                    b"dim",
+                    bump.create_list_with(&[b"mat" as &[u8]]),
+                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[ASTStmt::Return(bump.alloc(ASTExpr::Index(
+                        bump.alloc(ASTExpr::Unary(
+                            ASTUnaryOp::Shape,
+                            bump.alloc(ASTExpr::Unary(ASTUnaryOp::Shape, bump.alloc(ASTExpr::Identifier(b"mat"))))
+                        )),
+                        bump.create_list_with(&[ASTExpr::Number(0.0)])
+                    )))])))
+                ),
+                ASTStmt::Function(
+                    b"len",
+                    bump.create_list_with(&[b"list" as &[u8]]),
+                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[
+                        ASTStmt::Verify(bump.alloc(ASTExpr::Binary(
+                            ASTBinaryOp::EqualsEquals,
+                            bump.alloc(ASTExpr::Call(
+                                b"dim",
+                                bump.create_list_with(&[ASTExpr::Identifier(b"list")])
+                            )),
+                            bump.alloc(ASTExpr::Number(1.0))
+                        ))),
+                        ASTStmt::Return(bump.alloc(ASTExpr::Index(
+                            bump.alloc(ASTExpr::Unary(ASTUnaryOp::Shape, bump.alloc(ASTExpr::Identifier(b"list")))),
+                            bump.create_list_with(&[ASTExpr::Number(0.0)])
+                        )))
+                    ])))
+                ),
+                ASTStmt::Function(
+                    b"part_one",
+                    bump.create_list_with(&[b"depths" as &[u8]]),
+                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[
+                        ASTStmt::Verify(bump.alloc(ASTExpr::Binary(
+                            ASTBinaryOp::EqualsEquals,
+                            bump.alloc(ASTExpr::Call(
+                                b"dim",
+                                bump.create_list_with(&[ASTExpr::Identifier(b"depths")])
+                            )),
+                            bump.alloc(ASTExpr::Number(1.0))
+                        ))),
+                        ASTStmt::Variable(
+                            b"len",
+                            bump.alloc(ASTExpr::Call(
+                                b"len",
+                                bump.create_list_with(&[ASTExpr::Identifier(b"depths")])
+                            ))
+                        ),
+                        ASTStmt::Verify(bump.alloc(ASTExpr::Binary(
+                            ASTBinaryOp::GreaterEquals,
+                            bump.alloc(ASTExpr::Identifier(b"len")),
+                            bump.alloc(ASTExpr::Number(1.0))
+                        ))),
+                        ASTStmt::Variable(b"j", bump.alloc(ASTExpr::Number(1.0))),
+                        ASTStmt::Variable(b"count", bump.alloc(ASTExpr::Number(0.0))),
+                        ASTStmt::While(
+                            bump.alloc(ASTExpr::Binary(
+                                ASTBinaryOp::Lesser,
+                                bump.alloc(ASTExpr::Identifier(b"j")),
+                                bump.alloc(ASTExpr::Identifier(b"len"))
+                            )),
+                            bump.alloc(ASTStmt::Block(bump.create_list_with(&[
+                                ASTStmt::If(
+                                    bump.alloc(ASTExpr::Binary(
+                                        ASTBinaryOp::Greater,
+                                        bump.alloc(ASTExpr::Index(
+                                            bump.alloc(ASTExpr::Identifier(b"depths")),
+                                            bump.create_list_with(&[ASTExpr::Identifier(b"j")])
+                                        )),
+                                        bump.alloc(ASTExpr::Index(
+                                            bump.alloc(ASTExpr::Identifier(b"depths")),
+                                            bump.create_list_with(&[ASTExpr::Binary(
+                                                ASTBinaryOp::Subtract,
+                                                bump.alloc(ASTExpr::Identifier(b"j")),
+                                                bump.alloc(ASTExpr::Number(1.0))
+                                            )])
+                                        ))
+                                    )),
+                                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[ASTStmt::Expression(
+                                        bump.alloc(ASTExpr::Assign(
+                                            bump.alloc(ASTExpr::Identifier(b"count")),
+                                            bump.alloc(ASTExpr::Binary(
+                                                ASTBinaryOp::Add,
+                                                bump.alloc(ASTExpr::Identifier(b"count")),
+                                                bump.alloc(ASTExpr::Number(1.0))
+                                            ))
+                                        ))
+                                    )])))
+                                ),
+                                ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
+                                    bump.alloc(ASTExpr::Identifier(b"j")),
+                                    bump.alloc(ASTExpr::Binary(
+                                        ASTBinaryOp::Add,
+                                        bump.alloc(ASTExpr::Identifier(b"j")),
+                                        bump.alloc(ASTExpr::Number(1.0))
+                                    ))
+                                )))
+                            ])))
+                        ),
+                        ASTStmt::Return(bump.alloc(ASTExpr::Identifier(b"count")))
+                    ])))
+                ),
+                ASTStmt::Function(
+                    b"part_two",
+                    bump.create_list_with(&[b"depths" as &[u8]]),
+                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[
+                        ASTStmt::Verify(bump.alloc(ASTExpr::Binary(
+                            ASTBinaryOp::EqualsEquals,
+                            bump.alloc(ASTExpr::Call(
+                                b"dim",
+                                bump.create_list_with(&[ASTExpr::Identifier(b"depths")])
+                            )),
+                            bump.alloc(ASTExpr::Number(1.0))
+                        ))),
+                        ASTStmt::Variable(
+                            b"len",
+                            bump.alloc(ASTExpr::Call(
+                                b"len",
+                                bump.create_list_with(&[ASTExpr::Identifier(b"depths")])
+                            ))
+                        ),
+                        ASTStmt::Verify(bump.alloc(ASTExpr::Binary(
+                            ASTBinaryOp::GreaterEquals,
+                            bump.alloc(ASTExpr::Identifier(b"len")),
+                            bump.alloc(ASTExpr::Number(1.0))
+                        ))),
+                        ASTStmt::Variable(b"j", bump.alloc(ASTExpr::Number(0.0))),
+                        ASTStmt::Variable(
+                            b"new_depths",
+                            bump.alloc(ASTExpr::Binary(
+                                ASTBinaryOp::ShapedAs,
+                                bump.alloc(ASTExpr::ArrayLiteral(
+                                    bump.create_list_with(&[ASTExpr::Number(0.0)])
+                                )),
+                                bump.alloc(ASTExpr::ArrayLiteral(
+                                    bump.create_list_with(&[ASTExpr::Identifier(b"len")])
+                                ))
+                            ))
+                        ),
+                        ASTStmt::Variable(b"count", bump.alloc(ASTExpr::Number(0.0))),
+                        ASTStmt::While(
+                            bump.alloc(ASTExpr::Binary(
+                                ASTBinaryOp::Lesser,
+                                bump.alloc(ASTExpr::Identifier(b"j")),
+                                bump.alloc(ASTExpr::Binary(
+                                    ASTBinaryOp::Subtract,
+                                    bump.alloc(ASTExpr::Identifier(b"len")),
+                                    bump.alloc(ASTExpr::Number(2.0))
+                                ))
+                            )),
+                            bump.alloc(ASTStmt::Block(bump.create_list_with(&[
+                                ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
+                                    bump.alloc(ASTExpr::Index(
+                                        bump.alloc(ASTExpr::Identifier(b"new_depths")),
+                                        bump.create_list_with(&[ASTExpr::Identifier(b"count")])
+                                    )),
+                                    bump.alloc(ASTExpr::Binary(
+                                        ASTBinaryOp::Add,
+                                        bump.alloc(ASTExpr::Binary(
+                                            ASTBinaryOp::Add,
+                                            bump.alloc(ASTExpr::Index(
+                                                bump.alloc(ASTExpr::Identifier(b"depths")),
+                                                bump.create_list_with(&[ASTExpr::Identifier(&[
+                                                    106
+                                                ])])
+                                            )),
+                                            bump.alloc(ASTExpr::Index(
+                                                bump.alloc(ASTExpr::Identifier(b"depths")),
+                                                bump.create_list_with(&[ASTExpr::Binary(
+                                                    ASTBinaryOp::Add,
+                                                    bump.alloc(ASTExpr::Identifier(b"j")),
+                                                    bump.alloc(ASTExpr::Number(1.0))
+                                                )])
+                                            ))
+                                        )),
+                                        bump.alloc(ASTExpr::Index(
+                                            bump.alloc(ASTExpr::Identifier(b"depths")),
+                                            bump.create_list_with(&[ASTExpr::Binary(
+                                                ASTBinaryOp::Add,
+                                                bump.alloc(ASTExpr::Identifier(b"j")),
+                                                bump.alloc(ASTExpr::Number(2.0))
+                                            )])
+                                        ))
+                                    ))
+                                ))),
+                                ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
+                                    bump.alloc(ASTExpr::Identifier(b"count")),
+                                    bump.alloc(ASTExpr::Binary(
+                                        ASTBinaryOp::Add,
+                                        bump.alloc(ASTExpr::Identifier(b"count")),
+                                        bump.alloc(ASTExpr::Number(1.0))
+                                    ))
+                                ))),
+                                ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
+                                    bump.alloc(ASTExpr::Identifier(b"j")),
+                                    bump.alloc(ASTExpr::Binary(
+                                        ASTBinaryOp::Add,
+                                        bump.alloc(ASTExpr::Identifier(b"j")),
+                                        bump.alloc(ASTExpr::Number(1.0))
+                                    ))
+                                )))
+                            ])))
+                        ),
+                        ASTStmt::Return(bump.alloc(ASTExpr::Call(
+                            b"part_one",
+                            bump.create_list_with(&[ASTExpr::Identifier(b"new_depths")])
+                        )))
+                    ])))
+                ),
+                ASTStmt::Variable(
+                    b"d",
+                    bump.alloc(ASTExpr::ArrayLiteral(bump.create_list_with(&[
+                        ASTExpr::Number(199.0),
+                        ASTExpr::Number(200.0),
+                        ASTExpr::Number(208.0),
+                        ASTExpr::Number(210.0),
+                        ASTExpr::Number(200.0),
+                        ASTExpr::Number(207.0),
+                        ASTExpr::Number(240.0),
+                        ASTExpr::Number(269.0),
+                        ASTExpr::Number(260.0),
+                        ASTExpr::Number(263.0)
+                    ])))
+                ),
+                ASTStmt::Print(bump.alloc(ASTExpr::Call(
+                    b"part_one",
+                    bump.create_list_with(&[ASTExpr::Identifier(&[100])])
+                ))),
+                ASTStmt::Print(bump.alloc(ASTExpr::Call(
+                    b"part_two",
+                    bump.create_list_with(&[ASTExpr::Identifier(&[100])])
+                )))
+            ])
+        );
         assert_eq!(rest, &[]);
     }
 }
