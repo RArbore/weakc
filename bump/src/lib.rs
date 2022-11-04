@@ -293,7 +293,6 @@ mod tests {
             ptrs.push(a);
         }
         for i in 0..num {
-            println!("{} {}", *ptrs[i], i);
             assert!(*ptrs[i] == i);
         }
     }
