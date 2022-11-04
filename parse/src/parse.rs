@@ -21,7 +21,7 @@ use super::lex;
 pub enum ASTStmt<'a> {
     Block(&'a bump::List<'a, ASTStmt<'a>>),
     Function(&'a [u8], &'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>),
-    Operator(&'a [u8], [&'a [u8]; 2], &'a ASTStmt<'a>),
+    Operator(&'a [u8], &'a [u8], &'a [u8], &'a ASTStmt<'a>),
     If(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
     While(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
     Print(&'a ASTExpr<'a>),
@@ -110,6 +110,8 @@ fn parse_stmt<'a, 'b>(
         tokens,
         &[
             &parse_block,
+            &parse_func,
+            &parse_op,
             &parse_if,
             &parse_while,
             &parse_print,
@@ -136,6 +138,55 @@ fn parse_block<'a, 'b>(
     let rest = combi::parse_token_consume(rest, lex::Token::RightBrace)?;
     cp.commit();
     Some((ASTStmt::Block(list), rest))
+}
+
+fn parse_func<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let rest = combi::parse_token_consume(tokens, lex::Token::Function)?;
+    let (name, rest) = parse_identifier(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::LeftParen)?;
+    let (list, rest) = combi::parse_or(
+        rest,
+        &[
+            &|tokens, bump| {
+                let list = bump.create_list();
+                let (arg, mut rest) = parse_identifier(tokens, bump)?;
+                list.push(arg);
+                while let Some(rest_comma) = combi::parse_token_consume(rest, lex::Token::Comma) {
+                    let (arg, rest_new) = parse_identifier(rest_comma, bump)?;
+                    list.push(arg);
+                    rest = rest_new;
+                }
+                Some((list, rest))
+            },
+            &|tokens, bump| Some((bump.create_list(), tokens)),
+        ],
+        bump,
+    )?;
+    let rest = combi::parse_token_consume(rest, lex::Token::RightParen)?;
+    let (body, rest) = parse_block(rest, bump)?;
+    cp.commit();
+    Some((ASTStmt::Function(name, list, bump.alloc(body)), rest))
+}
+
+fn parse_op<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let rest = combi::parse_token_consume(tokens, lex::Token::Operator)?;
+    let (name, rest) = parse_identifier(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::LeftParen)?;
+    let (left, rest) = parse_identifier(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::Comma)?;
+    let (right, rest) = parse_identifier(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::RightParen)?;
+    let (body, rest) = parse_block(rest, bump)?;
+    cp.commit();
+    Some((ASTStmt::Operator(name, left, right, bump.alloc(body)), rest))
 }
 
 fn parse_if<'a, 'b>(
@@ -896,6 +947,55 @@ mod tests {
         );
         assert_eq!(rest, &[]);
     }
+
+    #[test]
+    fn parse_op() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"o myop (x, y) { r x + y; }", &bump).unwrap();
+        let (ast, rest) = parse_stmt(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        correct_list.push(ASTStmt::Return(bump.alloc(ASTExpr::Binary(
+            ASTBinaryOp::Add,
+            bump.alloc(ASTExpr::Identifier(b"x")),
+            bump.alloc(ASTExpr::Identifier(b"y")),
+        ))));
+        assert_eq!(
+            ast,
+            ASTStmt::Operator(
+                b"myop",
+                b"x",
+                b"y",
+                bump.alloc(ASTStmt::Block(correct_list))
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_func() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"f myop (x, y) { r x + y; }", &bump).unwrap();
+        let (ast, rest) = parse_stmt(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        correct_list.push(ASTStmt::Return(bump.alloc(ASTExpr::Binary(
+            ASTBinaryOp::Add,
+            bump.alloc(ASTExpr::Identifier(b"x")),
+            bump.alloc(ASTExpr::Identifier(b"y")),
+        ))));
+        let params_list: &mut bump::List<&[u8]> = bump.create_list();
+        params_list.push(b"x");
+        params_list.push(b"y");
+        assert_eq!(
+            ast,
+            ASTStmt::Function(
+                b"myop",
+                params_list,
+                bump.alloc(ASTStmt::Block(correct_list))
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+
     #[test]
     fn parse_block() {
         let bump = bump::BumpAllocator::new();
