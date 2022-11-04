@@ -22,7 +22,7 @@ pub enum ASTStmt<'a> {
     Block(&'a bump::List<'a, ASTStmt<'a>>),
     Function(&'a [u8], &'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>),
     Operator(&'a [u8], [&'a [u8]; 2], &'a ASTStmt<'a>),
-    If(ASTExpr<'a>, &'a ASTStmt<'a>),
+    If(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
     While(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
     Print(&'a ASTExpr<'a>),
     Return(&'a ASTExpr<'a>),
@@ -110,6 +110,7 @@ fn parse_stmt<'a, 'b>(
         tokens,
         &[
             &parse_block,
+            &parse_if,
             &parse_while,
             &parse_print,
             &parse_return,
@@ -135,6 +136,20 @@ fn parse_block<'a, 'b>(
     let rest = combi::parse_token_consume(rest, lex::Token::RightBrace)?;
     cp.commit();
     Some((ASTStmt::Block(list), rest))
+}
+
+fn parse_if<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let rest = combi::parse_token_consume(tokens, lex::Token::If)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::LeftParen)?;
+    let (cond, rest) = parse_expr(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::RightParen)?;
+    let (body, rest) = parse_block(rest, bump)?;
+    cp.commit();
+    Some((ASTStmt::If(bump.alloc(cond), bump.alloc(body)), rest))
 }
 
 fn parse_while<'a, 'b>(
@@ -862,6 +877,37 @@ mod tests {
                 bump.alloc(ASTStmt::Block(correct_list))
             )
         );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn parse_if() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"i (cond) { p \"hey there!\"; }", &bump).unwrap();
+        let (ast, rest) = parse_stmt(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        correct_list.push(ASTStmt::Print(bump.alloc(ASTExpr::String(b"hey there!"))));
+        assert_eq!(
+            ast,
+            ASTStmt::If(
+                bump.alloc(ASTExpr::Identifier(b"cond")),
+                bump.alloc(ASTStmt::Block(correct_list))
+            )
+        );
+        assert_eq!(rest, &[]);
+    }
+    #[test]
+    fn parse_block() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = lex(b"{ p \"hey there!\"; x = y; }", &bump).unwrap();
+        let (ast, rest) = parse_stmt(&tokens, &bump).unwrap();
+        let correct_list = bump.create_list();
+        correct_list.push(ASTStmt::Print(bump.alloc(ASTExpr::String(b"hey there!"))));
+        correct_list.push(ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
+            bump.alloc(ASTExpr::Identifier(b"x")),
+            bump.alloc(ASTExpr::Identifier(b"y")),
+        ))));
+        assert_eq!(ast, ASTStmt::Block(correct_list));
         assert_eq!(rest, &[]);
     }
 }
