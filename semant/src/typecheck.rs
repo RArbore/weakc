@@ -15,6 +15,11 @@
 extern crate bump;
 extern crate parse;
 
+use core::cell::RefCell;
+
+use parse::ASTExpr;
+use parse::ASTStmt;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum Type {
     Number,
@@ -23,14 +28,36 @@ pub enum Type {
     String,
 }
 
-pub fn typecheck<'a>(ast: &'a bump::List<'a, parse::ASTStmt<'a>>, bump: &'a bump::BumpAllocator) {
-    let constraints = generate_constraints(ast, bump);
+pub fn typecheck<'a>(
+    ast: &'a bump::List<'a, ASTStmt<'a>>,
+    bump: &'a bump::BumpAllocator,
+) -> Option<&'a bump::List<'a, Type>> {
+    let types: RefCell<&'a bump::List<'a, Type>> = RefCell::new(bump.create_list());
+    for i in 0..ast.len() {
+        typecheck_stmt(ast.at(i), types.clone(), bump)?;
+    }
+    Some(types.into_inner())
 }
 
-fn generate_constraints<'a>(
-    ast: &'a bump::List<'a, parse::ASTStmt<'a>>,
+pub fn typecheck_stmt<'a>(
+    ast: &'a ASTStmt<'a>,
+    types: RefCell<&'a bump::List<'a, Type>>,
     bump: &'a bump::BumpAllocator,
-) -> &'a bump::List<'a, (&'a [u8], Type)> {
-    let constraints = bump.create_list();
-    constraints
+) -> Option<()> {
+    Some(())
+}
+
+pub fn typecheck_expr<'a>(
+    ast: &'a ASTExpr<'a>,
+    types: RefCell<&'a bump::List<'a, Type>>,
+    bump: &'a bump::BumpAllocator,
+) -> Option<()> {
+    Some(())
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn typecheck1() {}
 }
