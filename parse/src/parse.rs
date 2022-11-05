@@ -102,7 +102,7 @@ const FACTOR_OPS: &[(&[lex::Token], ASTBinaryOp)] = &[
     (&[lex::Token::ShapedAs], ASTBinaryOp::ShapedAs),
 ];
 
-fn parse_program<'a, 'b>(
+pub fn parse_program<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(&'b bump::List<'b, ASTStmt<'b>>, &'a [lex::Token<'b>])> {
@@ -1037,13 +1037,18 @@ mod tests {
                 ASTStmt::Function(
                     b"dim",
                     bump.create_list_with(&[b"mat" as &[u8]]),
-                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[ASTStmt::Return(bump.alloc(ASTExpr::Index(
-                        bump.alloc(ASTExpr::Unary(
-                            ASTUnaryOp::Shape,
-                            bump.alloc(ASTExpr::Unary(ASTUnaryOp::Shape, bump.alloc(ASTExpr::Identifier(b"mat"))))
-                        )),
-                        bump.create_list_with(&[ASTExpr::Number(0.0)])
-                    )))])))
+                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[ASTStmt::Return(
+                        bump.alloc(ASTExpr::Index(
+                            bump.alloc(ASTExpr::Unary(
+                                ASTUnaryOp::Shape,
+                                bump.alloc(ASTExpr::Unary(
+                                    ASTUnaryOp::Shape,
+                                    bump.alloc(ASTExpr::Identifier(b"mat"))
+                                ))
+                            )),
+                            bump.create_list_with(&[ASTExpr::Number(0.0)])
+                        ))
+                    )])))
                 ),
                 ASTStmt::Function(
                     b"len",
@@ -1058,7 +1063,10 @@ mod tests {
                             bump.alloc(ASTExpr::Number(1.0))
                         ))),
                         ASTStmt::Return(bump.alloc(ASTExpr::Index(
-                            bump.alloc(ASTExpr::Unary(ASTUnaryOp::Shape, bump.alloc(ASTExpr::Identifier(b"list")))),
+                            bump.alloc(ASTExpr::Unary(
+                                ASTUnaryOp::Shape,
+                                bump.alloc(ASTExpr::Identifier(b"list"))
+                            )),
                             bump.create_list_with(&[ASTExpr::Number(0.0)])
                         )))
                     ])))
@@ -1112,16 +1120,16 @@ mod tests {
                                             )])
                                         ))
                                     )),
-                                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[ASTStmt::Expression(
-                                        bump.alloc(ASTExpr::Assign(
+                                    bump.alloc(ASTStmt::Block(bump.create_list_with(&[
+                                        ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
                                             bump.alloc(ASTExpr::Identifier(b"count")),
                                             bump.alloc(ASTExpr::Binary(
                                                 ASTBinaryOp::Add,
                                                 bump.alloc(ASTExpr::Identifier(b"count")),
                                                 bump.alloc(ASTExpr::Number(1.0))
                                             ))
-                                        ))
-                                    )])))
+                                        )))
+                                    ])))
                                 ),
                                 ASTStmt::Expression(bump.alloc(ASTExpr::Assign(
                                     bump.alloc(ASTExpr::Identifier(b"j")),

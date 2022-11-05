@@ -1,0 +1,9 @@
+[package]
+name = "semant"
+description = "Semantic checker for weak-lang"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+bump = { path = "../bump" }
+parse = { path = "../parse" }

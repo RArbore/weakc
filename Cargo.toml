@@ -3,6 +3,7 @@ members = [
     "driver",
     "bump",
     "parse",
+    "semant",
 ]
 
 [profile.release]

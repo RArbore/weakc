@@ -14,5 +14,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "semant"
+version = "0.1.0"
+dependencies = [
+ "bump",
+ "parse",
+]
+
+[[package]]
 name = "weakc"
 version = "0.1.0"

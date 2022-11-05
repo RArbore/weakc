@@ -71,7 +71,7 @@ pub fn parse_string<'a, T: Copy + PartialEq>(
 pub fn parse_token<'a, 'b, T: Copy + PartialEq, R>(
     chunk: &'a [T],
     pred: &dyn Fn(T) -> Option<R>,
-    bump: &'b bump::BumpAllocator,
+    _bump: &'b bump::BumpAllocator,
 ) -> Option<(R, &'a [T])> {
     let c = *chunk.get(0)?;
     if let Some(result) = pred(c) {
