@@ -15,8 +15,6 @@
 extern crate bump;
 extern crate parse;
 
-use core::cell::RefCell;
-
 use parse::ASTExpr;
 use parse::ASTStmt;
 
@@ -24,35 +22,35 @@ use parse::ASTStmt;
 pub enum Type {
     Number,
     Tensor,
+    Numeric,
     Boolean,
     String,
+}
+
+enum Symbol<'a> {
+    Variable(&'a [u8], Type),
+    Function(&'a [u8], Option<&'a bump::List<'a, Type>>, Option<Type>),
 }
 
 pub fn typecheck<'a>(
     ast: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
 ) -> Option<&'a bump::List<'a, Type>> {
-    let types: RefCell<&'a bump::List<'a, Type>> = RefCell::new(bump.create_list());
+    let mut types = bump.create_list();
+    let mut symbols = vec![];
     for i in 0..ast.len() {
-        typecheck_stmt(ast.at(i), types.clone(), bump)?;
+        (types, symbols) = typecheck_stmt(ast.at(i), types, symbols, bump)?;
     }
-    Some(types.into_inner())
+    Some(types)
 }
 
-pub fn typecheck_stmt<'a>(
+fn typecheck_stmt<'a>(
     ast: &'a ASTStmt<'a>,
-    types: RefCell<&'a bump::List<'a, Type>>,
+    types: &'a mut bump::List<'a, Type>,
+    symbols: Vec<Symbol<'a>>,
     bump: &'a bump::BumpAllocator,
-) -> Option<()> {
-    Some(())
-}
-
-pub fn typecheck_expr<'a>(
-    ast: &'a ASTExpr<'a>,
-    types: RefCell<&'a bump::List<'a, Type>>,
-    bump: &'a bump::BumpAllocator,
-) -> Option<()> {
-    Some(())
+) -> Option<(&'a mut bump::List<'a, Type>, Vec<Symbol<'a>>)> {
+    Some((types, symbols))
 }
 
 mod tests {
