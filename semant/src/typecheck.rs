@@ -83,6 +83,9 @@ fn typecheck_expr<'a>(
 ) -> Option<(TypeContext<'a>, Type)> {
     let my_type = match ast {
         ASTExpr::Nil => Type::Nil,
+        ASTExpr::Boolean(_) => Type::Boolean,
+        ASTExpr::Number(_) => Type::Number,
+        ASTExpr::String(_) => Type::String,
         ASTExpr::Identifier(var) => {
             let mut found_type = None;
             for symbol in context.symbols.iter() {
@@ -117,6 +120,42 @@ mod tests {
         let correct_list = bump.create_list();
         correct_list.push(Type::Nil);
         correct_list.push(Type::Nil);
+        assert_eq!(typecheck, correct_list);
+    }
+
+    #[test]
+    fn typecheck2() {
+        let bump = bump::BumpAllocator::new();
+        let ast = bump.create_list();
+        ast.push(ASTStmt::Variable(
+            b"var1",
+            bump.alloc(ASTExpr::Boolean(false)),
+        ));
+        ast.push(ASTStmt::Variable(b"var2", bump.alloc(ASTExpr::Number(0.0))));
+        ast.push(ASTStmt::Variable(
+            b"var3",
+            bump.alloc(ASTExpr::String(b"string")),
+        ));
+        ast.push(ASTStmt::Variable(
+            b"var4",
+            bump.alloc(ASTExpr::Identifier(b"var1")),
+        ));
+        ast.push(ASTStmt::Variable(
+            b"var5",
+            bump.alloc(ASTExpr::Identifier(b"var2")),
+        ));
+        ast.push(ASTStmt::Variable(
+            b"var6",
+            bump.alloc(ASTExpr::Identifier(b"var3")),
+        ));
+        let typecheck = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list();
+        correct_list.push(Type::Boolean);
+        correct_list.push(Type::Number);
+        correct_list.push(Type::String);
+        correct_list.push(Type::Boolean);
+        correct_list.push(Type::Number);
+        correct_list.push(Type::String);
         assert_eq!(typecheck, correct_list);
     }
 }
