@@ -80,7 +80,15 @@ impl<'a> TypeContext<'a> {
 fn constrain<'a>(dst: Type, src: Type, mut context: TypeContext<'a>) -> Option<TypeContext<'a>> {
     match dst {
         Type::Generic(var) => context.replace_generic(var, src),
-        Type::Numeric(var) => context.replace_generic(var, src),
+        Type::Numeric(var) => {
+            match src {
+                Type::Numeric(_) => {}
+                Type::Number => {}
+                Type::Tensor => {}
+                _ => return None,
+            }
+            context.replace_generic(var, src)
+        }
         ty => {
             if ty != src {
                 return None;
@@ -167,6 +175,12 @@ fn typecheck_expr<'a>(
                 context = constrain(elem_type, Type::Number, elem_context)?;
             }
             Type::Tensor
+        }
+        ASTExpr::Assign(to, from) => {
+            let (to_type, to_context) = typecheck_expr(to, context)?;
+            let (from_type, from_context) = typecheck_expr(from, to_context)?;
+            context = constrain(to_type, from_type, from_context)?;
+            to_type
         }
         _ => panic!(),
     };
