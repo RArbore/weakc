@@ -23,9 +23,10 @@ pub enum Type {
     Nil,
     Number,
     Tensor,
-    Numeric,
     Boolean,
     String,
+    Generic(u32),
+    Numeric(u32),
 }
 
 enum Symbol<'a> {
@@ -33,52 +34,58 @@ enum Symbol<'a> {
     Function(&'a [u8], Option<&'a bump::List<'a, Type>>, Option<Type>),
 }
 
+struct TypeContext<'a> {
+    types: &'a mut bump::List<'a, Type>,
+    symbols: Vec<Symbol<'a>>,
+    cur_type_var: u32,
+}
+
 pub fn typecheck<'a>(
     ast: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
 ) -> Option<&'a bump::List<'a, Type>> {
-    let mut types = bump.create_list();
-    let mut symbols = vec![];
+    let mut context = TypeContext {
+        types: bump.create_list(),
+        symbols: vec![],
+        cur_type_var: 0,
+    };
     for i in 0..ast.len() {
-        (types, symbols) = typecheck_stmt(ast.at(i), types, symbols)?;
+        context = typecheck_stmt(ast.at(i), context)?;
     }
-    Some(types)
+    Some(context.types)
 }
 
 fn typecheck_stmt<'a>(
     ast: &'a ASTStmt<'a>,
-    mut types: &'a mut bump::List<'a, Type>,
-    mut symbols: Vec<Symbol<'a>>,
-) -> Option<(&'a mut bump::List<'a, Type>, Vec<Symbol<'a>>)> {
+    mut context: TypeContext<'a>,
+) -> Option<TypeContext<'a>> {
     match ast {
         ASTStmt::Block(stmts) => {
-            let before_symbols = symbols.len();
+            let before_symbols = context.symbols.len();
             for i in 0..stmts.len() {
-                (types, symbols) = typecheck_stmt(stmts.at(i), types, symbols)?;
+                context = typecheck_stmt(stmts.at(i), context)?;
             }
-            symbols.truncate(before_symbols);
+            context.symbols.truncate(before_symbols);
         }
         ASTStmt::Variable(var, init) => {
-            let (new_types, new_symbols, init_type) = typecheck_expr(init, types, symbols)?;
-            types = new_types;
-            symbols = new_symbols;
-            symbols.push(Symbol::Variable(var, init_type));
+            let (new_context, init_type) = typecheck_expr(init, context)?;
+            context = new_context;
+            context.symbols.push(Symbol::Variable(var, init_type));
         }
         _ => panic!(),
     }
-    Some((types, symbols))
+    Some(context)
 }
 
 fn typecheck_expr<'a>(
     ast: &'a ASTExpr<'a>,
-    types: &'a mut bump::List<'a, Type>,
-    symbols: Vec<Symbol<'a>>,
-) -> Option<(&'a mut bump::List<'a, Type>, Vec<Symbol<'a>>, Type)> {
+    context: TypeContext<'a>,
+) -> Option<(TypeContext<'a>, Type)> {
     let my_type = match ast {
         ASTExpr::Nil => Type::Nil,
         ASTExpr::Identifier(var) => {
             let mut found_type = None;
-            for symbol in symbols.iter() {
+            for symbol in context.symbols.iter() {
                 if let Symbol::Variable(potential_var, potential_type) = symbol {
                     if var == potential_var {
                         found_type = Some(*potential_type);
@@ -90,8 +97,8 @@ fn typecheck_expr<'a>(
         }
         _ => panic!(),
     };
-    types.push(my_type);
-    Some((types, symbols, my_type))
+    context.types.push(my_type);
+    Some((context, my_type))
 }
 
 mod tests {
