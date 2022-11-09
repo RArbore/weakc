@@ -72,6 +72,8 @@ impl<'a> TypeContext<'a> {
             self.bounds_of_type_vars[new_var].1 =
                 core::cmp::max(self.bounds_of_type_vars[new_var].1, bounds.1);
         }
+        self.bounds_of_type_vars[var as usize].0 = 1;
+        self.bounds_of_type_vars[var as usize].1 = 0;
     }
 }
 
@@ -121,6 +123,9 @@ fn typecheck_stmt<'a>(
             context = new_context;
             context.symbols.push(Symbol::Variable(var, init_type));
         }
+        ASTStmt::Expression(expr) => {
+            (_, context) = typecheck_expr(expr, context)?;
+        }
         _ => panic!(),
     }
     Some(context)
@@ -128,7 +133,7 @@ fn typecheck_stmt<'a>(
 
 fn typecheck_expr<'a>(
     ast: &'a ASTExpr<'a>,
-    context: TypeContext<'a>,
+    mut context: TypeContext<'a>,
 ) -> Option<(Type, TypeContext<'a>)> {
     let my_type = match ast {
         ASTExpr::Nil => Type::Nil,
@@ -146,6 +151,22 @@ fn typecheck_expr<'a>(
                 }
             }
             found_type?
+        }
+        ASTExpr::Index(arr, indices) => {
+            let (arr_type, new_context) = typecheck_expr(arr, context)?;
+            context = constrain(arr_type, Type::Tensor, new_context)?;
+            for i in 0..indices.len() {
+                let (idx_type, idx_context) = typecheck_expr(indices.at(i), context)?;
+                context = constrain(idx_type, Type::Number, idx_context)?;
+            }
+            Type::Number
+        }
+        ASTExpr::ArrayLiteral(contents) => {
+            for i in 0..contents.len() {
+                let (elem_type, elem_context) = typecheck_expr(contents.at(i), context)?;
+                context = constrain(elem_type, Type::Number, elem_context)?;
+            }
+            Type::Tensor
         }
         _ => panic!(),
     };
@@ -198,13 +219,26 @@ mod tests {
             bump.alloc(ASTExpr::Identifier(b"var3")),
         ));
         let typecheck = typecheck(ast, &bump).unwrap();
-        let correct_list = bump.create_list();
-        correct_list.push(Type::Boolean);
-        correct_list.push(Type::Number);
-        correct_list.push(Type::String);
-        correct_list.push(Type::Boolean);
-        correct_list.push(Type::Number);
-        correct_list.push(Type::String);
+        let correct_list = bump.create_list_with(&[
+            Type::Boolean,
+            Type::Number,
+            Type::String,
+            Type::Boolean,
+            Type::Number,
+            Type::String,
+        ]);
+        assert_eq!(typecheck, correct_list);
+    }
+
+    #[test]
+    fn typecheck3() {
+        let bump = bump::BumpAllocator::new();
+        let ast = bump.create_list();
+        ast.push(ASTStmt::Expression(bump.alloc(ASTExpr::ArrayLiteral(
+            bump.create_list_with(&[ASTExpr::Number(0.0)]),
+        ))));
+        let typecheck = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[Type::Number, Type::Tensor]);
         assert_eq!(typecheck, correct_list);
     }
 }
