@@ -38,6 +38,54 @@ struct TypeContext<'a> {
     types: &'a mut bump::List<'a, Type>,
     symbols: Vec<Symbol<'a>>,
     cur_type_var: u32,
+    bounds_of_type_vars: Vec<(u32, u32)>,
+}
+
+impl<'a> TypeContext<'a> {
+    fn replace_generic(&mut self, var: u32, new: Type) {
+        let bounds = self.bounds_of_type_vars[var as usize];
+        for i in bounds.0..=bounds.1 {
+            let i = i as usize;
+            match self.types.at(i) {
+                Type::Generic(gen_var) => {
+                    if var == *gen_var {
+                        *self.types.at_mut(i) = new;
+                    }
+                }
+                Type::Numeric(gen_var) => {
+                    if var == *gen_var {
+                        *self.types.at_mut(i) = new;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let new_var = match new {
+            Type::Generic(var) => Some(var),
+            Type::Numeric(var) => Some(var),
+            _ => None,
+        };
+        if let Some(new_var) = new_var {
+            let new_var = new_var as usize;
+            self.bounds_of_type_vars[new_var].0 =
+                core::cmp::min(self.bounds_of_type_vars[new_var].0, bounds.0);
+            self.bounds_of_type_vars[new_var].1 =
+                core::cmp::max(self.bounds_of_type_vars[new_var].1, bounds.1);
+        }
+    }
+}
+
+fn constrain<'a>(dst: Type, src: Type, mut context: TypeContext<'a>) -> Option<TypeContext<'a>> {
+    match dst {
+        Type::Generic(var) => context.replace_generic(var, src),
+        Type::Numeric(var) => context.replace_generic(var, src),
+        ty => {
+            if ty != src {
+                return None;
+            }
+        }
+    }
+    Some(context)
 }
 
 pub fn typecheck<'a>(
@@ -48,6 +96,7 @@ pub fn typecheck<'a>(
         types: bump.create_list(),
         symbols: vec![],
         cur_type_var: 0,
+        bounds_of_type_vars: vec![],
     };
     for i in 0..ast.len() {
         context = typecheck_stmt(ast.at(i), context)?;
@@ -68,7 +117,7 @@ fn typecheck_stmt<'a>(
             context.symbols.truncate(before_symbols);
         }
         ASTStmt::Variable(var, init) => {
-            let (new_context, init_type) = typecheck_expr(init, context)?;
+            let (init_type, new_context) = typecheck_expr(init, context)?;
             context = new_context;
             context.symbols.push(Symbol::Variable(var, init_type));
         }
@@ -80,7 +129,7 @@ fn typecheck_stmt<'a>(
 fn typecheck_expr<'a>(
     ast: &'a ASTExpr<'a>,
     context: TypeContext<'a>,
-) -> Option<(TypeContext<'a>, Type)> {
+) -> Option<(Type, TypeContext<'a>)> {
     let my_type = match ast {
         ASTExpr::Nil => Type::Nil,
         ASTExpr::Boolean(_) => Type::Boolean,
@@ -101,7 +150,7 @@ fn typecheck_expr<'a>(
         _ => panic!(),
     };
     context.types.push(my_type);
-    Some((context, my_type))
+    Some((my_type, context))
 }
 
 mod tests {
