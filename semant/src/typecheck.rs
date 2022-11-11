@@ -126,6 +126,23 @@ fn typecheck_stmt<'a>(
             }
             context.symbols.truncate(before_symbols);
         }
+        ASTStmt::If(cond, body) => {
+            let (cond_type, new_context) = typecheck_expr(cond, context)?;
+            context = constrain(cond_type, Type::Boolean, new_context)?;
+            context = typecheck_stmt(body, context)?;
+        }
+        ASTStmt::While(cond, body) => {
+            let (cond_type, new_context) = typecheck_expr(cond, context)?;
+            context = constrain(cond_type, Type::Boolean, new_context)?;
+            context = typecheck_stmt(body, context)?;
+        }
+        ASTStmt::Print(expr) => {
+            (_, context) = typecheck_expr(expr, context)?;
+        }
+        ASTStmt::Verify(expr) => {
+            let (expr_type, new_context) = typecheck_expr(expr, context)?;
+            context = constrain(expr_type, Type::Boolean, new_context)?;
+        }
         ASTStmt::Variable(var, init) => {
             let (init_type, new_context) = typecheck_expr(init, context)?;
             context = new_context;
