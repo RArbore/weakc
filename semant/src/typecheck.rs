@@ -388,4 +388,37 @@ mod tests {
         let correct_list = bump.create_list_with(&[Type::Boolean, Type::Nil]);
         assert_eq!(typecheck, correct_list);
     }
+
+    #[test]
+    fn typecheck5() {
+        let bump = bump::BumpAllocator::new();
+        let (ast, _) = parse::parse_program(
+            &parse::lex(b"1 + 2; [1, 2, 3] sa [3, 1]; 7 ^ (4 * 5); 1 >= 2;", &bump).unwrap(),
+            &bump,
+        )
+        .unwrap();
+        let typecheck = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+        ]);
+        assert_eq!(typecheck, correct_list);
+    }
 }
