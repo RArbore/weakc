@@ -15,8 +15,10 @@
 extern crate bump;
 extern crate parse;
 
+use parse::ASTBinaryOp;
 use parse::ASTExpr;
 use parse::ASTStmt;
+use parse::ASTUnaryOp;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum Type {
@@ -90,12 +92,41 @@ fn constrain<'a>(dst: Type, src: Type, mut context: TypeContext<'a>) -> Option<T
             context.replace_generic(var, src)
         }
         ty => {
+            match src {
+                Type::Generic(_) => {
+                    return constrain(src, dst, context);
+                }
+                Type::Numeric(_) => {
+                    return constrain(src, dst, context);
+                }
+                _ => {}
+            }
             if ty != src {
                 return None;
             }
         }
     }
     Some(context)
+}
+
+fn enforce_numeric(ty: Type) -> Option<()> {
+    match ty {
+        Type::Number => Some(()),
+        Type::Tensor => Some(()),
+        Type::Numeric(_) => Some(()),
+        _ => None,
+    }
+}
+
+fn numeric_bop(op: ASTBinaryOp) -> bool {
+    match op {
+        ASTBinaryOp::Add => true,
+        ASTBinaryOp::Subtract => true,
+        ASTBinaryOp::Multiply => true,
+        ASTBinaryOp::Divide => true,
+        ASTBinaryOp::Power => true,
+        _ => false,
+    }
 }
 
 pub fn typecheck<'a>(
@@ -199,6 +230,78 @@ fn typecheck_expr<'a>(
             context = constrain(to_type, from_type, from_context)?;
             to_type
         }
+        ASTExpr::Unary(op, expr) => {
+            let (in_type, out_type) = match op {
+                ASTUnaryOp::Not => (Type::Boolean, Type::Boolean),
+                ASTUnaryOp::Negate => (Type::Number, Type::Number),
+                ASTUnaryOp::Shape => (Type::Tensor, Type::Tensor),
+            };
+            let (unary_type, unary_context) = typecheck_expr(expr, context)?;
+            context = constrain(unary_type, in_type, unary_context)?;
+            out_type
+        }
+        ASTExpr::Binary(op, left, right) => {
+            let (left_type, left_context) = typecheck_expr(left, context)?;
+            let (right_type, right_context) = typecheck_expr(right, left_context)?;
+            if numeric_bop(*op) {
+                context = constrain(left_type, right_type, right_context)?;
+                enforce_numeric(left_type)?;
+                enforce_numeric(right_type)?;
+                right_type
+            } else {
+                match *op {
+                    ASTBinaryOp::ShapedAs => {
+                        context = constrain(left_type, Type::Tensor, right_context)?;
+                        context = constrain(right_type, Type::Tensor, context)?;
+                        Type::Tensor
+                    }
+                    ASTBinaryOp::MatrixMultiply => {
+                        context = constrain(left_type, Type::Tensor, right_context)?;
+                        context = constrain(right_type, Type::Tensor, context)?;
+                        Type::Tensor
+                    }
+                    ASTBinaryOp::Greater => {
+                        context = constrain(left_type, Type::Number, right_context)?;
+                        context = constrain(right_type, Type::Number, context)?;
+                        Type::Boolean
+                    }
+                    ASTBinaryOp::Lesser => {
+                        context = constrain(left_type, Type::Number, right_context)?;
+                        context = constrain(right_type, Type::Number, context)?;
+                        Type::Boolean
+                    }
+                    ASTBinaryOp::NotEquals => {
+                        context = constrain(left_type, right_type, right_context)?;
+                        right_type
+                    }
+                    ASTBinaryOp::EqualsEquals => {
+                        context = constrain(left_type, right_type, right_context)?;
+                        right_type
+                    }
+                    ASTBinaryOp::GreaterEquals => {
+                        context = constrain(left_type, Type::Number, right_context)?;
+                        context = constrain(right_type, Type::Number, context)?;
+                        Type::Boolean
+                    }
+                    ASTBinaryOp::LesserEquals => {
+                        context = constrain(left_type, Type::Number, right_context)?;
+                        context = constrain(right_type, Type::Number, context)?;
+                        Type::Boolean
+                    }
+                    ASTBinaryOp::And => {
+                        context = constrain(left_type, Type::Boolean, right_context)?;
+                        context = constrain(right_type, Type::Boolean, context)?;
+                        Type::Boolean
+                    }
+                    ASTBinaryOp::Or => {
+                        context = constrain(left_type, Type::Boolean, right_context)?;
+                        context = constrain(right_type, Type::Boolean, context)?;
+                        Type::Boolean
+                    }
+                    _ => panic!(),
+                }
+            }
+        }
         _ => panic!(),
     };
     context.types.push(my_type);
@@ -270,6 +373,19 @@ mod tests {
         ))));
         let typecheck = typecheck(ast, &bump).unwrap();
         let correct_list = bump.create_list_with(&[Type::Number, Type::Tensor]);
+        assert_eq!(typecheck, correct_list);
+    }
+
+    #[test]
+    fn typecheck4() {
+        let bump = bump::BumpAllocator::new();
+        let ast = bump.create_list();
+        ast.push(ASTStmt::While(
+            bump.alloc(ASTExpr::Boolean(true)),
+            bump.alloc(ASTStmt::Variable(b"xyz", bump.alloc(ASTExpr::Nil))),
+        ));
+        let typecheck = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[Type::Boolean, Type::Nil]);
         assert_eq!(typecheck, correct_list);
     }
 }
