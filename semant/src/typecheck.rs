@@ -33,14 +33,31 @@ pub enum Type {
 
 enum Symbol<'a> {
     Variable(&'a [u8], Type),
-    Function(&'a [u8], Option<&'a bump::List<'a, Type>>, Option<Type>),
+    Function(&'a [u8], Option<&'a mut bump::List<'a, Type>>, Option<Type>),
 }
 
 struct TypeContext<'a> {
     types: &'a mut bump::List<'a, Type>,
     symbols: Vec<Symbol<'a>>,
+    ret_type: Vec<Type>,
     cur_type_var: u32,
     bounds_of_type_vars: Vec<(u32, u32)>,
+}
+
+fn replace_single_generic(old: &mut Type, var: u32, new: Type) {
+    match old {
+        Type::Generic(gen_var) => {
+            if var == *gen_var {
+                *old = new;
+            }
+        }
+        Type::Numeric(gen_var) => {
+            if var == *gen_var {
+                *old = new;
+            }
+        }
+        _ => {}
+    }
 }
 
 impl<'a> TypeContext<'a> {
@@ -48,19 +65,7 @@ impl<'a> TypeContext<'a> {
         let bounds = self.bounds_of_type_vars[var as usize];
         for i in bounds.0..=bounds.1 {
             let i = i as usize;
-            match self.types.at(i) {
-                Type::Generic(gen_var) => {
-                    if var == *gen_var {
-                        *self.types.at_mut(i) = new;
-                    }
-                }
-                Type::Numeric(gen_var) => {
-                    if var == *gen_var {
-                        *self.types.at_mut(i) = new;
-                    }
-                }
-                _ => {}
-            }
+            replace_single_generic(self.types.at_mut(i), var, new);
         }
         let new_var = match new {
             Type::Generic(var) => Some(var),
@@ -76,6 +81,24 @@ impl<'a> TypeContext<'a> {
         }
         self.bounds_of_type_vars[var as usize].0 = 1;
         self.bounds_of_type_vars[var as usize].1 = 0;
+
+        for symbol in self.symbols.iter_mut() {
+            match symbol {
+                Symbol::Variable(_, ty) => {
+                    replace_single_generic(ty, var, new);
+                }
+                Symbol::Function(_, args, ret) => {
+                    if let Some(args) = args {
+                        for i in 0..args.len() {
+                            replace_single_generic(args.at_mut(i), var, new);
+                        }
+                    }
+                    if let Some(ret) = ret {
+                        replace_single_generic(ret, var, new);
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -125,6 +148,7 @@ pub fn typecheck<'a>(
     let mut context = TypeContext {
         types: bump.create_list(),
         symbols: vec![],
+        ret_type: vec![],
         cur_type_var: 0,
         bounds_of_type_vars: vec![],
     };
@@ -158,6 +182,10 @@ fn typecheck_stmt<'a>(
         }
         ASTStmt::Print(expr) => {
             (_, context) = typecheck_expr(expr, context)?;
+        }
+        ASTStmt::Return(expr) => {
+            let (expr_type, new_context) = typecheck_expr(expr, context)?;
+            context = constrain(*new_context.ret_type.last()?, expr_type, new_context)?;
         }
         ASTStmt::Verify(expr) => {
             let (expr_type, new_context) = typecheck_expr(expr, context)?;
