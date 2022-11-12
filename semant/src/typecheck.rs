@@ -256,7 +256,7 @@ fn typecheck_expr<'a>(
                 Type::Boolean
             } else if *op == ASTBinaryOp::EqualsEquals || *op == ASTBinaryOp::NotEquals {
                 context = constrain(left_type, right_type, right_context)?;
-                right_type
+                Type::Boolean
             } else if *op == ASTBinaryOp::And || *op == ASTBinaryOp::Or {
                 context = constrain(left_type, Type::Boolean, right_context)?;
                 context = constrain(right_type, Type::Boolean, context)?;
@@ -356,7 +356,11 @@ mod tests {
     fn typecheck5() {
         let bump = bump::BumpAllocator::new();
         let (ast, _) = parse::parse_program(
-            &parse::lex(b"1 + 2; [1, 2, 3] sa [3, 1]; 7 ^ (4 * 5); 1 >= 2;", &bump).unwrap(),
+            &parse::lex(
+                b"1 + 2; [1, 2, 3] sa [3, 1]; 7 ^ (4 * 5); 1 >= 2; 5 == 4;",
+                &bump,
+            )
+            .unwrap(),
             &bump,
         )
         .unwrap();
@@ -378,6 +382,9 @@ mod tests {
             Type::Number,
             Type::Number,
             Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
             Type::Number,
             Type::Number,
             Type::Boolean,
