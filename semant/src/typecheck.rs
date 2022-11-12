@@ -118,17 +118,6 @@ fn enforce_numeric(ty: Type) -> Option<()> {
     }
 }
 
-fn numeric_bop(op: ASTBinaryOp) -> bool {
-    match op {
-        ASTBinaryOp::Add => true,
-        ASTBinaryOp::Subtract => true,
-        ASTBinaryOp::Multiply => true,
-        ASTBinaryOp::Divide => true,
-        ASTBinaryOp::Power => true,
-        _ => false,
-    }
-}
-
 pub fn typecheck<'a>(
     ast: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
@@ -243,63 +232,37 @@ fn typecheck_expr<'a>(
         ASTExpr::Binary(op, left, right) => {
             let (left_type, left_context) = typecheck_expr(left, context)?;
             let (right_type, right_context) = typecheck_expr(right, left_context)?;
-            if numeric_bop(*op) {
+            if *op == ASTBinaryOp::Add
+                || *op == ASTBinaryOp::Subtract
+                || *op == ASTBinaryOp::Multiply
+                || *op == ASTBinaryOp::Divide
+                || *op == ASTBinaryOp::Power
+            {
                 context = constrain(left_type, right_type, right_context)?;
                 enforce_numeric(left_type)?;
                 enforce_numeric(right_type)?;
                 right_type
+            } else if *op == ASTBinaryOp::ShapedAs || *op == ASTBinaryOp::MatrixMultiply {
+                context = constrain(left_type, Type::Tensor, right_context)?;
+                context = constrain(right_type, Type::Tensor, context)?;
+                Type::Tensor
+            } else if *op == ASTBinaryOp::Greater
+                || *op == ASTBinaryOp::Lesser
+                || *op == ASTBinaryOp::GreaterEquals
+                || *op == ASTBinaryOp::LesserEquals
+            {
+                context = constrain(left_type, Type::Number, right_context)?;
+                context = constrain(right_type, Type::Number, context)?;
+                Type::Boolean
+            } else if *op == ASTBinaryOp::EqualsEquals || *op == ASTBinaryOp::NotEquals {
+                context = constrain(left_type, right_type, right_context)?;
+                right_type
+            } else if *op == ASTBinaryOp::And || *op == ASTBinaryOp::Or {
+                context = constrain(left_type, Type::Boolean, right_context)?;
+                context = constrain(right_type, Type::Boolean, context)?;
+                Type::Boolean
             } else {
-                match *op {
-                    ASTBinaryOp::ShapedAs => {
-                        context = constrain(left_type, Type::Tensor, right_context)?;
-                        context = constrain(right_type, Type::Tensor, context)?;
-                        Type::Tensor
-                    }
-                    ASTBinaryOp::MatrixMultiply => {
-                        context = constrain(left_type, Type::Tensor, right_context)?;
-                        context = constrain(right_type, Type::Tensor, context)?;
-                        Type::Tensor
-                    }
-                    ASTBinaryOp::Greater => {
-                        context = constrain(left_type, Type::Number, right_context)?;
-                        context = constrain(right_type, Type::Number, context)?;
-                        Type::Boolean
-                    }
-                    ASTBinaryOp::Lesser => {
-                        context = constrain(left_type, Type::Number, right_context)?;
-                        context = constrain(right_type, Type::Number, context)?;
-                        Type::Boolean
-                    }
-                    ASTBinaryOp::NotEquals => {
-                        context = constrain(left_type, right_type, right_context)?;
-                        right_type
-                    }
-                    ASTBinaryOp::EqualsEquals => {
-                        context = constrain(left_type, right_type, right_context)?;
-                        right_type
-                    }
-                    ASTBinaryOp::GreaterEquals => {
-                        context = constrain(left_type, Type::Number, right_context)?;
-                        context = constrain(right_type, Type::Number, context)?;
-                        Type::Boolean
-                    }
-                    ASTBinaryOp::LesserEquals => {
-                        context = constrain(left_type, Type::Number, right_context)?;
-                        context = constrain(right_type, Type::Number, context)?;
-                        Type::Boolean
-                    }
-                    ASTBinaryOp::And => {
-                        context = constrain(left_type, Type::Boolean, right_context)?;
-                        context = constrain(right_type, Type::Boolean, context)?;
-                        Type::Boolean
-                    }
-                    ASTBinaryOp::Or => {
-                        context = constrain(left_type, Type::Boolean, right_context)?;
-                        context = constrain(right_type, Type::Boolean, context)?;
-                        Type::Boolean
-                    }
-                    _ => panic!(),
-                }
+                panic!("Unreachable: unimplemented ASTBinaryOp typecheck")
             }
         }
         _ => panic!(),
