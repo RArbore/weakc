@@ -102,6 +102,19 @@ impl<'a> TypeContext<'a> {
             }
         }
     }
+
+    fn fix_function_ret_ty(&mut self, ret_ty: Type) {
+        let last = self.symbols.pop().unwrap();
+        if let Symbol::Function(func, args, new_ret_ty) = last {
+            if new_ret_ty == ret_ty {
+                self.symbols.push(Symbol::Function(func, args, Type::Nil));
+            } else {
+                self.symbols.push(Symbol::Function(func, args, new_ret_ty));
+            }
+        } else {
+            self.symbols.push(last);
+        }
+    }
 }
 
 fn constrain<'a>(dst: Type, src: Type, mut context: TypeContext<'a>) -> Option<TypeContext<'a>> {
@@ -196,20 +209,24 @@ fn typecheck_stmt<'a>(
             context = typecheck_stmt(body, context)?;
             context.symbols.truncate(before_len);
             context.ret_type.pop().unwrap();
-            let last = context.symbols.pop().unwrap();
-            if let Symbol::Function(func, args, new_ret_ty) = last {
-                if new_ret_ty == ret_ty {
-                    context
-                        .symbols
-                        .push(Symbol::Function(func, args, Type::Nil));
-                } else {
-                    context
-                        .symbols
-                        .push(Symbol::Function(func, args, new_ret_ty));
-                }
-            } else {
-                context.symbols.push(last);
-            }
+            context.fix_function_ret_ty(ret_ty);
+        }
+        ASTStmt::Operator(op, arg1, arg2, body) => {
+            let arg_ty = context.bump.create_list();
+            let ty1 = context.create_generic();
+            let ty2 = context.create_generic();
+            arg_ty.push(ty1);
+            arg_ty.push(ty2);
+            let ret_ty = context.create_generic();
+            context.symbols.push(Symbol::Function(op, arg_ty, ret_ty));
+            context.ret_type.push(ret_ty);
+            let before_len = context.symbols.len();
+            context.symbols.push(Symbol::Variable(arg1, ty1));
+            context.symbols.push(Symbol::Variable(arg2, ty2));
+            context = typecheck_stmt(body, context)?;
+            context.symbols.truncate(before_len);
+            context.ret_type.pop().unwrap();
+            context.fix_function_ret_ty(ret_ty);
         }
         ASTStmt::If(cond, body) => {
             let (cond_type, new_context) = typecheck_expr(cond, context)?;
