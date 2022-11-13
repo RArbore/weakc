@@ -441,15 +441,13 @@ mod tests {
     #[test]
     fn typecheck5() {
         let bump = bump::BumpAllocator::new();
-        let (ast, _) = parse::parse_program(
-            &parse::lex(
-                b"1 + 2; [1, 2, 3] sa [3, 1]; 7 ^ (4 * 5); 1 >= 2; 5 == 4;",
-                &bump,
-            )
-            .unwrap(),
+        let lexed = &parse::lex(
+            b"1 + 2; [1, 2, 3] sa [3, 1]; 7 ^ (4 * 5); 1 >= 2; 5 == 4;",
             &bump,
         )
         .unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
         let typecheck = typecheck(ast, &bump).unwrap().0;
         let correct_list = bump.create_list_with(&[
             Type::Number,
@@ -481,9 +479,9 @@ mod tests {
     #[test]
     fn typecheck6() {
         let bump = bump::BumpAllocator::new();
-        let (ast, _) =
-            parse::parse_program(&parse::lex(b"f xyz(var) { var; };", &bump).unwrap(), &bump)
-                .unwrap();
+        let lexed = &parse::lex(b"f xyz(var) { var; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
         let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
         let correct_list = bump.create_list_with(&[Type::Generic(0)]);
         assert_eq!(typecheck, correct_list);
@@ -500,11 +498,29 @@ mod tests {
     #[test]
     fn typecheck7() {
         let bump = bump::BumpAllocator::new();
-        let (ast, _) = parse::parse_program(
-            &parse::lex(b"f xyz(abc, def) { r abc + def; };", &bump).unwrap(),
-            &bump,
-        )
-        .unwrap();
+        let lexed = &parse::lex(b"f xyz(abc, def) { r abc + def; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list =
+            bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4), Type::Numeric(4)]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![Symbol::Function(
+                b"xyz",
+                bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4)]),
+                Type::Numeric(4),
+            )]
+        );
+    }
+
+    #[test]
+    fn typecheck8() {
+        let bump = bump::BumpAllocator::new();
+        let lexed = &parse::lex(b"o xyz(abc, def) { r abc + def; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
         let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
         let correct_list =
             bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4), Type::Numeric(4)]);
