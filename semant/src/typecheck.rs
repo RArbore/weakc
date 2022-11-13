@@ -31,17 +31,18 @@ pub enum Type {
     Numeric(u32),
 }
 
-enum Symbol<'a> {
+#[derive(Debug, PartialEq)]
+pub enum Symbol<'a> {
     Variable(&'a [u8], Type),
-    Function(&'a [u8], Option<&'a mut bump::List<'a, Type>>, Option<Type>),
+    Function(&'a [u8], &'a mut bump::List<'a, Type>, Type),
 }
 
 struct TypeContext<'a> {
+    bump: &'a bump::BumpAllocator,
     types: &'a mut bump::List<'a, Type>,
     symbols: Vec<Symbol<'a>>,
     ret_type: Vec<Type>,
     cur_type_var: u32,
-    bounds_of_type_vars: Vec<(u32, u32)>,
 }
 
 fn replace_single_generic(old: &mut Type, var: u32, new: Type) {
@@ -61,26 +62,35 @@ fn replace_single_generic(old: &mut Type, var: u32, new: Type) {
 }
 
 impl<'a> TypeContext<'a> {
+    fn create_generic(&mut self) -> Type {
+        let ty = Type::Generic(self.cur_type_var);
+        self.cur_type_var += 1;
+        ty
+    }
+
+    fn create_numeric(&mut self) -> Type {
+        let ty = Type::Numeric(self.cur_type_var);
+        self.cur_type_var += 1;
+        ty
+    }
+
+    fn checkpoint_type_var(&self) -> u32 {
+        self.cur_type_var
+    }
+
+    fn replay_generic(&self, idx: u32) -> Type {
+        Type::Generic(idx)
+    }
+
+    fn replay_numeric(&self, idx: u32) -> Type {
+        Type::Numeric(idx)
+    }
+
     fn replace_generic(&mut self, var: u32, new: Type) {
-        let bounds = self.bounds_of_type_vars[var as usize];
-        for i in bounds.0..=bounds.1 {
+        for i in 0..self.types.len() {
             let i = i as usize;
             replace_single_generic(self.types.at_mut(i), var, new);
         }
-        let new_var = match new {
-            Type::Generic(var) => Some(var),
-            Type::Numeric(var) => Some(var),
-            _ => None,
-        };
-        if let Some(new_var) = new_var {
-            let new_var = new_var as usize;
-            self.bounds_of_type_vars[new_var].0 =
-                core::cmp::min(self.bounds_of_type_vars[new_var].0, bounds.0);
-            self.bounds_of_type_vars[new_var].1 =
-                core::cmp::max(self.bounds_of_type_vars[new_var].1, bounds.1);
-        }
-        self.bounds_of_type_vars[var as usize].0 = 1;
-        self.bounds_of_type_vars[var as usize].1 = 0;
 
         for symbol in self.symbols.iter_mut() {
             match symbol {
@@ -88,14 +98,10 @@ impl<'a> TypeContext<'a> {
                     replace_single_generic(ty, var, new);
                 }
                 Symbol::Function(_, args, ret) => {
-                    if let Some(args) = args {
-                        for i in 0..args.len() {
-                            replace_single_generic(args.at_mut(i), var, new);
-                        }
+                    for i in 0..args.len() {
+                        replace_single_generic(args.at_mut(i), var, new);
                     }
-                    if let Some(ret) = ret {
-                        replace_single_generic(ret, var, new);
-                    }
+                    replace_single_generic(ret, var, new);
                 }
             }
         }
@@ -132,11 +138,16 @@ fn constrain<'a>(dst: Type, src: Type, mut context: TypeContext<'a>) -> Option<T
     Some(context)
 }
 
-fn enforce_numeric(ty: Type) -> Option<()> {
+fn enforce_numeric(ty: Type, mut context: TypeContext) -> Option<TypeContext> {
     match ty {
-        Type::Number => Some(()),
-        Type::Tensor => Some(()),
-        Type::Numeric(_) => Some(()),
+        Type::Number => Some(context),
+        Type::Tensor => Some(context),
+        Type::Numeric(_) => Some(context),
+        Type::Generic(var) => {
+            let new_numeric = context.create_numeric();
+            context.replace_generic(var, new_numeric);
+            Some(context)
+        }
         _ => None,
     }
 }
@@ -144,18 +155,18 @@ fn enforce_numeric(ty: Type) -> Option<()> {
 pub fn typecheck<'a>(
     ast: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
-) -> Option<&'a bump::List<'a, Type>> {
+) -> Option<(&'a bump::List<'a, Type>, Vec<Symbol<'a>>)> {
     let mut context = TypeContext {
+        bump,
         types: bump.create_list(),
         symbols: vec![],
         ret_type: vec![],
         cur_type_var: 0,
-        bounds_of_type_vars: vec![],
     };
     for i in 0..ast.len() {
         context = typecheck_stmt(ast.at(i), context)?;
     }
-    Some(context.types)
+    Some((context.types, context.symbols))
 }
 
 fn typecheck_stmt<'a>(
@@ -169,6 +180,40 @@ fn typecheck_stmt<'a>(
                 context = typecheck_stmt(stmts.at(i), context)?;
             }
             context.symbols.truncate(before_symbols);
+        }
+        ASTStmt::Function(func, args, body) => {
+            let arg_ty = context.bump.create_list();
+            let ty_var_before = context.checkpoint_type_var();
+            for _ in 0..args.len() {
+                let ty = context.create_generic();
+                arg_ty.push(ty);
+            }
+            let ret_ty = context.create_generic();
+            context.symbols.push(Symbol::Function(func, arg_ty, ret_ty));
+            context.ret_type.push(ret_ty);
+            let before_len = context.symbols.len();
+            for i in 0..args.len() {
+                let arg = args.at(i);
+                let ty = context.replay_generic(ty_var_before + i as u32);
+                context.symbols.push(Symbol::Variable(arg, ty));
+            }
+            context = typecheck_stmt(body, context)?;
+            context.symbols.truncate(before_len);
+            context.ret_type.pop().unwrap();
+            let last = context.symbols.pop().unwrap();
+            if let Symbol::Function(func, args, new_ret_ty) = last {
+                if new_ret_ty == ret_ty {
+                    context
+                        .symbols
+                        .push(Symbol::Function(func, args, Type::Nil));
+                } else {
+                    context
+                        .symbols
+                        .push(Symbol::Function(func, args, new_ret_ty));
+                }
+            } else {
+                context.symbols.push(last);
+            }
         }
         ASTStmt::If(cond, body) => {
             let (cond_type, new_context) = typecheck_expr(cond, context)?;
@@ -267,8 +312,8 @@ fn typecheck_expr<'a>(
                 || *op == ASTBinaryOp::Power
             {
                 context = constrain(left_type, right_type, right_context)?;
-                enforce_numeric(left_type)?;
-                enforce_numeric(right_type)?;
+                context = enforce_numeric(left_type, context)?;
+                context = enforce_numeric(right_type, context)?;
                 right_type
             } else if *op == ASTBinaryOp::ShapedAs || *op == ASTBinaryOp::MatrixMultiply {
                 context = constrain(left_type, Type::Tensor, right_context)?;
@@ -311,7 +356,7 @@ mod tests {
             b"xyz",
             bump.alloc(ASTExpr::Identifier(b"abc")),
         ));
-        let typecheck = typecheck(ast, &bump).unwrap();
+        let typecheck = typecheck(ast, &bump).unwrap().0;
         let correct_list = bump.create_list();
         correct_list.push(Type::Nil);
         correct_list.push(Type::Nil);
@@ -343,7 +388,7 @@ mod tests {
             b"var6",
             bump.alloc(ASTExpr::Identifier(b"var3")),
         ));
-        let typecheck = typecheck(ast, &bump).unwrap();
+        let typecheck = typecheck(ast, &bump).unwrap().0;
         let correct_list = bump.create_list_with(&[
             Type::Boolean,
             Type::Number,
@@ -362,7 +407,7 @@ mod tests {
         ast.push(ASTStmt::Expression(bump.alloc(ASTExpr::ArrayLiteral(
             bump.create_list_with(&[ASTExpr::Number(0.0)]),
         ))));
-        let typecheck = typecheck(ast, &bump).unwrap();
+        let typecheck = typecheck(ast, &bump).unwrap().0;
         let correct_list = bump.create_list_with(&[Type::Number, Type::Tensor]);
         assert_eq!(typecheck, correct_list);
     }
@@ -375,7 +420,7 @@ mod tests {
             bump.alloc(ASTExpr::Boolean(true)),
             bump.alloc(ASTStmt::Variable(b"xyz", bump.alloc(ASTExpr::Nil))),
         ));
-        let typecheck = typecheck(ast, &bump).unwrap();
+        let typecheck = typecheck(ast, &bump).unwrap().0;
         let correct_list = bump.create_list_with(&[Type::Boolean, Type::Nil]);
         assert_eq!(typecheck, correct_list);
     }
@@ -392,7 +437,7 @@ mod tests {
             &bump,
         )
         .unwrap();
-        let typecheck = typecheck(ast, &bump).unwrap();
+        let typecheck = typecheck(ast, &bump).unwrap().0;
         let correct_list = bump.create_list_with(&[
             Type::Number,
             Type::Number,
@@ -418,5 +463,26 @@ mod tests {
             Type::Boolean,
         ]);
         assert_eq!(typecheck, correct_list);
+    }
+
+    #[test]
+    fn typecheck6() {
+        let bump = bump::BumpAllocator::new();
+        let (ast, _) = parse::parse_program(
+            &parse::lex(b"f xyz(var) { r var; };", &bump).unwrap(),
+            &bump,
+        )
+        .unwrap();
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[Type::Generic(0)]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![Symbol::Function(
+                b"xyz",
+                bump.create_list_with(&[Type::Generic(0)]),
+                Type::Generic(0),
+            )]
+        );
     }
 }
