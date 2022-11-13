@@ -35,6 +35,7 @@ pub enum Type {
 pub enum Symbol<'a> {
     Variable(&'a [u8], Type),
     Function(&'a [u8], &'a mut bump::List<'a, Type>, Type),
+    Operator(&'a [u8], Type, Type, Type),
 }
 
 struct TypeContext<'a> {
@@ -99,6 +100,11 @@ impl<'a> TypeContext<'a> {
                     }
                     replace_single_generic(ret, var, new);
                 }
+                Symbol::Operator(_, arg1, arg2, ret) => {
+                    replace_single_generic(arg1, var, new);
+                    replace_single_generic(arg2, var, new);
+                    replace_single_generic(ret, var, new);
+                }
             }
         }
     }
@@ -110,6 +116,14 @@ impl<'a> TypeContext<'a> {
                 self.symbols.push(Symbol::Function(func, args, Type::Nil));
             } else {
                 self.symbols.push(Symbol::Function(func, args, new_ret_ty));
+            }
+        } else if let Symbol::Operator(func, arg1, arg2, new_ret_ty) = last {
+            if new_ret_ty == ret_ty {
+                self.symbols
+                    .push(Symbol::Operator(func, arg1, arg2, Type::Nil));
+            } else {
+                self.symbols
+                    .push(Symbol::Operator(func, arg1, arg2, new_ret_ty));
             }
         } else {
             self.symbols.push(last);
@@ -212,13 +226,10 @@ fn typecheck_stmt<'a>(
             context.fix_function_ret_ty(ret_ty);
         }
         ASTStmt::Operator(op, arg1, arg2, body) => {
-            let arg_ty = context.bump.create_list();
             let ty1 = context.create_generic();
             let ty2 = context.create_generic();
-            arg_ty.push(ty1);
-            arg_ty.push(ty2);
             let ret_ty = context.create_generic();
-            context.symbols.push(Symbol::Function(op, arg_ty, ret_ty));
+            context.symbols.push(Symbol::Operator(op, ty1, ty2, ret_ty));
             context.ret_type.push(ret_ty);
             let before_len = context.symbols.len();
             context.symbols.push(Symbol::Variable(arg1, ty1));
@@ -257,7 +268,6 @@ fn typecheck_stmt<'a>(
         ASTStmt::Expression(expr) => {
             (_, context) = typecheck_expr(expr, context)?;
         }
-        _ => panic!(),
     }
     Some(context)
 }
@@ -358,6 +368,7 @@ fn typecheck_expr<'a>(
 }
 
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
@@ -527,9 +538,10 @@ mod tests {
         assert_eq!(typecheck, correct_list);
         assert_eq!(
             symbols,
-            vec![Symbol::Function(
+            vec![Symbol::Operator(
                 b"xyz",
-                bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4)]),
+                Type::Numeric(4),
+                Type::Numeric(4),
                 Type::Numeric(4),
             )]
         );
