@@ -82,10 +82,6 @@ impl<'a> TypeContext<'a> {
         Type::Generic(idx)
     }
 
-    fn replay_numeric(&self, idx: u32) -> Type {
-        Type::Numeric(idx)
-    }
-
     fn replace_generic(&mut self, var: u32, new: Type) {
         for i in 0..self.types.len() {
             let i = i as usize;
@@ -314,7 +310,7 @@ fn typecheck_expr<'a>(
                 context = constrain(left_type, right_type, right_context)?;
                 context = enforce_numeric(left_type, context)?;
                 context = enforce_numeric(right_type, context)?;
-                right_type
+                *context.types.at(context.types.len() - 1)
             } else if *op == ASTBinaryOp::ShapedAs || *op == ASTBinaryOp::MatrixMultiply {
                 context = constrain(left_type, Type::Tensor, right_context)?;
                 context = constrain(right_type, Type::Tensor, context)?;
@@ -468,11 +464,9 @@ mod tests {
     #[test]
     fn typecheck6() {
         let bump = bump::BumpAllocator::new();
-        let (ast, _) = parse::parse_program(
-            &parse::lex(b"f xyz(var) { r var; };", &bump).unwrap(),
-            &bump,
-        )
-        .unwrap();
+        let (ast, _) =
+            parse::parse_program(&parse::lex(b"f xyz(var) { var; };", &bump).unwrap(), &bump)
+                .unwrap();
         let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
         let correct_list = bump.create_list_with(&[Type::Generic(0)]);
         assert_eq!(typecheck, correct_list);
@@ -481,7 +475,29 @@ mod tests {
             vec![Symbol::Function(
                 b"xyz",
                 bump.create_list_with(&[Type::Generic(0)]),
-                Type::Generic(0),
+                Type::Nil,
+            )]
+        );
+    }
+
+    #[test]
+    fn typecheck7() {
+        let bump = bump::BumpAllocator::new();
+        let (ast, _) = parse::parse_program(
+            &parse::lex(b"f xyz(abc, def) { r abc + def; };", &bump).unwrap(),
+            &bump,
+        )
+        .unwrap();
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list =
+            bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4), Type::Numeric(4)]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![Symbol::Function(
+                b"xyz",
+                bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4)]),
+                Type::Numeric(4),
             )]
         );
     }
