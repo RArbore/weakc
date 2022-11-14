@@ -161,6 +161,40 @@ fn constrain<'a>(dst: Type, src: Type, mut context: TypeContext<'a>) -> Option<T
     Some(context)
 }
 
+fn call_constrain<'a>(
+    dst: Type,
+    src: Type,
+    mut context: TypeContext<'a>,
+) -> Option<TypeContext<'a>> {
+    match dst {
+        Type::Generic(var) => context.replace_generic(var, src),
+        Type::Numeric(var) => {
+            match src {
+                Type::Numeric(_) => {}
+                Type::Number => {}
+                Type::Tensor => {}
+                _ => return None,
+            }
+            context.replace_generic(var, src)
+        }
+        ty => {
+            match src {
+                Type::Generic(_) => {
+                    return Some(context);
+                }
+                Type::Numeric(_) => {
+                    return enforce_numeric(dst, context);
+                }
+                _ => {}
+            }
+            if ty != src {
+                return None;
+            }
+        }
+    }
+    Some(context)
+}
+
 fn enforce_numeric(ty: Type, mut context: TypeContext) -> Option<TypeContext> {
     match ty {
         Type::Number => Some(context),
@@ -292,6 +326,63 @@ fn typecheck_expr<'a>(
                 }
             }
             found_type?
+        }
+        ASTExpr::Call(func, args) => {
+            let mut real_arg_ty = vec![];
+            for i in 0..args.len() {
+                let (single_ty, single_context) = typecheck_expr(args.at(i), context)?;
+                context = single_context;
+                real_arg_ty.push(single_ty);
+            }
+            let mut found_symbol = None;
+            for symbol in context.symbols.iter().rev() {
+                match symbol {
+                    Symbol::Function(query_func, arg_ty, ret_ty) => {
+                        if query_func == func {
+                            found_symbol = Some((arg_ty, ret_ty));
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let (arg_ty, ret_ty) = found_symbol?;
+            if arg_ty.len() == args.len() {
+                let all_match = true;
+                let mut cp_arg_ty = vec![];
+                for i in 0..arg_ty.len() {
+                    cp_arg_ty.push(arg_ty.at(i).clone());
+                }
+                let mut ret_ty = *ret_ty;
+                let mut call_inst_tys = vec![];
+                for i in 0..arg_ty.len() {
+                    for (single_arg_ty, single_inst_ty) in call_inst_tys.iter() {
+                        if *single_arg_ty == cp_arg_ty[i] {
+                            context = constrain(real_arg_ty[i], *single_inst_ty, context)?;
+                            break;
+                        }
+                    }
+                    context = call_constrain(real_arg_ty[i], cp_arg_ty[i], context)?;
+                    match cp_arg_ty[i] {
+                        Type::Generic(_) => call_inst_tys.push((cp_arg_ty[i], real_arg_ty[i])),
+                        Type::Numeric(_) => call_inst_tys.push((cp_arg_ty[i], real_arg_ty[i])),
+                        _ => {}
+                    }
+                }
+                if all_match {
+                    for (single_arg_ty, single_inst_ty) in call_inst_tys.iter() {
+                        if *single_arg_ty == ret_ty {
+                            ret_ty = *single_inst_ty;
+                            break;
+                        }
+                    }
+                    ret_ty
+                } else {
+                    None?
+                }
+            } else {
+                None?
+            }
         }
         ASTExpr::Index(arr, indices) => {
             let (arr_type, new_context) = typecheck_expr(arr, context)?;
@@ -542,6 +633,32 @@ mod tests {
                 b"xyz",
                 Type::Numeric(4),
                 Type::Numeric(4),
+                Type::Numeric(4),
+            )]
+        );
+    }
+
+    #[test]
+    fn typecheck9() {
+        let bump = bump::BumpAllocator::new();
+        let lexed = &parse::lex(b"f xyz(abc, def) { r abc + def; } xyz(1, 2);", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[
+            Type::Numeric(4),
+            Type::Numeric(4),
+            Type::Numeric(4),
+            Type::Number,
+            Type::Number,
+            Type::Number,
+        ]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![Symbol::Function(
+                b"xyz",
+                bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4)]),
                 Type::Numeric(4),
             )]
         );
