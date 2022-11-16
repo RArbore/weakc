@@ -348,7 +348,6 @@ fn typecheck_expr<'a>(
             }
             let (arg_ty, ret_ty) = found_symbol?;
             if arg_ty.len() == args.len() {
-                let all_match = true;
                 let mut cp_arg_ty = vec![];
                 for i in 0..arg_ty.len() {
                     cp_arg_ty.push(arg_ty.at(i).clone());
@@ -363,23 +362,15 @@ fn typecheck_expr<'a>(
                         }
                     }
                     context = call_constrain(real_arg_ty[i], cp_arg_ty[i], context)?;
-                    match cp_arg_ty[i] {
-                        Type::Generic(_) => call_inst_tys.push((cp_arg_ty[i], real_arg_ty[i])),
-                        Type::Numeric(_) => call_inst_tys.push((cp_arg_ty[i], real_arg_ty[i])),
-                        _ => {}
+                    call_inst_tys.push((cp_arg_ty[i], real_arg_ty[i]));
+                }
+                for (single_arg_ty, single_inst_ty) in call_inst_tys.iter() {
+                    if ret_ty == *single_arg_ty {
+                        ret_ty = *single_inst_ty;
+                        break;
                     }
                 }
-                if all_match {
-                    for (single_arg_ty, single_inst_ty) in call_inst_tys.iter() {
-                        if *single_arg_ty == ret_ty {
-                            ret_ty = *single_inst_ty;
-                            break;
-                        }
-                    }
-                    ret_ty
-                } else {
-                    None?
-                }
+                ret_ty
             } else {
                 None?
             }
@@ -452,7 +443,38 @@ fn typecheck_expr<'a>(
                 panic!("Unreachable: unimplemented ASTBinaryOp typecheck")
             }
         }
-        _ => panic!(),
+        ASTExpr::CustomBinary(op, left, right) => {
+            let (left_ty, left_context) = typecheck_expr(left, context)?;
+            let (right_ty, right_context) = typecheck_expr(right, left_context)?;
+            let mut found_symbol = None;
+            for symbol in right_context.symbols.iter().rev() {
+                match symbol {
+                    Symbol::Operator(query_op, arg1_ty, arg2_ty, ret_ty) => {
+                        if query_op == op {
+                            found_symbol = Some((arg1_ty, arg2_ty, ret_ty));
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            let (arg1_ty, arg2_ty, ret_ty) = found_symbol?;
+            let arg1_ty = *arg1_ty;
+            let arg2_ty = *arg2_ty;
+            let ret_ty = *ret_ty;
+            context = call_constrain(left_ty, arg1_ty, right_context)?;
+            if arg1_ty == arg2_ty {
+                context = constrain(right_ty, left_ty, context)?;
+            }
+            context = call_constrain(right_ty, arg2_ty, context)?;
+            if ret_ty == arg1_ty {
+                left_ty
+            } else if ret_ty == arg2_ty {
+                right_ty
+            } else {
+                ret_ty
+            }
+        }
     };
     context.types.push(my_type);
     Some((my_type, context))
