@@ -663,4 +663,63 @@ mod tests {
             )]
         );
     }
+
+    #[test]
+    fn typecheck10() {
+        let bump = bump::BumpAllocator::new();
+        let lexed = &parse::lex(b"f xyz(abc, def) { r abc + def; } xyz(1, 2); xyz([1], [2]); f pw(x) { p x; } pw(\"hello\"); f func(x, y, z, xx, yy, zz) { p x + y; p z + x; p xx == yy; p zz; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[
+            Type::Numeric(4),
+            Type::Numeric(4),
+            Type::Numeric(4),
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Tensor,
+            Type::Tensor,
+            Type::Generic(5),
+            Type::String,
+            Type::Nil,
+            Type::Numeric(15),
+            Type::Numeric(15),
+            Type::Numeric(15),
+            Type::Numeric(15),
+            Type::Numeric(15),
+            Type::Numeric(15),
+            Type::Generic(11),
+            Type::Generic(11),
+            Type::Boolean,
+            Type::Generic(12),
+        ]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![
+                Symbol::Function(
+                    b"xyz",
+                    bump.create_list_with(&[Type::Numeric(4), Type::Numeric(4)]),
+                    Type::Numeric(4),
+                ),
+                Symbol::Function(b"pw", bump.create_list_with(&[Type::Generic(5)]), Type::Nil),
+                Symbol::Function(
+                    b"func",
+                    bump.create_list_with(&[
+                        Type::Numeric(15),
+                        Type::Numeric(15),
+                        Type::Numeric(15),
+                        Type::Generic(11),
+                        Type::Generic(11),
+                        Type::Generic(12)
+                    ]),
+                    Type::Nil
+                )
+            ]
+        );
+    }
 }
