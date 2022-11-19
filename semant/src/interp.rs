@@ -16,18 +16,20 @@ extern crate bump;
 extern crate parse;
 
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use parse::ASTBinaryOp;
 use parse::ASTExpr;
 use parse::ASTStmt;
 use parse::ASTUnaryOp;
 
+#[derive(Debug, PartialEq, Clone)]
 enum Value<'a> {
     Nil,
     Boolean(bool),
     Number(f64),
     String(&'a [u8]),
-    Tensor(Box<[f64]>),
+    Tensor(Rc<[f64]>),
 }
 
 struct InterpContext<'a> {
@@ -53,5 +55,13 @@ fn eval_expr<'a>(
     expr: &'a ASTExpr<'a>,
     context: InterpContext<'a>,
 ) -> Option<(Value<'a>, InterpContext<'a>)> {
-    Some((Value::Nil, context))
+    let val = match expr {
+        ASTExpr::Nil => Value::Nil,
+        ASTExpr::Boolean(val) => Value::Boolean(*val),
+        ASTExpr::Number(val) => Value::Number(*val),
+        ASTExpr::String(val) => Value::String(val),
+        ASTExpr::Identifier(name) => context.vars.get(name)?.clone(),
+        _ => panic!(),
+    };
+    Some((val, context))
 }
