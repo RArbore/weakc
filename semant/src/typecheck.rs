@@ -812,4 +812,167 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn typecheck13() {
+        let bad_programs: &[&[u8]] = &[
+            b"f xyz(x) { r x + x; } o abc(x, y) { r xyz(x); \"hi\" abc 1;}",
+            b"1 + \"hello\";",
+            b"f abc(x) { p s x; } f def(x) { p x > x; } f gh(x) { p abc(x); p def(x); }",
+            b"s 5;",
+            b"[1] > [0];",
+            b"v 1 + 0;",
+        ];
+        for bad_program in bad_programs {
+            let bump = bump::BumpAllocator::new();
+            let lexed = &parse::lex(bad_program, &bump).unwrap();
+            let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+            assert_eq!(rest, &[]);
+            assert_eq!(typecheck(ast, &bump), None);
+        }
+    }
+
+    #[test]
+    fn typecheck14() {
+        let bump = bump::BumpAllocator::new();
+        let lexed = &parse::lex(b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[
+            Type::Tensor,
+            Type::Tensor,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Tensor,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Tensor,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Boolean,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Number,
+            Type::Tensor,
+            Type::Tensor,
+            Type::Number,
+            Type::Tensor,
+            Type::Number,
+        ]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![
+                Symbol::Function(b"dim", bump.create_list_with(&[Type::Tensor]), Type::Number),
+                Symbol::Function(b"len", bump.create_list_with(&[Type::Tensor]), Type::Number),
+                Symbol::Function(
+                    b"part_one",
+                    bump.create_list_with(&[Type::Tensor]),
+                    Type::Number
+                ),
+                Symbol::Function(
+                    b"part_two",
+                    bump.create_list_with(&[Type::Tensor]),
+                    Type::Number
+                ),
+                Symbol::Variable(b"d", Type::Tensor),
+            ]
+        );
+    }
 }
