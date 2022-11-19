@@ -12,6 +12,8 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
+pub mod interp;
 pub mod typecheck;
 
+pub use interp::*;
 pub use typecheck::*;

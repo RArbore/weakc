@@ -318,7 +318,7 @@ fn typecheck_expr<'a>(
         ASTExpr::String(_) => Type::String,
         ASTExpr::Identifier(var) => {
             let mut found_type = None;
-            for symbol in context.symbols.iter() {
+            for symbol in context.symbols.iter().rev() {
                 if let Symbol::Variable(potential_var, potential_type) = symbol {
                     if var == potential_var {
                         found_type = Some(*potential_type);
@@ -834,6 +834,37 @@ mod tests {
 
     #[test]
     fn typecheck14() {
+        let bump = bump::BumpAllocator::new();
+        let lexed = &parse::lex(
+            b"o abc(x, y) { f xyz(x) { r x + x; } r xyz(x); } a x = 1; f what() { p x; }",
+            &bump,
+        )
+        .unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[
+            Type::Numeric(5),
+            Type::Numeric(5),
+            Type::Numeric(5),
+            Type::Numeric(7),
+            Type::Numeric(7),
+            Type::Number,
+            Type::Number,
+        ]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![
+                Symbol::Operator(b"abc", Type::Numeric(7), Type::Generic(1), Type::Numeric(7)),
+                Symbol::Variable(b"x", Type::Number),
+                Symbol::Function(b"what", bump.create_list(), Type::Nil)
+            ]
+        );
+    }
+
+    #[test]
+    fn typecheck15() {
         let bump = bump::BumpAllocator::new();
         let lexed = &parse::lex(b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);", &bump).unwrap();
         let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
