@@ -46,6 +46,27 @@ struct TypeContext<'a> {
     cur_type_var: u32,
 }
 
+fn join_types(recent_type: Type, older_type: Type) -> Option<Type> {
+    match (recent_type, older_type) {
+        (Type::Generic(_), _) => Some(older_type),
+        (_, Type::Generic(_)) => Some(recent_type),
+        (Type::Numeric(_), Type::Numeric(_)) => Some(older_type),
+        (Type::Numeric(_), Type::Number) => Some(older_type),
+        (Type::Numeric(_), Type::Tensor) => Some(older_type),
+        (Type::Numeric(_), _) => None,
+        (Type::Number, Type::Numeric(_)) => Some(recent_type),
+        (Type::Tensor, Type::Numeric(_)) => Some(recent_type),
+        (_, Type::Numeric(_)) => None,
+        (recent_type, older_type) => {
+            if recent_type == older_type {
+                Some(recent_type)
+            } else {
+                None
+            }
+        }
+    }
+}
+
 fn replace_single_generic(old: &mut Type, var: u32, new: Type) {
     match old {
         Type::Generic(gen_var) => {
@@ -81,6 +102,10 @@ impl<'a> TypeContext<'a> {
 
     fn replay_generic(&self, idx: u32) -> Type {
         Type::Generic(idx)
+    }
+
+    fn replay_numeric(&self, idx: u32) -> Type {
+        Type::Numeric(idx)
     }
 
     fn replace_generic(&mut self, var: u32, new: Type) {
@@ -132,31 +157,19 @@ impl<'a> TypeContext<'a> {
 }
 
 fn constrain<'a>(dst: Type, src: Type, mut context: TypeContext<'a>) -> Option<TypeContext<'a>> {
-    match dst {
-        Type::Generic(var) => context.replace_generic(var, src),
-        Type::Numeric(var) => {
-            match src {
-                Type::Numeric(_) => {}
-                Type::Number => {}
-                Type::Tensor => {}
-                _ => return None,
-            }
-            context.replace_generic(var, src)
-        }
-        ty => {
-            match src {
-                Type::Generic(_) => {
-                    return constrain(src, dst, context);
-                }
-                Type::Numeric(_) => {
-                    return constrain(src, dst, context);
-                }
-                _ => {}
-            }
-            if ty != src {
-                return None;
-            }
-        }
+    let joined_type = join_types(dst, src)?;
+    let get_var = |ty| match ty {
+        Type::Generic(var) => var,
+        Type::Numeric(var) => var,
+        _ => panic!("Unreachable: can't replace non-generic with generic"),
+    };
+    if joined_type != dst {
+        let var = get_var(dst);
+        context.replace_generic(var, joined_type);
+    }
+    if joined_type != src {
+        let var = get_var(src);
+        context.replace_generic(var, joined_type);
     }
     Some(context)
 }
@@ -166,33 +179,21 @@ fn call_constrain<'a>(
     src: Type,
     mut context: TypeContext<'a>,
 ) -> Option<TypeContext<'a>> {
-    match dst {
-        Type::Generic(var) => context.replace_generic(var, src),
-        Type::Numeric(var) => {
-            match src {
-                Type::Numeric(_) => {}
-                Type::Number => {}
-                Type::Tensor => {}
-                _ => return None,
-            }
-            context.replace_generic(var, src)
+    if let (Type::Generic(_), Type::Numeric(_)) = (dst, src) {
+        enforce_numeric(dst, context)
+    } else {
+        let joined_type = join_types(src, dst)?;
+        let get_var = |ty| match ty {
+            Type::Generic(var) => var,
+            Type::Numeric(var) => var,
+            _ => panic!("Unreachable: can't replace non-generic with generic"),
+        };
+        if joined_type != dst {
+            let var = get_var(dst);
+            context.replace_generic(var, joined_type);
         }
-        ty => {
-            match src {
-                Type::Generic(_) => {
-                    return Some(context);
-                }
-                Type::Numeric(_) => {
-                    return enforce_numeric(dst, context);
-                }
-                _ => {}
-            }
-            if ty != src {
-                return None;
-            }
-        }
+        Some(context)
     }
-    Some(context)
 }
 
 fn enforce_numeric(ty: Type, mut context: TypeContext) -> Option<TypeContext> {
@@ -361,8 +362,13 @@ fn typecheck_expr<'a>(
                             break;
                         }
                     }
+                    let cur_var = context.cur_type_var;
                     context = call_constrain(real_arg_ty[i], cp_arg_ty[i], context)?;
-                    call_inst_tys.push((cp_arg_ty[i], real_arg_ty[i]));
+                    if context.cur_type_var != cur_var {
+                        call_inst_tys.push((cp_arg_ty[i], context.replay_numeric(cur_var)));
+                    } else {
+                        call_inst_tys.push((cp_arg_ty[i], real_arg_ty[i]));
+                    }
                 }
                 for (single_arg_ty, single_inst_ty) in call_inst_tys.iter() {
                     if ret_ty == *single_arg_ty {
@@ -741,6 +747,68 @@ mod tests {
                     ]),
                     Type::Nil
                 )
+            ]
+        );
+    }
+
+    #[test]
+    fn typecheck11() {
+        let bump = bump::BumpAllocator::new();
+        let lexed =
+            &parse::lex(b"f xyz(x) { r x; } f abc(x) { r xyz(x) + xyz(x); }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[
+            Type::Generic(0),
+            Type::Numeric(4),
+            Type::Numeric(4),
+            Type::Numeric(4),
+            Type::Numeric(4),
+            Type::Numeric(4),
+        ]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![
+                Symbol::Function(
+                    b"xyz",
+                    bump.create_list_with(&[Type::Generic(0)]),
+                    Type::Generic(0),
+                ),
+                Symbol::Function(
+                    b"abc",
+                    bump.create_list_with(&[Type::Numeric(4)]),
+                    Type::Numeric(4),
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn typecheck12() {
+        let bump = bump::BumpAllocator::new();
+        let lexed = &parse::lex(b"f xyz(x) { r x + x; } o abc(x, y) { r xyz(x); }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(lexed, &bump).unwrap();
+        assert_eq!(rest, &[]);
+        let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
+        let correct_list = bump.create_list_with(&[
+            Type::Numeric(2),
+            Type::Numeric(2),
+            Type::Numeric(2),
+            Type::Numeric(7),
+            Type::Numeric(7),
+        ]);
+        assert_eq!(typecheck, correct_list);
+        assert_eq!(
+            symbols,
+            vec![
+                Symbol::Function(
+                    b"xyz",
+                    bump.create_list_with(&[Type::Numeric(2)]),
+                    Type::Numeric(2),
+                ),
+                Symbol::Operator(b"abc", Type::Numeric(7), Type::Generic(5), Type::Numeric(7),),
             ]
         );
     }
