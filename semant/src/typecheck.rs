@@ -296,6 +296,13 @@ fn typecheck_stmt<'a>(
             context = constrain(expr_type, Type::Boolean, new_context)?;
         }
         ASTStmt::Variable(var, init) => {
+            for symbol in context.symbols.iter().rev() {
+                if let Symbol::Variable(potential_var, _) = symbol {
+                    if var == potential_var {
+                        None?;
+                    }
+                }
+            }
             let (init_type, new_context) = typecheck_expr(init, context)?;
             context = new_context;
             context.symbols.push(Symbol::Variable(var, init_type));
