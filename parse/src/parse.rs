@@ -117,7 +117,7 @@ pub fn parse_program<'a, 'b>(
     Some((list, rest))
 }
 
-fn parse_stmt<'a, 'b>(
+pub fn parse_stmt<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
@@ -293,7 +293,7 @@ fn parse_expr_stmt<'a, 'b>(
     Some((ASTStmt::Expression(bump.alloc(expr)), rest))
 }
 
-fn parse_expr<'a, 'b>(
+pub fn parse_expr<'a, 'b>(
     tokens: &'a [lex::Token<'b>],
     bump: &'b bump::BumpAllocator,
 ) -> Option<(ASTExpr<'b>, &'a [lex::Token<'b>])> {

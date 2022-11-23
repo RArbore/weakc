@@ -836,7 +836,7 @@ mod tests {
     fn typecheck14() {
         let bump = bump::BumpAllocator::new();
         let lexed = &parse::lex(
-            b"o abc(x, y) { f xyz(x) { r x + x; } r xyz(x); } a x = 1; f what() { p x; }",
+            b"a x = 1; o abc(x, y) { f xyz(x) { r x + x; } r xyz(x); } f what() { p x; }",
             &bump,
         )
         .unwrap();
@@ -844,20 +844,20 @@ mod tests {
         assert_eq!(rest, &[]);
         let (typecheck, symbols) = typecheck(ast, &bump).unwrap();
         let correct_list = bump.create_list_with(&[
-            Type::Numeric(5),
-            Type::Numeric(5),
-            Type::Numeric(5),
-            Type::Numeric(7),
-            Type::Numeric(7),
             Type::Number,
+            Type::Numeric(5),
+            Type::Numeric(5),
+            Type::Numeric(5),
+            Type::Numeric(7),
+            Type::Numeric(7),
             Type::Number,
         ]);
         assert_eq!(typecheck, correct_list);
         assert_eq!(
             symbols,
             vec![
-                Symbol::Operator(b"abc", Type::Numeric(7), Type::Generic(1), Type::Numeric(7)),
                 Symbol::Variable(b"x", Type::Number),
+                Symbol::Operator(b"abc", Type::Numeric(7), Type::Generic(1), Type::Numeric(7)),
                 Symbol::Function(b"what", bump.create_list(), Type::Nil)
             ]
         );
