@@ -23,13 +23,15 @@ use parse::ASTExpr;
 use parse::ASTStmt;
 use parse::ASTUnaryOp;
 
+use crate::typecheck::*;
+
 #[derive(Debug, PartialEq, Clone)]
 enum Value<'a> {
     Nil,
     Boolean(bool),
     Number(f64),
     String(&'a [u8]),
-    Tensor(Rc<[f64]>),
+    Tensor(Box<[usize]>, Box<[f64]>),
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -86,6 +88,42 @@ fn eval_expr<'a>(
                 ret_val
             } else {
                 Value::Nil
+            }
+        }
+        ASTExpr::Index(tensor, indices) => {
+            let (tensor_val, new_context) = eval_expr(tensor, context)?;
+            context = new_context;
+            if let Value::Tensor(size, contents) = tensor_val {
+                let mut index_vals = vec![];
+                for i in 0..indices.len() {
+                    let (index, new_context) = eval_expr(indices.at(i), context)?;
+                    context = new_context;
+                    if let Value::Number(index_num) = index {
+                        let index_num = index_num as isize;
+                        if index_num >= 0 {
+                            index_vals.push(index_num as usize);
+                        } else {
+                            None?
+                        }
+                    } else {
+                        None?
+                    }
+                }
+                if size.len() == index_vals.len() {
+                    let mut flat_index = 0;
+                    for i in 0..size.len() {
+                        if index_vals[i] < size[i] {
+                            flat_index = flat_index * size[i] + index_vals[i];
+                        } else {
+                            None?
+                        }
+                    }
+                    Value::Number(contents[flat_index])
+                } else {
+                    None?
+                }
+            } else {
+                None?
             }
         }
         _ => panic!(),
