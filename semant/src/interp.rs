@@ -16,14 +16,11 @@ extern crate bump;
 extern crate parse;
 
 use std::collections::HashMap;
-use std::rc::Rc;
 
 use parse::ASTBinaryOp;
 use parse::ASTExpr;
 use parse::ASTStmt;
 use parse::ASTUnaryOp;
-
-use crate::typecheck::*;
 
 #[derive(Debug, PartialEq, Clone)]
 enum Value<'a> {
@@ -189,7 +186,9 @@ fn eval_expr<'a>(
                             None?
                         }
                     }
-                    if let Value::Tensor(size, contents) = context.vars.get_mut(name)? {
+                    if let (Value::Tensor(size, contents), Value::Number(num)) =
+                        (context.vars.get_mut(name)?, right_val)
+                    {
                         if size.len() == index_vals.len() {
                             let mut flat_index = 0;
                             for i in 0..size.len() {
@@ -199,12 +198,8 @@ fn eval_expr<'a>(
                                     None?
                                 }
                             }
-                            if let Value::Number(num) = right_val {
-                                contents[flat_index] = num;
-                                Value::Number(num)
-                            } else {
-                                None?
-                            }
+                            contents[flat_index] = num;
+                            Value::Number(num)
                         } else {
                             None?
                         }
