@@ -126,6 +126,22 @@ fn eval_expr<'a>(
                 None?
             }
         }
+        ASTExpr::ArrayLiteral(contents) => {
+            let mut content_vals = vec![];
+            for i in 0..contents.len() {
+                let (val, new_context) = eval_expr(contents.at(i), context)?;
+                context = new_context;
+                if let Value::Number(val_num) = val {
+                    content_vals.push(val_num);
+                } else {
+                    None?
+                }
+            }
+            Value::Tensor(
+                Box::new([content_vals.len()]),
+                content_vals.into_boxed_slice(),
+            )
+        }
         _ => panic!(),
     };
     Some((val, context))
@@ -143,6 +159,11 @@ mod tests {
             (b"T", Value::Boolean(true)),
             (b"\"hello\"", Value::String(b"hello")),
             (b"N", Value::Nil),
+            (
+                b"[1.2, 4]",
+                Value::Tensor(Box::new([2]), Box::new([1.2, 4.0])),
+            ),
+            (b"[1.2, 4][1]", Value::Number(4.0)),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
