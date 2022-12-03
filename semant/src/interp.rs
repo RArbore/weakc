@@ -142,6 +142,79 @@ fn eval_expr<'a>(
                 content_vals.into_boxed_slice(),
             )
         }
+        ASTExpr::Assign(left, right) => {
+            let (right_val, new_context) = eval_expr(right, context)?;
+            context = new_context;
+            match left {
+                ASTExpr::Identifier(name) => {
+                    let cur_val = context.vars.get_mut(name)?;
+                    match (cur_val, right_val) {
+                        (Value::Nil, Value::Nil) => Value::Nil,
+                        (Value::Boolean(cur_bool), Value::Boolean(right_bool)) => {
+                            *cur_bool = right_bool;
+                            Value::Boolean(right_bool)
+                        }
+                        (Value::Number(cur_num), Value::Number(right_num)) => {
+                            *cur_num = right_num;
+                            Value::Number(right_num)
+                        }
+                        (Value::String(cur_str), Value::String(right_str)) => {
+                            *cur_str = right_str;
+                            Value::String(right_str)
+                        }
+                        (
+                            Value::Tensor(cur_size, cur_data),
+                            Value::Tensor(right_size, right_data),
+                        ) => {
+                            *cur_size = right_size.clone();
+                            *cur_data = right_data.clone();
+                            Value::Tensor(right_size, right_data)
+                        }
+                        _ => None?,
+                    }
+                }
+                ASTExpr::Index(&ASTExpr::Identifier(name), indices) => {
+                    let mut index_vals = vec![];
+                    for i in 0..indices.len() {
+                        let (index, new_context) = eval_expr(indices.at(i), context)?;
+                        context = new_context;
+                        if let Value::Number(index_num) = index {
+                            let index_num = index_num as isize;
+                            if index_num >= 0 {
+                                index_vals.push(index_num as usize);
+                            } else {
+                                None?
+                            }
+                        } else {
+                            None?
+                        }
+                    }
+                    if let Value::Tensor(size, contents) = context.vars.get_mut(name)? {
+                        if size.len() == index_vals.len() {
+                            let mut flat_index = 0;
+                            for i in 0..size.len() {
+                                if index_vals[i] < size[i] {
+                                    flat_index = flat_index * size[i] + index_vals[i];
+                                } else {
+                                    None?
+                                }
+                            }
+                            if let Value::Number(num) = right_val {
+                                contents[flat_index] = num;
+                                Value::Number(num)
+                            } else {
+                                None?
+                            }
+                        } else {
+                            None?
+                        }
+                    } else {
+                        None?
+                    }
+                }
+                _ => None?,
+            }
+        }
         _ => panic!(),
     };
     Some((val, context))
