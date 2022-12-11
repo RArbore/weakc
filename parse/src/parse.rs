@@ -534,7 +534,7 @@ fn parse_array_literal<'a, 'b>(
 }
 
 macro_rules! define_simple_expr_parse {
-    ($x:ident, $y: expr, $z: ty) => {
+    ($x: ident, $y: expr, $z: ty) => {
         fn $x<'a, 'b>(
             tokens: &'a [lex::Token<'b>],
             bump: &'b bump::BumpAllocator,

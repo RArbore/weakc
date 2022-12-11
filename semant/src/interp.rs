@@ -48,6 +48,29 @@ fn eval_stmt<'a>(stmt: &'a ASTStmt<'a>, context: InterpContext<'a>) -> Option<In
     Some(context)
 }
 
+macro_rules! combine_elementwise {
+    ($x: ident, $ld: expr, $lv: expr, $rd: expr, $rv: expr) => {
+        if $ld == $rd {
+            for i in 0..$lv.len() {
+                $lv[i] = $lv[i].$x($rv[i]);
+            }
+            Value::Tensor($ld, $lv)
+        } else {
+            None?
+        }
+    };
+    ($x: tt, $ld: expr, $lv: expr, $rd: expr, $rv: expr) => {
+        if $ld == $rd {
+            for i in 0..$lv.len() {
+                $lv[i] $x $rv[i];
+            }
+            Value::Tensor($ld, $lv)
+        } else {
+            None?
+        }
+    };
+}
+
 fn eval_expr<'a>(
     expr: &'a ASTExpr<'a>,
     mut context: InterpContext<'a>,
@@ -258,6 +281,34 @@ fn eval_expr<'a>(
                         None?
                     }
                 }
+                (ASTBinaryOp::Add, Value::Number(lv), Value::Number(rv)) => Value::Number(lv + rv),
+                (ASTBinaryOp::Subtract, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Number(lv - rv)
+                }
+                (ASTBinaryOp::Multiply, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Number(lv * rv)
+                }
+                (ASTBinaryOp::Divide, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Number(lv / rv)
+                }
+                (ASTBinaryOp::Power, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Number(lv.powf(rv))
+                }
+                (ASTBinaryOp::Add, Value::Tensor(ld, mut lv), Value::Tensor(rd, rv)) => {
+                    combine_elementwise!(+=, ld, lv, rd, rv)
+                }
+                (ASTBinaryOp::Subtract, Value::Tensor(ld, mut lv), Value::Tensor(rd, rv)) => {
+                    combine_elementwise!(-=, ld, lv, rd, rv)
+                }
+                (ASTBinaryOp::Multiply, Value::Tensor(ld, mut lv), Value::Tensor(rd, rv)) => {
+                    combine_elementwise!(*=, ld, lv, rd, rv)
+                }
+                (ASTBinaryOp::Divide, Value::Tensor(ld, mut lv), Value::Tensor(rd, rv)) => {
+                    combine_elementwise!(/=, ld, lv, rd, rv)
+                }
+                (ASTBinaryOp::Power, Value::Tensor(ld, mut lv), Value::Tensor(rd, rv)) => {
+                    combine_elementwise!(powf, ld, lv, rd, rv)
+                }
                 _ => None?,
             }
         }
@@ -294,6 +345,9 @@ mod tests {
                 b"[1.2, 4, 1.0, 2.0, 3.0, 4.0] sa [3, 2]",
                 Value::Tensor(Box::new([3, 2]), Box::new([1.2, 4.0, 1.0, 2.0, 3.0, 4.0])),
             ),
+            (b"([1.2, 4]-[1.0, 2.0])[1]", Value::Number(2.0)),
+            (b"([1.2, 4]^[1.0, 2.0])[1]", Value::Number(16.0)),
+            (b"1.22387 + 1.0", Value::Number(2.22387)),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
