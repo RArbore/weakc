@@ -210,6 +210,57 @@ fn eval_expr<'a>(
                 _ => None?,
             }
         }
+        ASTExpr::Unary(op, expr) => {
+            let (val, new_context) = eval_expr(expr, context)?;
+            context = new_context;
+            match (op, val) {
+                (ASTUnaryOp::Not, Value::Boolean(v)) => Value::Boolean(!v),
+                (ASTUnaryOp::Negate, Value::Number(v)) => Value::Number(-v),
+                (ASTUnaryOp::Negate, Value::Tensor(d, mut v)) => {
+                    for i in 0..v.len() {
+                        v[i] *= -1.0;
+                    }
+                    Value::Tensor(d, v)
+                }
+                (ASTUnaryOp::Shape, Value::Tensor(d, _)) => {
+                    let mut v = vec![];
+                    for i in 0..d.len() {
+                        v.push(d[i] as f64);
+                    }
+                    Value::Tensor(Box::new([v.len()]), v.into_boxed_slice())
+                }
+                _ => None?,
+            }
+        }
+        ASTExpr::Binary(op, left, right) => {
+            let (lval, new_context) = eval_expr(left, context)?;
+            let (rval, new_context) = eval_expr(right, new_context)?;
+            context = new_context;
+            match (op, lval, rval) {
+                (ASTBinaryOp::ShapedAs, Value::Tensor(_, lv), Value::Tensor(rd, rv)) => {
+                    if rd.len() == 1 {
+                        let mut right_prod = 1;
+                        let mut new_ld = vec![];
+                        for i in 0..rv.len() {
+                            let dim = rv[i] as usize;
+                            if dim <= 0 {
+                                None?
+                            }
+                            new_ld.push(dim);
+                            right_prod *= dim;
+                        }
+                        if lv.len() == right_prod {
+                            Value::Tensor(new_ld.into_boxed_slice(), lv)
+                        } else {
+                            None?
+                        }
+                    } else {
+                        None?
+                    }
+                }
+                _ => None?,
+            }
+        }
         _ => panic!(),
     };
     Some((val, context))
@@ -232,6 +283,17 @@ mod tests {
                 Value::Tensor(Box::new([2]), Box::new([1.2, 4.0])),
             ),
             (b"[1.2, 4][1]", Value::Number(4.0)),
+            (b"(-[1.2, 4])[1]", Value::Number(-4.0)),
+            (b"(s [1.2, 4])[0]", Value::Number(2.0)),
+            (b"!T", Value::Boolean(false)),
+            (
+                b"[1.2, 4] sa [1, 2]",
+                Value::Tensor(Box::new([1, 2]), Box::new([1.2, 4.0])),
+            ),
+            (
+                b"[1.2, 4, 1.0, 2.0, 3.0, 4.0] sa [3, 2]",
+                Value::Tensor(Box::new([3, 2]), Box::new([1.2, 4.0, 1.0, 2.0, 3.0, 4.0])),
+            ),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
