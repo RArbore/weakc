@@ -99,6 +99,26 @@ fn eval_stmt<'a, W: Write>(
             }
             Some(context)
         }
+        ASTStmt::Function(name, params, body) => {
+            context.funcs.insert(name, (params, body));
+            Some(context)
+        }
+        ASTStmt::Operator(name, left_param, right_param, body) => {
+            context.ops.insert(name, (left_param, right_param, body));
+            Some(context)
+        }
+        ASTStmt::If(cond, body) => {
+            let (cond_val, new_context) = eval_expr(cond, context)?;
+            context = new_context;
+            if let Value::Boolean(v) = cond_val {
+                if v {
+                    context = eval_stmt(body, context)?;
+                }
+                Some(context)
+            } else {
+                None?
+            }
+        }
         ASTStmt::While(cond, body) => loop {
             let (cond_val, new_context) = eval_expr(cond, context)?;
             context = new_context;
@@ -142,7 +162,6 @@ fn eval_stmt<'a, W: Write>(
             let (_, context) = eval_expr(expr, context)?;
             Some(context)
         }
-        _ => None,
     }
 }
 
@@ -539,6 +558,7 @@ mod tests {
                 b"{a x = 0.5; w (x < 10) { p x; x = x + 1; }}",
                 b"0.5\n1.5\n2.5\n3.5\n4.5\n5.5\n6.5\n7.5\n8.5\n9.5\n",
             ),
+            (b"{f xyz(x) { r x + 7; } p xyz(1.5);}", b"8.5\n"),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
@@ -546,8 +566,9 @@ mod tests {
             let mut context = InterpContext::_new(Cursor::new(vec![0; 64]));
             context = eval_stmt(bump.alloc(ast), context).unwrap();
             assert_eq!(
-                *output,
-                &context.writer.get_ref()[0..context.writer.position() as usize]
+                str::from_utf8(*output).unwrap(),
+                str::from_utf8(&context.writer.get_ref()[0..context.writer.position() as usize])
+                    .unwrap(),
             );
         }
     }
