@@ -17,13 +17,14 @@ extern crate parse;
 
 use core::fmt;
 use core::str;
-use std::collections::{HashMap, HashSet};
 use std::io::{stdout, Stdout, Write};
 
 use parse::ASTBinaryOp;
 use parse::ASTExpr;
 use parse::ASTStmt;
 use parse::ASTUnaryOp;
+
+type InterpResult<T> = Result<T, &'static str>;
 
 #[derive(Debug, PartialEq, Clone)]
 enum Value<'a> {
@@ -48,11 +49,51 @@ impl<'a> fmt::Display for Value<'a> {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct InterpContext<'a, W: Write> {
-    funcs: HashMap<&'a [u8], (&'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>)>,
-    ops: HashMap<&'a [u8], (&'a [u8], &'a [u8], &'a ASTStmt<'a>)>,
-    vars: HashMap<&'a [u8], Value<'a>>,
+struct SymbolTable<K: PartialEq, V>(Vec<(K, V)>);
+
+impl<K: PartialEq, V> SymbolTable<K, V> {
+    fn get(&self, k: &K) -> Option<&V> {
+        Some(&self.0.iter().rev().find(|x| &x.0 == k)?.1)
+    }
+
+    fn get_mut(&mut self, k: &K) -> Option<&mut V> {
+        Some(&mut self.0.iter_mut().rev().find(|x| &x.0 == k)?.1)
+    }
+
+    fn contains(&self, k: &K, checkpoint: usize) -> bool {
+        self.0[checkpoint..]
+            .iter()
+            .rev()
+            .find(|x| &x.0 == k)
+            .is_some()
+    }
+
+    fn insert(&mut self, k: K, v: V) {
+        self.0.push((k, v));
+    }
+
+    fn get_checkpoint(&self) -> usize {
+        self.0.len()
+    }
+
+    fn revert_checkpoint(&mut self, checkpoint: usize) {
+        self.0.truncate(checkpoint);
+    }
+}
+
+impl<K: PartialEq, V> Default for SymbolTable<K, V> {
+    fn default() -> Self {
+        SymbolTable(vec![])
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct InterpContext<'a, W: Write> {
+    funcs: SymbolTable<&'a [u8], (&'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>)>,
+    ops: SymbolTable<&'a [u8], (&'a [u8], &'a [u8], &'a ASTStmt<'a>)>,
+    vars: SymbolTable<&'a [u8], Value<'a>>,
     ret_val: Option<Value<'a>>,
+    current_checkpoints: (usize, usize, usize),
     writer: W,
 }
 
@@ -63,6 +104,7 @@ impl<'a, W: Write> InterpContext<'a, W> {
             ops: Default::default(),
             vars: Default::default(),
             ret_val: Default::default(),
+            current_checkpoints: (0, 0, 0),
             writer: w,
         }
     }
@@ -75,49 +117,55 @@ impl<'a> Default for InterpContext<'a, Stdout> {
             ops: Default::default(),
             vars: Default::default(),
             ret_val: Default::default(),
+            current_checkpoints: (0, 0, 0),
             writer: stdout(),
         }
     }
 }
 
-pub fn eval<'a>(program: &'a ASTStmt<'a>) {
-    let context = InterpContext::<Stdout>::default();
-    eval_stmt(program, context);
+pub fn eval_program<'a, W: Write>(
+    program: &'a bump::List<'a, ASTStmt<'a>>,
+    mut context: InterpContext<'a, W>,
+) -> InterpResult<InterpContext<'a, W>> {
+    for i in 0..program.len() {
+        context = eval_stmt(program.at(i), context)?;
+    }
+    Ok(context)
 }
 
 fn eval_stmt<'a, W: Write>(
     stmt: &'a ASTStmt<'a>,
     mut context: InterpContext<'a, W>,
-) -> Option<InterpContext<'a, W>> {
+) -> InterpResult<InterpContext<'a, W>> {
     match stmt {
         ASTStmt::Block(stmts) => {
-            let pre_funcs: HashSet<&[u8]> = context.funcs.keys().map(|x| x.clone()).collect();
-            let pre_ops: HashSet<&[u8]> = context.ops.keys().map(|x| x.clone()).collect();
-            let pre_vars: HashSet<&[u8]> = context.vars.keys().map(|x| x.clone()).collect();
+            let funcs_checkpoint = context.funcs.get_checkpoint();
+            let ops_checkpoint = context.ops.get_checkpoint();
+            let vars_checkpoint = context.vars.get_checkpoint();
             for i in 0..stmts.len() {
                 if context.ret_val.is_some() {
-                    None?
+                    Err("ERROR: Attempted to evaluate statement after return in block.")?
                 }
                 context = eval_stmt(stmts.at(i), context)?;
             }
-            context.funcs.retain(|&k, _| pre_funcs.contains(k));
-            context.ops.retain(|&k, _| pre_ops.contains(k));
-            context.vars.retain(|&k, _| pre_vars.contains(k));
-            Some(context)
+            context.funcs.revert_checkpoint(funcs_checkpoint);
+            context.ops.revert_checkpoint(ops_checkpoint);
+            context.vars.revert_checkpoint(vars_checkpoint);
+            Ok(context)
         }
         ASTStmt::Function(name, params, body) => {
-            if let Some(_) = context.funcs.get(name) {
-                None?
+            if context.funcs.contains(name, context.current_checkpoints.0) {
+                Err("ERROR: Attempted a redefinition of a function.")?
             }
             context.funcs.insert(name, (params, body));
-            Some(context)
+            Ok(context)
         }
         ASTStmt::Operator(name, left_param, right_param, body) => {
-            if let Some(_) = context.ops.get(name) {
-                None?
+            if context.ops.contains(name, context.current_checkpoints.1) {
+                Err("ERROR: Attempted a redefinition of an operator.")?
             }
             context.ops.insert(name, (left_param, right_param, body));
-            Some(context)
+            Ok(context)
         }
         ASTStmt::If(cond, body) => {
             let (cond_val, new_context) = eval_expr(cond, context)?;
@@ -126,9 +174,9 @@ fn eval_stmt<'a, W: Write>(
                 if v {
                     context = eval_stmt(body, context)?;
                 }
-                Some(context)
+                Ok(context)
             } else {
-                None?
+                Err("ERROR: Attempted to use a non-boolean in an if statement.")?
             }
         }
         ASTStmt::While(cond, body) => loop {
@@ -138,10 +186,10 @@ fn eval_stmt<'a, W: Write>(
                 if v {
                     context = eval_stmt(body, context)?;
                 } else {
-                    break Some(context);
+                    break Ok(context);
                 }
             } else {
-                None?
+                Err("ERROR: Attempted to use a non-boolean in a while statement.")?
             }
         },
         ASTStmt::Print(expr) => {
@@ -150,32 +198,32 @@ fn eval_stmt<'a, W: Write>(
                 .writer
                 .write(format!("{}\n", value).as_bytes())
                 .unwrap();
-            Some(context)
+            Ok(context)
         }
         ASTStmt::Return(expr) => {
             let (value, mut context) = eval_expr(expr, context)?;
             context.ret_val = Some(value);
-            Some(context)
+            Ok(context)
         }
         ASTStmt::Verify(expr) => {
             let (value, context) = eval_expr(expr, context)?;
             if value == Value::Boolean(true) {
-                Some(context)
+                Ok(context)
             } else {
-                None
+                Err("ERROR: Failed a verify statement.")?
             }
         }
         ASTStmt::Variable(name, init) => {
-            let (value, mut context) = eval_expr(init, context)?;
-            if let Some(_) = context.vars.get(name) {
-                None?
+            if context.vars.contains(name, context.current_checkpoints.2) {
+                Err("ERROR: Attempted a redefinition of a variable.")?
             }
+            let (value, mut context) = eval_expr(init, context)?;
             context.vars.insert(name, value);
-            Some(context)
+            Ok(context)
         }
         ASTStmt::Expression(expr) => {
             let (_, context) = eval_expr(expr, context)?;
-            Some(context)
+            Ok(context)
         }
     }
 }
@@ -188,7 +236,7 @@ macro_rules! combine_elementwise {
             }
             Value::Tensor($ld, $lv)
         } else {
-            None?
+            Err("ERROR: Attempted element-wise operation on two tensors of different sizes.")?
         }
     };
     ($x: tt, $ld: expr, $lv: expr, $rd: expr, $rv: expr) => {
@@ -198,7 +246,7 @@ macro_rules! combine_elementwise {
             }
             Value::Tensor($ld, $lv)
         } else {
-            None?
+            Err("ERROR: Attempted element-wise operation on two tensors of different sizes.")?
         }
     };
 }
@@ -206,17 +254,25 @@ macro_rules! combine_elementwise {
 fn eval_expr<'a, W: Write>(
     expr: &'a ASTExpr<'a>,
     mut context: InterpContext<'a, W>,
-) -> Option<(Value<'a>, InterpContext<'a, W>)> {
+) -> InterpResult<(Value<'a>, InterpContext<'a, W>)> {
     let val = match expr {
         ASTExpr::Nil => Value::Nil,
         ASTExpr::Boolean(val) => Value::Boolean(*val),
         ASTExpr::Number(val) => Value::Number(*val),
         ASTExpr::String(val) => Value::String(val),
-        ASTExpr::Identifier(name) => context.vars.get(name)?.clone(),
+        ASTExpr::Identifier(name) => context
+            .vars
+            .get(name)
+            .ok_or("ERROR: Attempted to reference an undefined variable.")?
+            .clone(),
         ASTExpr::Call(func, args) => {
-            let (params, body) = context.funcs.get(func)?.clone();
+            let (params, body) = context
+                .funcs
+                .get(func)
+                .ok_or("ERROR: Attempted to call an undefined function.")?
+                .clone();
             if args.len() != params.len() {
-                return None;
+                Err("ERROR: Attempted to call a function with the wrong number of arguments.")?
             }
             let mut eval_args = vec![];
             for i in 0..args.len() {
@@ -224,20 +280,17 @@ fn eval_expr<'a, W: Write>(
                 context = new_context;
                 eval_args.push(eval);
             }
-            let mut old_values = HashMap::new();
+            let funcs_checkpoint = context.funcs.get_checkpoint();
+            let ops_checkpoint = context.ops.get_checkpoint();
+            let vars_checkpoint = context.vars.get_checkpoint();
             for i in (0..args.len()).rev() {
-                let old_value = context.vars.insert(params.at(i), eval_args.pop().unwrap());
-                if let Some(old_value) = old_value {
-                    old_values.insert(params.at(i), old_value);
-                }
+                context.vars.insert(params.at(i), eval_args.pop().unwrap());
             }
+            context.current_checkpoints = (funcs_checkpoint, ops_checkpoint, vars_checkpoint);
             context = eval_stmt(body, context)?;
-            for i in 0..params.len() {
-                context.vars.remove(params.at(i));
-            }
-            for (old_k, old_v) in old_values {
-                context.vars.insert(old_k, old_v);
-            }
+            context.funcs.revert_checkpoint(funcs_checkpoint);
+            context.ops.revert_checkpoint(ops_checkpoint);
+            context.vars.revert_checkpoint(vars_checkpoint);
             if let Some(ret_val) = context.ret_val {
                 context.ret_val = None;
                 ret_val
@@ -258,10 +311,12 @@ fn eval_expr<'a, W: Write>(
                         if index_num >= 0 {
                             index_vals.push(index_num as usize);
                         } else {
-                            None?
+                            Err(
+                                "ERROR: Attempted to use a negative number to index into a tensor.",
+                            )?
                         }
                     } else {
-                        None?
+                        Err("ERROR: Attempted to use a non-number as an index value.")?
                     }
                 }
                 if size.len() == index_vals.len() {
@@ -270,15 +325,15 @@ fn eval_expr<'a, W: Write>(
                         if index_vals[i] < size[i] {
                             flat_index = flat_index * size[i] + index_vals[i];
                         } else {
-                            None?
+                            Err("ERROR: Index value doesn't fit in dimension of tensor.")?
                         }
                     }
                     Value::Number(contents[flat_index])
                 } else {
-                    None?
+                    Err("ERROR: Attempted to index into tensor using incorrect number of indices.")?
                 }
             } else {
-                None?
+                Err("ERROR: Attempted to index into non-tensor.")?
             }
         }
         ASTExpr::ArrayLiteral(contents) => {
@@ -289,7 +344,7 @@ fn eval_expr<'a, W: Write>(
                 if let Value::Number(val_num) = val {
                     content_vals.push(val_num);
                 } else {
-                    None?
+                    Err("ERROR: Attempted to place non-number inside tensor.")?
                 }
             }
             Value::Tensor(
@@ -302,7 +357,10 @@ fn eval_expr<'a, W: Write>(
             context = new_context;
             match left {
                 ASTExpr::Identifier(name) => {
-                    let cur_val = context.vars.get_mut(name)?;
+                    let cur_val = context
+                        .vars
+                        .get_mut(name)
+                        .ok_or("ERROR: Attempted to reference an undefined variable.")?;
                     match (cur_val, right_val) {
                         (Value::Nil, Value::Nil) => Value::Nil,
                         (Value::Boolean(cur_bool), Value::Boolean(right_bool)) => {
@@ -325,7 +383,7 @@ fn eval_expr<'a, W: Write>(
                             *cur_data = right_data.clone();
                             Value::Tensor(right_size, right_data)
                         }
-                        _ => None?,
+                        _ => Err("ERROR: Attempted invalid assignment.")?,
                     }
                 }
                 ASTExpr::Index(&ASTExpr::Identifier(name), indices) => {
@@ -338,34 +396,38 @@ fn eval_expr<'a, W: Write>(
                             if index_num >= 0 {
                                 index_vals.push(index_num as usize);
                             } else {
-                                None?
+                                Err("ERROR: Attempted to use a negative number to index into a tensor.")?
                             }
                         } else {
-                            None?
+                            Err("ERROR: Attempted to use a non-number as an index value.")?
                         }
                     }
-                    if let (Value::Tensor(size, contents), Value::Number(num)) =
-                        (context.vars.get_mut(name)?, right_val)
-                    {
+                    if let (Value::Tensor(size, contents), Value::Number(num)) = (
+                        context
+                            .vars
+                            .get_mut(&name)
+                            .ok_or("ERROR: Attempted to reference an undefined variable.")?,
+                        right_val,
+                    ) {
                         if size.len() == index_vals.len() {
                             let mut flat_index = 0;
                             for i in 0..size.len() {
                                 if index_vals[i] < size[i] {
                                     flat_index = flat_index * size[i] + index_vals[i];
                                 } else {
-                                    None?
+                                    Err("ERROR: Index value doesn't fit in dimension of tensor.")?
                                 }
                             }
                             contents[flat_index] = num;
                             Value::Number(num)
                         } else {
-                            None?
+                            Err("ERROR: Attempted to index into tensor using incorrect number of indices.")?
                         }
                     } else {
-                        None?
+                        Err("ERROR: Attempted to index into non-tensor.")?
                     }
                 }
-                _ => None?,
+                _ => Err("ERROR: Attempted to assign to a non-assignable thing.")?,
             }
         }
         ASTExpr::Unary(op, expr) => {
@@ -387,7 +449,7 @@ fn eval_expr<'a, W: Write>(
                     }
                     Value::Tensor(Box::new([v.len()]), v.into_boxed_slice())
                 }
-                _ => None?,
+                _ => Err("ERROR: Incorrect usage of a predefined unary operation.")?,
             }
         }
         ASTExpr::Binary(op, left, right) => {
@@ -395,14 +457,29 @@ fn eval_expr<'a, W: Write>(
             let (rval, new_context) = eval_expr(right, new_context)?;
             context = new_context;
             match (op, lval, rval) {
-                (ASTBinaryOp::ShapedAs, Value::Tensor(_, lv), Value::Tensor(rd, rv)) => {
-                    if rd.len() == 1 {
+                (ASTBinaryOp::ShapedAs, Value::Tensor(ld, lv), Value::Tensor(rd, rv)) => {
+                    if ld.len() == 1 && ld[0] == 1 {
                         let mut right_prod = 1;
                         let mut new_ld = vec![];
                         for i in 0..rv.len() {
                             let dim = rv[i] as usize;
                             if dim <= 0 {
-                                None?
+                                Err("ERROR: Attempted to resize tensor using non-positive dimension.")?
+                            }
+                            new_ld.push(dim);
+                            right_prod *= dim;
+                        }
+                        Value::Tensor(
+                            new_ld.into_boxed_slice(),
+                            vec![lv[0]; right_prod].into_boxed_slice(),
+                        )
+                    } else if rd.len() == 1 {
+                        let mut right_prod = 1;
+                        let mut new_ld = vec![];
+                        for i in 0..rv.len() {
+                            let dim = rv[i] as usize;
+                            if dim <= 0 {
+                                Err("ERROR: Attempted to resize tensor using non-positive dimension.")?
                             }
                             new_ld.push(dim);
                             right_prod *= dim;
@@ -410,10 +487,10 @@ fn eval_expr<'a, W: Write>(
                         if lv.len() == right_prod {
                             Value::Tensor(new_ld.into_boxed_slice(), lv)
                         } else {
-                            None?
+                            Err("ERROR: Attempted to resize tensor, but new size has different number of elements than old size.")?
                         }
                     } else {
-                        None?
+                        Err("ERROR: Attempted to resize with tensor which has more than one dimension.")?
                     }
                 }
                 (ASTBinaryOp::Add, Value::Number(lv), Value::Number(rv)) => Value::Number(lv + rv),
@@ -456,7 +533,7 @@ fn eval_expr<'a, W: Write>(
                         }
                         Value::Tensor(Box::new([ld[0], rd[1]]), v.into_boxed_slice())
                     } else {
-                        None?
+                        Err("ERROR: Attempted to matrix multiply incompatible tensors.")?
                     }
                 }
                 (ASTBinaryOp::Greater, Value::Number(lv), Value::Number(rv)) => {
@@ -479,25 +556,28 @@ fn eval_expr<'a, W: Write>(
                 (ASTBinaryOp::Or, Value::Boolean(lv), Value::Boolean(rv)) => {
                     Value::Boolean(lv || rv)
                 }
-                _ => None?,
+                _ => Err("ERROR: Incorrect usage of a predefined binary operation.")?,
             }
         }
         ASTExpr::CustomBinary(op, left, right) => {
-            let (left_param, right_param, body) = context.ops.get(op)?.clone();
+            let (left_param, right_param, body) = context
+                .ops
+                .get(op)
+                .ok_or("ERROR: Attempted to call an undefined operator.")?
+                .clone();
             let (left_val, new_context) = eval_expr(left, context)?;
             let (right_val, new_context) = eval_expr(right, new_context)?;
             context = new_context;
-            let old_left_value = context.vars.insert(left_param, left_val);
-            let old_right_value = context.vars.insert(right_param, right_val);
+            let funcs_checkpoint = context.funcs.get_checkpoint();
+            let ops_checkpoint = context.ops.get_checkpoint();
+            let vars_checkpoint = context.vars.get_checkpoint();
+            context.vars.insert(left_param, left_val);
+            context.vars.insert(right_param, right_val);
+            context.current_checkpoints = (funcs_checkpoint, ops_checkpoint, vars_checkpoint);
             context = eval_stmt(body, context)?;
-            context.vars.remove(left_param);
-            context.vars.remove(right_param);
-            if let Some(old_left_value) = old_left_value {
-                context.vars.insert(left_param, old_left_value);
-            }
-            if let Some(old_right_value) = old_right_value {
-                context.vars.insert(right_param, old_right_value);
-            }
+            context.funcs.revert_checkpoint(funcs_checkpoint);
+            context.ops.revert_checkpoint(ops_checkpoint);
+            context.vars.revert_checkpoint(vars_checkpoint);
             if let Some(ret_val) = context.ret_val {
                 context.ret_val = None;
                 ret_val
@@ -506,7 +586,7 @@ fn eval_expr<'a, W: Write>(
             }
         }
     };
-    Some((val, context))
+    Ok((val, context))
 }
 
 #[cfg(test)]
@@ -581,6 +661,25 @@ mod tests {
             let (ast, _) = parse::parse_stmt(&tokens, &bump).unwrap();
             let mut context = InterpContext::_new(Cursor::new(vec![0; 64]));
             context = eval_stmt(bump.alloc(ast), context).unwrap();
+            assert_eq!(
+                str::from_utf8(*output).unwrap(),
+                str::from_utf8(&context.writer.get_ref()[0..context.writer.position() as usize])
+                    .unwrap(),
+            );
+        }
+    }
+
+    #[test]
+    fn test_eval3() {
+        let bump = bump::BumpAllocator::new();
+        let tests: &[(&[u8], &[u8])] = &[
+            (b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);", b"7\n5\n"),
+        ];
+        for (input, output) in tests {
+            let tokens = parse::lex(input, &bump).unwrap();
+            let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+            let mut context = InterpContext::_new(Cursor::new(vec![0; 64]));
+            context = eval_program(bump.alloc(ast), context).unwrap();
             assert_eq!(
                 str::from_utf8(*output).unwrap(),
                 str::from_utf8(&context.writer.get_ref()[0..context.writer.position() as usize])
