@@ -100,7 +100,7 @@ fn eval_stmt<'a, W: Write>(
             let (value, mut context) = eval_expr(expr, context)?;
             context
                 .writer
-                .write(format!("{}", value).as_bytes())
+                .write(format!("{}\n", value).as_bytes())
                 .unwrap();
             Some(context)
         }
@@ -177,6 +177,9 @@ fn eval_expr<'a, W: Write>(
                 }
             }
             context = eval_stmt(body, context)?;
+            for i in 0..params.len() {
+                context.vars.remove(params.at(i));
+            }
             for (old_k, old_v) in old_values {
                 context.vars.insert(old_k, old_v);
             }
@@ -424,7 +427,29 @@ fn eval_expr<'a, W: Write>(
                 _ => None?,
             }
         }
-        _ => panic!(),
+        ASTExpr::CustomBinary(op, left, right) => {
+            let (left_param, right_param, body) = context.ops.get(op)?.clone();
+            let (left_val, new_context) = eval_expr(left, context)?;
+            let (right_val, new_context) = eval_expr(right, new_context)?;
+            context = new_context;
+            let old_left_value = context.vars.insert(left_param, left_val);
+            let old_right_value = context.vars.insert(right_param, right_val);
+            context = eval_stmt(body, context)?;
+            context.vars.remove(left_param);
+            context.vars.remove(right_param);
+            if let Some(old_left_value) = old_left_value {
+                context.vars.insert(left_param, old_left_value);
+            }
+            if let Some(old_right_value) = old_right_value {
+                context.vars.insert(right_param, old_right_value);
+            }
+            if let Some(ret_val) = context.ret_val {
+                context.ret_val = None;
+                ret_val
+            } else {
+                Value::Nil
+            }
+        }
     };
     Some((val, context))
 }
@@ -482,7 +507,10 @@ mod tests {
     #[test]
     fn test_eval2() {
         let bump = bump::BumpAllocator::new();
-        let tests: &[(&[u8], &[u8])] = &[(b"p 1.22387;", b"1.22387")];
+        let tests: &[(&[u8], &[u8])] = &[
+            (b"p 1.22387;", b"1.22387\n"),
+            (b"{p T;p [1.0, 2.0];}", b"True\n[1.0, 2.0] sa [2]\n"),
+        ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
             let (ast, _) = parse::parse_stmt(&tokens, &bump).unwrap();
