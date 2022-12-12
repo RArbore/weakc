@@ -309,6 +309,21 @@ fn eval_expr<'a>(
                 (ASTBinaryOp::Power, Value::Tensor(ld, mut lv), Value::Tensor(rd, rv)) => {
                     combine_elementwise!(powf, ld, lv, rd, rv)
                 }
+                (ASTBinaryOp::MatrixMultiply, Value::Tensor(ld, lv), Value::Tensor(rd, rv)) => {
+                    if ld.len() == 2 && rd.len() == 2 && ld[1] == rd[0] {
+                        let mut v = vec![0.0; ld[0] * rd[1]];
+                        for i in 0..ld[0] {
+                            for k in 0..ld[1] {
+                                for j in 0..rd[1] {
+                                    v[i * rd[1] + j] += lv[i * ld[1] + k] * rv[k * rd[1] + j];
+                                }
+                            }
+                        }
+                        Value::Tensor(Box::new([ld[0], rd[1]]), v.into_boxed_slice())
+                    } else {
+                        None?
+                    }
+                }
                 _ => None?,
             }
         }
@@ -348,6 +363,10 @@ mod tests {
             (b"([1.2, 4]-[1.0, 2.0])[1]", Value::Number(2.0)),
             (b"([1.2, 4]^[1.0, 2.0])[1]", Value::Number(16.0)),
             (b"1.22387 + 1.0", Value::Number(2.22387)),
+            (
+                b"([1.0, 5.0, -2.0, 3.5, 7.1, 22.01, -110.0, 21.0, 2.13] sa [3, 3]) @ ([-1.9, 1.9, 22.0, 2.0, 3.0, -1.0] sa [3, 2])",
+                Value::Tensor(Box::new([3, 2]), Box::new([102.1, 13.9, 215.57999999999998, -1.1600000000000037, 677.39, -169.13])),
+            ),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
