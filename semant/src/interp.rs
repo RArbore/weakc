@@ -15,7 +15,10 @@
 extern crate bump;
 extern crate parse;
 
+use core::fmt;
+use core::str;
 use std::collections::HashMap;
+use std::io::{stdout, Stdout, Write};
 
 use parse::ASTBinaryOp;
 use parse::ASTExpr;
@@ -31,23 +34,61 @@ enum Value<'a> {
     Tensor(Box<[usize]>, Box<[f64]>),
 }
 
-#[derive(Debug, Default, PartialEq, Clone)]
-struct InterpContext<'a> {
+impl<'a> fmt::Display for Value<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Value::Nil => write!(f, "Nil"),
+            Value::Boolean(true) => write!(f, "True"),
+            Value::Boolean(false) => write!(f, "True"),
+            Value::Number(v) => write!(f, "{}", v),
+            Value::String(v) => write!(f, "{}", str::from_utf8(v).unwrap()),
+            Value::Tensor(d, v) => write!(f, "{:?} sa {:?}", v, d),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+struct InterpContext<'a, W: Write> {
     funcs: HashMap<&'a [u8], (&'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>)>,
     ops: HashMap<&'a [u8], (&'a [u8], &'a [u8], &'a ASTStmt<'a>)>,
     vars: HashMap<&'a [u8], Value<'a>>,
     ret_val: Option<Value<'a>>,
+    writer: W,
+}
+
+impl<'a, W: Write> InterpContext<'a, W> {
+    fn _new(w: W) -> Self {
+        InterpContext {
+            funcs: Default::default(),
+            ops: Default::default(),
+            vars: Default::default(),
+            ret_val: Default::default(),
+            writer: w,
+        }
+    }
+}
+
+impl<'a> Default for InterpContext<'a, Stdout> {
+    fn default() -> Self {
+        InterpContext {
+            funcs: Default::default(),
+            ops: Default::default(),
+            vars: Default::default(),
+            ret_val: Default::default(),
+            writer: stdout(),
+        }
+    }
 }
 
 pub fn eval<'a>(program: &'a ASTStmt<'a>) {
-    let context = InterpContext::default();
+    let context = InterpContext::<Stdout>::default();
     eval_stmt(program, context);
 }
 
-fn eval_stmt<'a>(
+fn eval_stmt<'a, W: Write>(
     stmt: &'a ASTStmt<'a>,
-    mut context: InterpContext<'a>,
-) -> Option<InterpContext<'a>> {
+    mut context: InterpContext<'a, W>,
+) -> Option<InterpContext<'a, W>> {
     match stmt {
         ASTStmt::Block(stmts) => {
             for i in 0..stmts.len() {
@@ -56,8 +97,11 @@ fn eval_stmt<'a>(
             Some(context)
         }
         ASTStmt::Print(expr) => {
-            let (value, context) = eval_expr(expr, context)?;
-            println!("{:?}", value);
+            let (value, mut context) = eval_expr(expr, context)?;
+            context
+                .writer
+                .write(format!("{}", value).as_bytes())
+                .unwrap();
             Some(context)
         }
         ASTStmt::Verify(expr) => {
@@ -104,10 +148,10 @@ macro_rules! combine_elementwise {
     };
 }
 
-fn eval_expr<'a>(
+fn eval_expr<'a, W: Write>(
     expr: &'a ASTExpr<'a>,
-    mut context: InterpContext<'a>,
-) -> Option<(Value<'a>, InterpContext<'a>)> {
+    mut context: InterpContext<'a, W>,
+) -> Option<(Value<'a>, InterpContext<'a, W>)> {
     let val = match expr {
         ASTExpr::Nil => Value::Nil,
         ASTExpr::Boolean(val) => Value::Boolean(*val),
@@ -388,6 +432,7 @@ fn eval_expr<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::Cursor;
 
     #[test]
     fn test_eval1() {
@@ -431,6 +476,22 @@ mod tests {
             let context = InterpContext::default();
             let (val, _) = eval_expr(bump.alloc(ast), context).unwrap();
             assert_eq!(val, *output);
+        }
+    }
+
+    #[test]
+    fn test_eval2() {
+        let bump = bump::BumpAllocator::new();
+        let tests: &[(&[u8], &[u8])] = &[(b"p 1.22387;", b"1.22387")];
+        for (input, output) in tests {
+            let tokens = parse::lex(input, &bump).unwrap();
+            let (ast, _) = parse::parse_stmt(&tokens, &bump).unwrap();
+            let mut context = InterpContext::_new(Cursor::new(vec![0; 64]));
+            context = eval_stmt(bump.alloc(ast), context).unwrap();
+            assert_eq!(
+                *output,
+                &context.writer.get_ref()[0..context.writer.position() as usize]
+            );
         }
     }
 }
