@@ -17,7 +17,7 @@ extern crate parse;
 
 use core::fmt;
 use core::str;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::{stdout, Stdout, Write};
 
 use parse::ASTBinaryOp;
@@ -91,19 +91,31 @@ fn eval_stmt<'a, W: Write>(
 ) -> Option<InterpContext<'a, W>> {
     match stmt {
         ASTStmt::Block(stmts) => {
+            let pre_funcs: HashSet<&[u8]> = context.funcs.keys().map(|x| x.clone()).collect();
+            let pre_ops: HashSet<&[u8]> = context.ops.keys().map(|x| x.clone()).collect();
+            let pre_vars: HashSet<&[u8]> = context.vars.keys().map(|x| x.clone()).collect();
             for i in 0..stmts.len() {
                 if context.ret_val.is_some() {
                     None?
                 }
                 context = eval_stmt(stmts.at(i), context)?;
             }
+            context.funcs.retain(|&k, _| pre_funcs.contains(k));
+            context.ops.retain(|&k, _| pre_ops.contains(k));
+            context.vars.retain(|&k, _| pre_vars.contains(k));
             Some(context)
         }
         ASTStmt::Function(name, params, body) => {
+            if let Some(_) = context.funcs.get(name) {
+                None?
+            }
             context.funcs.insert(name, (params, body));
             Some(context)
         }
         ASTStmt::Operator(name, left_param, right_param, body) => {
+            if let Some(_) = context.ops.get(name) {
+                None?
+            }
             context.ops.insert(name, (left_param, right_param, body));
             Some(context)
         }
@@ -155,6 +167,9 @@ fn eval_stmt<'a, W: Write>(
         }
         ASTStmt::Variable(name, init) => {
             let (value, mut context) = eval_expr(init, context)?;
+            if let Some(_) = context.vars.get(name) {
+                None?
+            }
             context.vars.insert(name, value);
             Some(context)
         }
@@ -559,6 +574,7 @@ mod tests {
                 b"0.5\n1.5\n2.5\n3.5\n4.5\n5.5\n6.5\n7.5\n8.5\n9.5\n",
             ),
             (b"{f xyz(x) { r x + 7; } p xyz(1.5);}", b"8.5\n"),
+            (b"{{a x = 0; p x;} a x = 1; p x;}", b"0\n1\n"),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
