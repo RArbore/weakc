@@ -44,8 +44,41 @@ pub fn eval<'a>(program: &'a ASTStmt<'a>) {
     eval_stmt(program, context);
 }
 
-fn eval_stmt<'a>(stmt: &'a ASTStmt<'a>, context: InterpContext<'a>) -> Option<InterpContext<'a>> {
-    Some(context)
+fn eval_stmt<'a>(
+    stmt: &'a ASTStmt<'a>,
+    mut context: InterpContext<'a>,
+) -> Option<InterpContext<'a>> {
+    match stmt {
+        ASTStmt::Block(stmts) => {
+            for i in 0..stmts.len() {
+                context = eval_stmt(stmts.at(i), context)?;
+            }
+            Some(context)
+        }
+        ASTStmt::Print(expr) => {
+            let (value, context) = eval_expr(expr, context)?;
+            println!("{:?}", value);
+            Some(context)
+        }
+        ASTStmt::Verify(expr) => {
+            let (value, context) = eval_expr(expr, context)?;
+            if value == Value::Boolean(true) {
+                Some(context)
+            } else {
+                None
+            }
+        }
+        ASTStmt::Variable(name, init) => {
+            let (value, mut context) = eval_expr(init, context)?;
+            context.vars.insert(name, value);
+            Some(context)
+        }
+        ASTStmt::Expression(expr) => {
+            let (_, context) = eval_expr(expr, context)?;
+            Some(context)
+        }
+        _ => None,
+    }
 }
 
 macro_rules! combine_elementwise {
