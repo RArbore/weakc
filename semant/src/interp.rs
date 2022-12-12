@@ -324,6 +324,26 @@ fn eval_expr<'a>(
                         None?
                     }
                 }
+                (ASTBinaryOp::Greater, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Boolean(lv > rv)
+                }
+                (ASTBinaryOp::Lesser, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Boolean(lv < rv)
+                }
+                (ASTBinaryOp::GreaterEquals, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Boolean(lv >= rv)
+                }
+                (ASTBinaryOp::LesserEquals, Value::Number(lv), Value::Number(rv)) => {
+                    Value::Boolean(lv <= rv)
+                }
+                (ASTBinaryOp::NotEquals, lv, rv) => Value::Boolean(lv != rv),
+                (ASTBinaryOp::EqualsEquals, lv, rv) => Value::Boolean(lv == rv),
+                (ASTBinaryOp::And, Value::Boolean(lv), Value::Boolean(rv)) => {
+                    Value::Boolean(lv && rv)
+                }
+                (ASTBinaryOp::Or, Value::Boolean(lv), Value::Boolean(rv)) => {
+                    Value::Boolean(lv || rv)
+                }
                 _ => None?,
             }
         }
@@ -367,6 +387,10 @@ mod tests {
                 b"([1.0, 5.0, -2.0, 3.5, 7.1, 22.01, -110.0, 21.0, 2.13] sa [3, 3]) @ ([-1.9, 1.9, 22.0, 2.0, 3.0, -1.0] sa [3, 2])",
                 Value::Tensor(Box::new([3, 2]), Box::new([102.1, 13.9, 215.57999999999998, -1.1600000000000037, 677.39, -169.13])),
             ),
+            (b"T == F", Value::Boolean(false)),
+            (b"T != F", Value::Boolean(true)),
+            (b"T A F", Value::Boolean(false)),
+            (b"1 < 2", Value::Boolean(true)),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
