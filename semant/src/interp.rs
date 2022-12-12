@@ -92,16 +92,37 @@ fn eval_stmt<'a, W: Write>(
     match stmt {
         ASTStmt::Block(stmts) => {
             for i in 0..stmts.len() {
+                if context.ret_val.is_some() {
+                    None?
+                }
                 context = eval_stmt(stmts.at(i), context)?;
             }
             Some(context)
         }
+        ASTStmt::While(cond, body) => loop {
+            let (cond_val, new_context) = eval_expr(cond, context)?;
+            context = new_context;
+            if let Value::Boolean(v) = cond_val {
+                if v {
+                    context = eval_stmt(body, context)?;
+                } else {
+                    break Some(context);
+                }
+            } else {
+                None?
+            }
+        },
         ASTStmt::Print(expr) => {
             let (value, mut context) = eval_expr(expr, context)?;
             context
                 .writer
                 .write(format!("{}\n", value).as_bytes())
                 .unwrap();
+            Some(context)
+        }
+        ASTStmt::Return(expr) => {
+            let (value, mut context) = eval_expr(expr, context)?;
+            context.ret_val = Some(value);
             Some(context)
         }
         ASTStmt::Verify(expr) => {
@@ -510,6 +531,14 @@ mod tests {
         let tests: &[(&[u8], &[u8])] = &[
             (b"p 1.22387;", b"1.22387\n"),
             (b"{p T;p [1.0, 2.0];}", b"True\n[1.0, 2.0] sa [2]\n"),
+            (
+                b"{a x = 0; w (x < 10) { p x; x = x + 1; }}",
+                b"0\n1\n2\n3\n4\n5\n6\n7\n8\n9\n",
+            ),
+            (
+                b"{a x = 0.5; w (x < 10) { p x; x = x + 1; }}",
+                b"0.5\n1.5\n2.5\n3.5\n4.5\n5.5\n6.5\n7.5\n8.5\n9.5\n",
+            ),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
