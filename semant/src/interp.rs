@@ -27,7 +27,7 @@ use parse::ASTUnaryOp;
 type InterpResult<T> = Result<T, &'static str>;
 
 #[derive(Debug, PartialEq, Clone)]
-enum Value<'a> {
+pub enum Value<'a> {
     Nil,
     Boolean(bool),
     Number(f64),

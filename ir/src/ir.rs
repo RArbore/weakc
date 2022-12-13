@@ -28,17 +28,29 @@ pub enum IRType {
 type Register = (u32, IRType);
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct IRInstruction {}
+pub enum IRInstruction<'a> {
+    LoadImmediate(Register, semant::Value<'a>),
+    Copy(Register, Register),
+    Unary(Register, parse::ASTUnaryOp, Register),
+    Binary(Register, parse::ASTBinaryOp, Register, Register),
+    Index(Register, Register, &'a bump::List<'a, Register>),
+    BranchUncond(u32),
+    BranchCond(Register, u32, u32),
+    Call(Register, &'a [u8], &'a bump::List<'a, Register>),
+    Print(Register),
+    Verify(Register),
+    Return(Register),
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRBasicBlock<'a> {
-    insts: &'a bump::List<'a, IRInstruction>,
+    insts: &'a bump::List<'a, IRInstruction<'a>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRFunction<'a> {
     name: &'a [u8],
-    blocks: &'a bump::List<'a, IRFunction<'a>>,
+    blocks: &'a bump::List<'a, IRBasicBlock<'a>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
