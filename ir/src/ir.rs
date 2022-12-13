@@ -26,16 +26,17 @@ pub enum IRType {
 }
 
 type Register = (u32, IRType);
+type BasicBlockRef = u32;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IRInstruction<'a> {
-    LoadImmediate(Register, semant::Value<'a>),
+    Immediate(Register, semant::Value<'a>),
     Copy(Register, Register),
     Unary(Register, parse::ASTUnaryOp, Register),
     Binary(Register, parse::ASTBinaryOp, Register, Register),
     Index(Register, Register, &'a bump::List<'a, Register>),
-    BranchUncond(u32),
-    BranchCond(Register, u32, u32),
+    BranchUncond(BasicBlockRef),
+    BranchCond(Register, BasicBlockRef, BasicBlockRef),
     Call(Register, &'a [u8], &'a bump::List<'a, Register>),
     Print(Register),
     Verify(Register),
@@ -50,10 +51,13 @@ pub struct IRBasicBlock<'a> {
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRFunction<'a> {
     name: &'a [u8],
+    params: &'a bump::List<'a, Register>,
+    ret_type: IRType,
     blocks: &'a bump::List<'a, IRBasicBlock<'a>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRModule<'a> {
+    globals: &'a bump::List<'a, Register>,
     funcs: &'a bump::List<'a, IRFunction<'a>>,
 }
