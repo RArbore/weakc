@@ -4,6 +4,7 @@ members = [
     "bump",
     "parse",
     "semant",
+    "ir",
     "fuzz",
 ]
 

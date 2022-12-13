@@ -21,6 +21,7 @@ use rand::Rng;
 use bump::BumpAllocator;
 
 #[test]
+#[ignore]
 fn fuzz_bump() {
     const NUM: usize = 1000000;
     let mut rng = rand::thread_rng();
@@ -94,6 +95,7 @@ fn fuzz_bump() {
 }
 
 #[test]
+#[ignore]
 fn fuzz_parse() {
     const NUM: usize = 20;
 
