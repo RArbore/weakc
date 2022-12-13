@@ -1,6 +1,6 @@
 [package]
 name = "parse"
-description = "Parser for weak-lang"
+description = "Parser for weakc"
 version = "0.1.0"
 edition = "2021"
 

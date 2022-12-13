@@ -1,9 +1,11 @@
 [package]
-name = "semant"
-description = "Semantic checker for weakc"
+name = "fuzz"
+description = "Fuzzing for weakc"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
 bump = { path = "../bump" }
 parse = { path = "../parse" }
+semant = { path = "../semant" }
+rand = "0.8"

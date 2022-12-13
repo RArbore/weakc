@@ -831,6 +831,7 @@ mod tests {
             b"v 1 + 0;",
             b"a x = 1; a x = 1;",
             b"a x = 1; {a x = 1;}",
+            b"a x = 1; f xyz(){a x = 1;} xyz();",
         ];
         for bad_program in bad_programs {
             let bump = bump::BumpAllocator::new();

@@ -674,6 +674,8 @@ mod tests {
         let bump = bump::BumpAllocator::new();
         let tests: &[(&[u8], &[u8])] = &[
             (b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);", b"7\n5\n"),
+            (b"{a x = 0; p x;}a x = 0; p x;", b"0\n0\n"),
+            (b"a x = 0; p x;f xyz(){a x = 0; p x;}xyz();", b"0\n0\n"),
         ];
         for (input, output) in tests {
             let tokens = parse::lex(input, &bump).unwrap();
