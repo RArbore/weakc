@@ -16,6 +16,15 @@ extern crate bump;
 extern crate parse;
 extern crate semant;
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum IRValue<'a> {
+    Nil,
+    Boolean(bool),
+    Number(f64),
+    String(&'a [u8]),
+    Tensor(&'a bump::List<'a, usize>, &'a bump::List<'a, f64>),
+}
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum IRType {
     Nil,
@@ -69,7 +78,7 @@ pub enum IRBinaryOp {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IRInstruction<'a> {
-    Immediate(IRRegister, semant::Value<'a>),
+    Immediate(IRRegister, IRValue<'a>),
     Copy(IRRegister, IRRegister),
     Unary(IRRegister, IRUnaryOp, IRRegister),
     Binary(IRRegister, IRBinaryOp, IRRegister, IRRegister),
@@ -97,6 +106,5 @@ pub struct IRFunction<'a> {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRModule<'a> {
-    globals: &'a bump::List<'a, IRRegister>,
     funcs: &'a bump::List<'a, IRFunction<'a>>,
 }
