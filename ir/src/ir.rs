@@ -35,7 +35,7 @@ pub enum IRType {
 }
 
 type IRRegister = (u32, IRType);
-type IRBasicBlockRef = u32;
+type IRBasicBlockID = u32;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum IRUnaryOp {
@@ -83,8 +83,8 @@ pub enum IRInstruction<'a> {
     Unary(IRRegister, IRUnaryOp, IRRegister),
     Binary(IRRegister, IRBinaryOp, IRRegister, IRRegister),
     Index(IRRegister, IRRegister, &'a bump::List<'a, IRRegister>),
-    BranchUncond(IRBasicBlockRef),
-    BranchCond(IRRegister, IRBasicBlockRef, IRBasicBlockRef),
+    BranchUncond(IRBasicBlockID),
+    BranchCond(IRRegister, IRBasicBlockID, IRBasicBlockID),
     Call(IRRegister, &'a [u8], &'a bump::List<'a, IRRegister>),
     Print(IRRegister),
     Verify(IRRegister),
