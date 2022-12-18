@@ -38,6 +38,54 @@ pub enum Symbol<'a> {
     Operator(&'a [u8], Type, Type, Type),
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub enum TypedASTStmt<'a> {
+    Block(&'a bump::List<'a, TypedASTStmt<'a>>),
+    Function(
+        &'a [u8],
+        &'a bump::List<'a, (&'a [u8], Type)>,
+        &'a TypedASTStmt<'a>,
+        Type,
+    ),
+    Operator(
+        &'a [u8],
+        &'a [u8],
+        &'a [u8],
+        Type,
+        Type,
+        &'a TypedASTStmt<'a>,
+        Type,
+    ),
+    If(&'a TypedASTExpr<'a>, &'a TypedASTStmt<'a>),
+    While(&'a TypedASTExpr<'a>, &'a TypedASTStmt<'a>),
+    Print(&'a TypedASTExpr<'a>),
+    Return(&'a TypedASTExpr<'a>),
+    Verify(&'a TypedASTExpr<'a>),
+    Variable(&'a [u8], &'a TypedASTExpr<'a>),
+    Expression(&'a TypedASTExpr<'a>),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum TypedASTExpr<'a> {
+    Nil,
+    Boolean(bool),
+    Number(f64),
+    String(&'a [u8]),
+    Identifier(&'a [u8], Type),
+    Call(&'a [u8], &'a bump::List<'a, TypedASTExpr<'a>>, Type),
+    Index(&'a TypedASTExpr<'a>, &'a bump::List<'a, TypedASTExpr<'a>>),
+    ArrayLiteral(&'a bump::List<'a, TypedASTExpr<'a>>),
+    Assign(&'a TypedASTExpr<'a>, &'a TypedASTExpr<'a>, Type),
+    Unary(ASTUnaryOp, &'a TypedASTExpr<'a>, Type),
+    Binary(
+        ASTBinaryOp,
+        &'a TypedASTExpr<'a>,
+        &'a TypedASTExpr<'a>,
+        Type,
+    ),
+    CustomBinary(&'a [u8], &'a TypedASTExpr<'a>, &'a TypedASTExpr<'a>, Type),
+}
+
 struct TypeContext<'a> {
     bump: &'a bump::BumpAllocator,
     types: &'a mut bump::List<'a, Type>,
@@ -832,6 +880,7 @@ mod tests {
             b"a x = 1; a x = 1;",
             b"a x = 1; {a x = 1;}",
             b"a x = 1; f xyz(){a x = 1;} xyz();",
+            b"a x = 1; f xyz(){a y = 1;} xyz(); p y;",
         ];
         for bad_program in bad_programs {
             let bump = bump::BumpAllocator::new();

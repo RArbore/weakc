@@ -87,44 +87,44 @@ pub enum IRInstruction<'a> {
     BranchCond(IRRegister, IRBasicBlockID, IRBasicBlockID),
     Call(IRRegister, &'a [u8], &'a bump::List<'a, IRRegister>),
     Print(IRRegister),
-    Verify(IRRegister),
+    IR(IRRegister),
     Return(IRRegister),
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRBasicBlock<'a> {
-    insts: &'a bump::List<'a, IRInstruction<'a>>,
+    pub(crate) insts: &'a bump::List<'a, IRInstruction<'a>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRFunction<'a> {
-    name: &'a [u8],
-    params: &'a bump::List<'a, IRRegister>,
-    ret_type: IRType,
-    blocks: &'a bump::List<'a, IRBasicBlock<'a>>,
+    pub(crate) name: &'a [u8],
+    pub(crate) params: &'a bump::List<'a, IRRegister>,
+    pub(crate) ret_type: IRType,
+    pub(crate) blocks: &'a bump::List<'a, IRBasicBlock<'a>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct IRModule<'a> {
-    funcs: &'a bump::List<'a, IRFunction<'a>>,
+    pub(crate) funcs: &'a bump::List<'a, IRFunction<'a>>,
 }
 
-type VerifyResult<T> = Result<T, &'static str>;
+pub type IRResult<T> = Result<T, &'static str>;
 
 impl<'a> IRModule<'a> {
-    pub fn verify_module(&self) -> VerifyResult<()> {
+    pub fn verify_module(&self) -> IRResult<()> {
         for i in 0..self.funcs.len() {
             self.verify_func(i)?;
         }
         Ok(())
     }
 
-    fn verify_func(&self, func_idx: usize) -> VerifyResult<()> {
+    fn verify_func(&self, func_idx: usize) -> IRResult<()> {
         let func = self.funcs.at(func_idx);
         Ok(())
     }
 
-    fn query_func(&self, name: &'a [u8]) -> VerifyResult<(&'a bump::List<'a, IRRegister>, IRType)> {
+    fn query_func(&self, name: &'a [u8]) -> IRResult<(&'a bump::List<'a, IRRegister>, IRType)> {
         for i in 0..self.funcs.len() {
             let func = self.funcs.at(i);
             if func.name == name {
