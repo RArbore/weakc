@@ -15,9 +15,12 @@
 extern crate bump;
 extern crate parse;
 
+use core::cell::RefCell;
 use core::fmt;
 use core::str;
+use std::collections::HashMap;
 use std::io::{stdout, Stdout, Write};
+use std::rc::Rc;
 
 use parse::ASTBinaryOp;
 use parse::ASTExpr;
@@ -49,52 +52,12 @@ impl<'a> fmt::Display for Value<'a> {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-struct SymbolTable<K: PartialEq, V>(Vec<(K, V)>);
-
-impl<K: PartialEq, V> SymbolTable<K, V> {
-    fn get(&self, k: &K) -> Option<&V> {
-        Some(&self.0.iter().rev().find(|x| &x.0 == k)?.1)
-    }
-
-    fn get_mut(&mut self, k: &K) -> Option<&mut V> {
-        Some(&mut self.0.iter_mut().rev().find(|x| &x.0 == k)?.1)
-    }
-
-    fn contains(&self, k: &K, checkpoint: usize) -> bool {
-        self.0[checkpoint..]
-            .iter()
-            .rev()
-            .find(|x| &x.0 == k)
-            .is_some()
-    }
-
-    fn insert(&mut self, k: K, v: V) {
-        self.0.push((k, v));
-    }
-
-    fn get_checkpoint(&self) -> usize {
-        self.0.len()
-    }
-
-    fn revert_checkpoint(&mut self, checkpoint: usize) {
-        self.0.truncate(checkpoint);
-    }
-}
-
-impl<K: PartialEq, V> Default for SymbolTable<K, V> {
-    fn default() -> Self {
-        SymbolTable(vec![])
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
 pub struct InterpContext<'a, W: Write> {
-    funcs: SymbolTable<&'a [u8], (&'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>)>,
-    ops: SymbolTable<&'a [u8], (&'a [u8], &'a [u8], &'a ASTStmt<'a>)>,
-    vars: SymbolTable<&'a [u8], Value<'a>>,
+    funcs: HashMap<&'a [u8], (&'a bump::List<'a, &'a [u8]>, &'a ASTStmt<'a>)>,
+    ops: HashMap<&'a [u8], (&'a [u8], &'a [u8], &'a ASTStmt<'a>)>,
+    vars: HashMap<&'a [u8], Value<'a>>,
     ret_val: Option<Value<'a>>,
-    current_checkpoints: (usize, usize, usize),
-    writer: W,
+    writer: Rc<RefCell<W>>,
 }
 
 impl<'a, W: Write> InterpContext<'a, W> {
@@ -104,8 +67,27 @@ impl<'a, W: Write> InterpContext<'a, W> {
             ops: Default::default(),
             vars: Default::default(),
             ret_val: Default::default(),
-            current_checkpoints: (0, 0, 0),
-            writer: w,
+            writer: Rc::new(RefCell::new(w)),
+        }
+    }
+
+    fn spawn_block(&self) -> Self {
+        InterpContext {
+            funcs: self.funcs.clone(),
+            ops: self.ops.clone(),
+            vars: self.vars.clone(),
+            ret_val: Default::default(),
+            writer: self.writer.clone(),
+        }
+    }
+
+    fn spawn_frame(&self) -> Self {
+        InterpContext {
+            funcs: self.funcs.clone(),
+            ops: self.ops.clone(),
+            vars: Default::default(),
+            ret_val: Default::default(),
+            writer: self.writer.clone(),
         }
     }
 }
@@ -117,8 +99,7 @@ impl<'a> Default for InterpContext<'a, Stdout> {
             ops: Default::default(),
             vars: Default::default(),
             ret_val: Default::default(),
-            current_checkpoints: (0, 0, 0),
-            writer: stdout(),
+            writer: Rc::new(RefCell::new(stdout())),
         }
     }
 }
@@ -139,29 +120,28 @@ fn eval_stmt<'a, W: Write>(
 ) -> InterpResult<InterpContext<'a, W>> {
     match stmt {
         ASTStmt::Block(stmts) => {
-            let funcs_checkpoint = context.funcs.get_checkpoint();
-            let ops_checkpoint = context.ops.get_checkpoint();
-            let vars_checkpoint = context.vars.get_checkpoint();
+            let mut block_context = context.spawn_block();
             for i in 0..stmts.len() {
-                if context.ret_val.is_some() {
+                if block_context.ret_val.is_some() {
                     Err("ERROR: Attempted to evaluate statement after return in block.")?
                 }
-                context = eval_stmt(stmts.at(i), context)?;
+                block_context = eval_stmt(stmts.at(i), block_context)?;
             }
-            context.funcs.revert_checkpoint(funcs_checkpoint);
-            context.ops.revert_checkpoint(ops_checkpoint);
-            context.vars.revert_checkpoint(vars_checkpoint);
+            for (k, v) in context.vars.iter_mut() {
+                *v = block_context.vars.remove(k).unwrap();
+            }
+            context.ret_val = block_context.ret_val;
             Ok(context)
         }
         ASTStmt::Function(name, params, body) => {
-            if context.funcs.contains(name, context.current_checkpoints.0) {
+            if context.funcs.contains_key(name) {
                 Err("ERROR: Attempted a redefinition of a function.")?
             }
             context.funcs.insert(name, (params, body));
             Ok(context)
         }
         ASTStmt::Operator(name, left_param, right_param, body) => {
-            if context.ops.contains(name, context.current_checkpoints.1) {
+            if context.ops.contains_key(name) {
                 Err("ERROR: Attempted a redefinition of an operator.")?
             }
             context.ops.insert(name, (left_param, right_param, body));
@@ -185,6 +165,9 @@ fn eval_stmt<'a, W: Write>(
             if let Value::Boolean(v) = cond_val {
                 if v {
                     context = eval_stmt(body, context)?;
+                    if context.ret_val.is_some() {
+                        break Ok(context);
+                    }
                 } else {
                     break Ok(context);
                 }
@@ -193,9 +176,10 @@ fn eval_stmt<'a, W: Write>(
             }
         },
         ASTStmt::Print(expr) => {
-            let (value, mut context) = eval_expr(expr, context)?;
+            let (value, context) = eval_expr(expr, context)?;
             context
                 .writer
+                .borrow_mut()
                 .write(format!("{}\n", value).as_bytes())
                 .unwrap();
             Ok(context)
@@ -214,7 +198,7 @@ fn eval_stmt<'a, W: Write>(
             }
         }
         ASTStmt::Variable(name, init) => {
-            if context.vars.contains(name, context.current_checkpoints.2) {
+            if context.vars.contains_key(name) {
                 Err("ERROR: Attempted a redefinition of a variable.")?
             }
             let (value, mut context) = eval_expr(init, context)?;
@@ -280,19 +264,14 @@ fn eval_expr<'a, W: Write>(
                 context = new_context;
                 eval_args.push(eval);
             }
-            let funcs_checkpoint = context.funcs.get_checkpoint();
-            let ops_checkpoint = context.ops.get_checkpoint();
-            let vars_checkpoint = context.vars.get_checkpoint();
+            let mut frame_context = context.spawn_frame();
             for i in (0..args.len()).rev() {
-                context.vars.insert(params.at(i), eval_args.pop().unwrap());
+                frame_context
+                    .vars
+                    .insert(params.at(i), eval_args.pop().unwrap());
             }
-            context.current_checkpoints = (funcs_checkpoint, ops_checkpoint, vars_checkpoint);
-            context = eval_stmt(body, context)?;
-            context.funcs.revert_checkpoint(funcs_checkpoint);
-            context.ops.revert_checkpoint(ops_checkpoint);
-            context.vars.revert_checkpoint(vars_checkpoint);
-            if let Some(ret_val) = context.ret_val {
-                context.ret_val = None;
+            frame_context = eval_stmt(body, frame_context)?;
+            if let Some(ret_val) = frame_context.ret_val {
                 ret_val
             } else {
                 Value::Nil
@@ -568,18 +547,11 @@ fn eval_expr<'a, W: Write>(
             let (left_val, new_context) = eval_expr(left, context)?;
             let (right_val, new_context) = eval_expr(right, new_context)?;
             context = new_context;
-            let funcs_checkpoint = context.funcs.get_checkpoint();
-            let ops_checkpoint = context.ops.get_checkpoint();
-            let vars_checkpoint = context.vars.get_checkpoint();
-            context.vars.insert(left_param, left_val);
-            context.vars.insert(right_param, right_val);
-            context.current_checkpoints = (funcs_checkpoint, ops_checkpoint, vars_checkpoint);
-            context = eval_stmt(body, context)?;
-            context.funcs.revert_checkpoint(funcs_checkpoint);
-            context.ops.revert_checkpoint(ops_checkpoint);
-            context.vars.revert_checkpoint(vars_checkpoint);
-            if let Some(ret_val) = context.ret_val {
-                context.ret_val = None;
+            let mut frame_context = context.spawn_frame();
+            frame_context.vars.insert(left_param, left_val);
+            frame_context.vars.insert(right_param, right_val);
+            frame_context = eval_stmt(body, frame_context)?;
+            if let Some(ret_val) = frame_context.ret_val {
                 ret_val
             } else {
                 Value::Nil
@@ -661,10 +633,10 @@ mod tests {
             let (ast, _) = parse::parse_stmt(&tokens, &bump).unwrap();
             let mut context = InterpContext::_new(Cursor::new(vec![0; 64]));
             context = eval_stmt(bump.alloc(ast), context).unwrap();
+            let writer = context.writer.borrow_mut();
             assert_eq!(
                 str::from_utf8(*output).unwrap(),
-                str::from_utf8(&context.writer.get_ref()[0..context.writer.position() as usize])
-                    .unwrap(),
+                str::from_utf8(&writer.get_ref()[0..writer.position() as usize]).unwrap(),
             );
         }
     }
@@ -682,10 +654,10 @@ mod tests {
             let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
             let mut context = InterpContext::_new(Cursor::new(vec![0; 64]));
             context = eval_program(bump.alloc(ast), context).unwrap();
+            let writer = context.writer.borrow_mut();
             assert_eq!(
                 str::from_utf8(*output).unwrap(),
-                str::from_utf8(&context.writer.get_ref()[0..context.writer.position() as usize])
-                    .unwrap(),
+                str::from_utf8(&writer.get_ref()[0..writer.position() as usize]).unwrap(),
             );
         }
     }
