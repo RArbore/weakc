@@ -82,17 +82,36 @@ pub enum TypedASTExpr<'a> {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-struct TypeContext {
+struct TypeContext<'a> {
     num_generics: u32,
+    constraints: &'a bump::List<'a, ()>,
 }
 
 pub fn typecheck_program<'a>(
     program: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
 ) -> TypeResult<&'a bump::List<'a, TypedASTStmt<'a>>> {
-    let mut context = TypeContext::new();
+    let mut context = TypeContext::new(&bump);
     let unconstrained = context.generate_unconstrained_tree(program, bump)?;
     Err("Unimplemented!")
+}
+
+fn join_types(ty1: Type, ty2: Type) -> TypeResult<Type> {
+    match (ty1, ty2) {
+        (Type::Nil, Type::Nil) => Ok(Type::Nil),
+        (Type::Number, Type::Number) => Ok(Type::Number),
+        (Type::Tensor, Type::Tensor) => Ok(Type::Tensor),
+        (Type::Boolean, Type::Boolean) => Ok(Type::Boolean),
+        (Type::String, Type::String) => Ok(Type::String),
+        (Type::Numeric(_), Type::Number) => Ok(Type::Number),
+        (Type::Numeric(_), Type::Tensor) => Ok(Type::Tensor),
+        (Type::Number, Type::Numeric(_)) => Ok(Type::Number),
+        (Type::Tensor, Type::Numeric(_)) => Ok(Type::Tensor),
+        (Type::Numeric(v), Type::Numeric(_)) => Ok(Type::Numeric(v)),
+        (ty, Type::Generic(_)) => Ok(ty),
+        (Type::Generic(_), ty) => Ok(ty),
+        _ => Err("ERROR: Could not join incompatible types."),
+    }
 }
 
 impl<'a> TypedASTExpr<'a> {
@@ -114,9 +133,12 @@ impl<'a> TypedASTExpr<'a> {
     }
 }
 
-impl TypeContext {
-    fn new() -> Self {
-        TypeContext { num_generics: 0 }
+impl<'a> TypeContext<'a> {
+    fn new(bump: &'a bump::BumpAllocator) -> Self {
+        TypeContext {
+            num_generics: 0,
+            constraints: bump.create_list(),
+        }
     }
 
     fn generate_generic(&mut self) -> Type {
@@ -125,7 +147,7 @@ impl TypeContext {
         ty
     }
 
-    fn generate_unconstrained_tree<'a>(
+    fn generate_unconstrained_tree(
         &mut self,
         program: &'a bump::List<'a, ASTStmt<'a>>,
         bump: &'a bump::BumpAllocator,
@@ -137,7 +159,7 @@ impl TypeContext {
         Ok(unconstrained)
     }
 
-    fn generate_unconstrained_stmt<'a>(
+    fn generate_unconstrained_stmt(
         &mut self,
         stmt: &'a ASTStmt<'a>,
         bump: &'a bump::BumpAllocator,
@@ -219,7 +241,7 @@ impl TypeContext {
         }
     }
 
-    fn generate_unconstrained_expr<'a>(
+    fn generate_unconstrained_expr(
         &mut self,
         expr: &'a ASTExpr<'a>,
         bump: &'a bump::BumpAllocator,
@@ -312,27 +334,26 @@ mod tests {
         let tokens = parse::lex(b"f myop (x, y) { r x + y; }", &bump).unwrap();
         let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
 
-        let mut context = TypeContext::new();
+        let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
 
-        let mut context = TypeContext::new();
         assert_eq!(
             unconstrained,
             bump.create_list_with(&[TypedASTStmt::Function(
                 b"myop",
                 bump.create_list_with(&[
-                    (b"x" as &[_], context.generate_generic()),
-                    (b"y" as &[_], context.generate_generic())
+                    (b"x" as &[_], Type::Generic(0)),
+                    (b"y" as &[_], Type::Generic(1))
                 ]),
                 bump.alloc(TypedASTStmt::Block(bump.create_list_with(&[
                     TypedASTStmt::Return(bump.alloc(TypedASTExpr::Binary(
                         ASTBinaryOp::Add,
-                        bump.alloc(TypedASTExpr::Identifier(b"x", context.generate_generic())),
-                        bump.alloc(TypedASTExpr::Identifier(b"y", context.generate_generic())),
-                        context.generate_generic(),
+                        bump.alloc(TypedASTExpr::Identifier(b"x", Type::Generic(2))),
+                        bump.alloc(TypedASTExpr::Identifier(b"y", Type::Generic(3))),
+                        Type::Generic(4),
                     )))
                 ]))),
-                context.generate_generic(),
+                Type::Generic(5),
             )])
         );
 
@@ -345,7 +366,7 @@ mod tests {
         let tokens = parse::lex(b"f myop (x, y) { r x + y; p x; }", &bump).unwrap();
         let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
 
-        let mut context = TypeContext::new();
+        let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump);
 
         assert_eq!(
@@ -361,7 +382,7 @@ mod tests {
         let tokens = parse::lex(b"f myop (x, y) { 3 = x; }", &bump).unwrap();
         let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
 
-        let mut context = TypeContext::new();
+        let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump);
 
         assert_eq!(
