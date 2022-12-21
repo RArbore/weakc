@@ -81,6 +81,7 @@ pub enum TypedASTExpr<'a> {
     CustomBinary(&'a [u8], &'a TypedASTExpr<'a>, &'a TypedASTExpr<'a>, Type),
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 struct TypeContext {
     num_generics: u32,
 }
@@ -290,5 +291,43 @@ impl TypeContext {
                 ))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generate_unconstrained1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f myop (x, y) { r x + y; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new();
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+
+        let mut context = TypeContext::new();
+        assert_eq!(
+            unconstrained,
+            bump.create_list_with(&[TypedASTStmt::Function(
+                b"myop",
+                bump.create_list_with(&[
+                    (b"x" as &[_], context.generate_generic()),
+                    (b"y" as &[_], context.generate_generic())
+                ]),
+                bump.alloc(TypedASTStmt::Block(bump.create_list_with(&[
+                    TypedASTStmt::Return(bump.alloc(TypedASTExpr::Binary(
+                        ASTBinaryOp::Add,
+                        bump.alloc(TypedASTExpr::Identifier(b"x", context.generate_generic())),
+                        bump.alloc(TypedASTExpr::Identifier(b"y", context.generate_generic())),
+                        context.generate_generic(),
+                    )))
+                ]))),
+                context.generate_generic(),
+            )])
+        );
+
+        assert_eq!(rest, &[]);
     }
 }
