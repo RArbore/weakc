@@ -81,10 +81,10 @@ pub enum TypedASTExpr<'a> {
     CustomBinary(&'a [u8], &'a TypedASTExpr<'a>, &'a TypedASTExpr<'a>, Type),
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq)]
 struct TypeContext<'a> {
     num_generics: u32,
-    constraints: &'a bump::List<'a, ()>,
+    constraints: &'a mut bump::List<'a, (Type, Type)>,
 }
 
 pub fn typecheck_program<'a>(
@@ -93,6 +93,7 @@ pub fn typecheck_program<'a>(
 ) -> TypeResult<&'a bump::List<'a, TypedASTStmt<'a>>> {
     let mut context = TypeContext::new(&bump);
     let unconstrained = context.generate_unconstrained_tree(program, bump)?;
+    context.generate_constraints_tree(unconstrained);
     Err("Unimplemented!")
 }
 
@@ -320,6 +321,88 @@ impl<'a> TypeContext<'a> {
                     self.generate_generic(),
                 ))
             }
+        }
+    }
+
+    fn generate_constraints_tree(&mut self, program: &'a bump::List<'a, TypedASTStmt<'a>>) {
+        for i in 0..program.len() {
+            self.generate_constraints_stmt(program.at(i));
+        }
+    }
+
+    fn generate_constraints_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {
+        match stmt {
+            TypedASTStmt::Block(stmts) => {
+                for i in 0..stmts.len() {
+                    self.generate_constraints_stmt(stmts.at(i));
+                }
+            }
+            TypedASTStmt::If(cond, body) => {
+                self.generate_constraints_expr(cond);
+                self.constraints.push((Type::Boolean, cond.get_type()));
+                self.generate_constraints_stmt(body);
+            }
+            TypedASTStmt::While(cond, body) => {
+                self.generate_constraints_expr(cond);
+                self.constraints.push((Type::Boolean, cond.get_type()));
+                self.generate_constraints_stmt(body);
+            }
+            TypedASTStmt::Print(expr) => {
+                self.generate_constraints_expr(expr);
+            }
+            TypedASTStmt::Return(expr) => {
+                self.generate_constraints_expr(expr);
+                self.constraints.push((Type::Boolean, expr.get_type()));
+            }
+            TypedASTStmt::Verify(expr) => {
+                self.generate_constraints_expr(expr);
+                self.constraints.push((Type::Boolean, expr.get_type()));
+            }
+            TypedASTStmt::Expression(expr) => {
+                self.generate_constraints_expr(expr);
+            }
+            _ => panic!(),
+        }
+    }
+
+    fn generate_constraints_expr(&mut self, expr: &'a TypedASTExpr<'a>) {
+        match expr {
+            TypedASTExpr::Nil => {}
+            TypedASTExpr::Boolean(_) => {}
+            TypedASTExpr::Number(_) => {}
+            TypedASTExpr::String(_) => {}
+            TypedASTExpr::Index(tensor, indices) => {
+                self.constraints.push((Type::Tensor, tensor.get_type()));
+                for i in 0..indices.len() {
+                    self.constraints
+                        .push((Type::Number, indices.at(i).get_type()));
+                }
+            }
+            TypedASTExpr::ArrayLiteral(elements) => {
+                for i in 0..elements.len() {
+                    self.constraints
+                        .push((Type::Number, elements.at(i).get_type()));
+                }
+            }
+            TypedASTExpr::Assign(left, right, ty) => {
+                self.constraints.push((left.get_type(), right.get_type()));
+                self.constraints.push((right.get_type(), *ty));
+            }
+            TypedASTExpr::Unary(op, expr, ty) => match op {
+                ASTUnaryOp::Not => {
+                    self.constraints.push((Type::Boolean, expr.get_type()));
+                    self.constraints.push((Type::Boolean, *ty));
+                }
+                ASTUnaryOp::Negate => {
+                    self.constraints.push((Type::Number, expr.get_type()));
+                    self.constraints.push((Type::Number, *ty));
+                }
+                ASTUnaryOp::Shape => {
+                    self.constraints.push((Type::Tensor, expr.get_type()));
+                    self.constraints.push((Type::Tensor, *ty));
+                }
+            },
+            _ => panic!(),
         }
     }
 }
