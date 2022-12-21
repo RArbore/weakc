@@ -81,37 +81,124 @@ pub enum TypedASTExpr<'a> {
     CustomBinary(&'a [u8], &'a TypedASTExpr<'a>, &'a TypedASTExpr<'a>, Type),
 }
 
+struct TypeContext {
+    num_generics: u32,
+}
+
 pub fn typecheck_program<'a>(
     program: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
 ) -> TypeResult<&'a bump::List<'a, TypedASTStmt<'a>>> {
-    let unconstrained = generate_unconstrained_tree(program, bump);
+    let mut context = TypeContext::new();
+    let unconstrained = context.generate_unconstrained_tree(program, bump);
     Err("Unimplemented!")
 }
 
-fn generate_unconstrained_tree<'a>(
-    program: &'a bump::List<'a, ASTStmt<'a>>,
-    bump: &'a bump::BumpAllocator,
-) -> &'a bump::List<'a, TypedASTStmt<'a>> {
-    let unconstrained = bump.create_list();
-    for i in 0..program.len() {
-        unconstrained.push(generate_unconstrained_stmt(program.at(i), bump));
+impl TypeContext {
+    fn new() -> Self {
+        TypeContext { num_generics: 0 }
     }
-    unconstrained
-}
 
-fn generate_unconstrained_stmt<'a>(
-    stmt: &'a ASTStmt<'a>,
-    bump: &'a bump::BumpAllocator,
-) -> TypedASTStmt<'a> {
-    match stmt {
-        ASTStmt::Block(stmts) => {
-            let contents = bump.create_list();
-            for i in 0..stmts.len() {
-                contents.push(generate_unconstrained_stmt(stmts.at(i), bump));
-            }
-            TypedASTStmt::Block(contents)
+    fn generate_generic(&mut self) -> Type {
+        let ty = Type::Generic(self.num_generics);
+        self.num_generics += 1;
+        ty
+    }
+
+    fn generate_unconstrained_tree<'a>(
+        &mut self,
+        program: &'a bump::List<'a, ASTStmt<'a>>,
+        bump: &'a bump::BumpAllocator,
+    ) -> &'a bump::List<'a, TypedASTStmt<'a>> {
+        let unconstrained = bump.create_list();
+        for i in 0..program.len() {
+            unconstrained.push(self.generate_unconstrained_stmt(program.at(i), bump));
         }
-        _ => panic!(),
+        unconstrained
+    }
+
+    fn generate_unconstrained_stmt<'a>(
+        &mut self,
+        stmt: &'a ASTStmt<'a>,
+        bump: &'a bump::BumpAllocator,
+    ) -> TypedASTStmt<'a> {
+        match stmt {
+            ASTStmt::Block(stmts) => {
+                let contents = bump.create_list();
+                for i in 0..stmts.len() {
+                    contents.push(self.generate_unconstrained_stmt(stmts.at(i), bump));
+                }
+                TypedASTStmt::Block(contents)
+            }
+            ASTStmt::Function(name, params, body) => {
+                let new_params = bump.create_list();
+                for i in 0..params.len() {
+                    new_params.push((*params.at(i), self.generate_generic()));
+                }
+                let new_body = self.generate_unconstrained_stmt(body, bump);
+                TypedASTStmt::Function(
+                    name,
+                    new_params,
+                    bump.alloc(new_body),
+                    self.generate_generic(),
+                )
+            }
+            ASTStmt::Operator(name, left_param, right_param, body) => {
+                let new_body = self.generate_unconstrained_stmt(body, bump);
+                TypedASTStmt::Operator(
+                    name,
+                    left_param,
+                    right_param,
+                    self.generate_generic(),
+                    self.generate_generic(),
+                    bump.alloc(new_body),
+                    self.generate_generic(),
+                )
+            }
+            ASTStmt::If(cond, body) => {
+                let new_cond = self.generate_unconstrained_expr(cond, bump);
+                let new_body = self.generate_unconstrained_stmt(body, bump);
+                TypedASTStmt::If(bump.alloc(new_cond), bump.alloc(new_body))
+            }
+            ASTStmt::While(cond, body) => {
+                let new_cond = self.generate_unconstrained_expr(cond, bump);
+                let new_body = self.generate_unconstrained_stmt(body, bump);
+                TypedASTStmt::While(bump.alloc(new_cond), bump.alloc(new_body))
+            }
+            ASTStmt::Print(expr) => {
+                let new_expr = self.generate_unconstrained_expr(expr, bump);
+                TypedASTStmt::Print(bump.alloc(new_expr))
+            }
+            ASTStmt::Return(expr) => {
+                let new_expr = self.generate_unconstrained_expr(expr, bump);
+                TypedASTStmt::Return(bump.alloc(new_expr))
+            }
+            ASTStmt::Verify(expr) => {
+                let new_expr = self.generate_unconstrained_expr(expr, bump);
+                TypedASTStmt::Verify(bump.alloc(new_expr))
+            }
+            ASTStmt::Variable(name, init) => {
+                let new_init = self.generate_unconstrained_expr(init, bump);
+                TypedASTStmt::Variable(name, bump.alloc(new_init))
+            }
+            ASTStmt::Expression(expr) => {
+                let new_expr = self.generate_unconstrained_expr(expr, bump);
+                TypedASTStmt::Expression(bump.alloc(new_expr))
+            }
+        }
+    }
+
+    fn generate_unconstrained_expr<'a>(
+        &mut self,
+        stmt: &'a ASTExpr<'a>,
+        bump: &'a bump::BumpAllocator,
+    ) -> TypedASTExpr<'a> {
+        match stmt {
+            ASTExpr::Nil => TypedASTExpr::Nil,
+            ASTExpr::Boolean(v) => TypedASTExpr::Boolean(*v),
+            ASTExpr::Number(v) => TypedASTExpr::Number(*v),
+            ASTExpr::String(v) => TypedASTExpr::String(v),
+            _ => panic!(),
+        }
     }
 }
