@@ -90,7 +90,7 @@ pub fn typecheck_program<'a>(
     bump: &'a bump::BumpAllocator,
 ) -> TypeResult<&'a bump::List<'a, TypedASTStmt<'a>>> {
     let mut context = TypeContext::new();
-    let unconstrained = context.generate_unconstrained_tree(program, bump);
+    let unconstrained = context.generate_unconstrained_tree(program, bump)?;
     Err("Unimplemented!")
 }
 
@@ -109,43 +109,43 @@ impl TypeContext {
         &mut self,
         program: &'a bump::List<'a, ASTStmt<'a>>,
         bump: &'a bump::BumpAllocator,
-    ) -> &'a bump::List<'a, TypedASTStmt<'a>> {
+    ) -> TypeResult<&'a bump::List<'a, TypedASTStmt<'a>>> {
         let unconstrained = bump.create_list();
         for i in 0..program.len() {
-            unconstrained.push(self.generate_unconstrained_stmt(program.at(i), bump));
+            unconstrained.push(self.generate_unconstrained_stmt(program.at(i), bump)?);
         }
-        unconstrained
+        Ok(unconstrained)
     }
 
     fn generate_unconstrained_stmt<'a>(
         &mut self,
         stmt: &'a ASTStmt<'a>,
         bump: &'a bump::BumpAllocator,
-    ) -> TypedASTStmt<'a> {
+    ) -> TypeResult<TypedASTStmt<'a>> {
         match stmt {
             ASTStmt::Block(stmts) => {
                 let contents = bump.create_list();
                 for i in 0..stmts.len() {
-                    contents.push(self.generate_unconstrained_stmt(stmts.at(i), bump));
+                    contents.push(self.generate_unconstrained_stmt(stmts.at(i), bump)?);
                 }
-                TypedASTStmt::Block(contents)
+                Ok(TypedASTStmt::Block(contents))
             }
             ASTStmt::Function(name, params, body) => {
                 let new_params = bump.create_list();
                 for i in 0..params.len() {
                     new_params.push((*params.at(i), self.generate_generic()));
                 }
-                let new_body = self.generate_unconstrained_stmt(body, bump);
-                TypedASTStmt::Function(
+                let new_body = self.generate_unconstrained_stmt(body, bump)?;
+                Ok(TypedASTStmt::Function(
                     name,
                     new_params,
                     bump.alloc(new_body),
                     self.generate_generic(),
-                )
+                ))
             }
             ASTStmt::Operator(name, left_param, right_param, body) => {
-                let new_body = self.generate_unconstrained_stmt(body, bump);
-                TypedASTStmt::Operator(
+                let new_body = self.generate_unconstrained_stmt(body, bump)?;
+                Ok(TypedASTStmt::Operator(
                     name,
                     left_param,
                     right_param,
@@ -153,52 +153,123 @@ impl TypeContext {
                     self.generate_generic(),
                     bump.alloc(new_body),
                     self.generate_generic(),
-                )
+                ))
             }
             ASTStmt::If(cond, body) => {
-                let new_cond = self.generate_unconstrained_expr(cond, bump);
-                let new_body = self.generate_unconstrained_stmt(body, bump);
-                TypedASTStmt::If(bump.alloc(new_cond), bump.alloc(new_body))
+                let new_cond = self.generate_unconstrained_expr(cond, bump)?;
+                let new_body = self.generate_unconstrained_stmt(body, bump)?;
+                Ok(TypedASTStmt::If(bump.alloc(new_cond), bump.alloc(new_body)))
             }
             ASTStmt::While(cond, body) => {
-                let new_cond = self.generate_unconstrained_expr(cond, bump);
-                let new_body = self.generate_unconstrained_stmt(body, bump);
-                TypedASTStmt::While(bump.alloc(new_cond), bump.alloc(new_body))
+                let new_cond = self.generate_unconstrained_expr(cond, bump)?;
+                let new_body = self.generate_unconstrained_stmt(body, bump)?;
+                Ok(TypedASTStmt::While(
+                    bump.alloc(new_cond),
+                    bump.alloc(new_body),
+                ))
             }
             ASTStmt::Print(expr) => {
-                let new_expr = self.generate_unconstrained_expr(expr, bump);
-                TypedASTStmt::Print(bump.alloc(new_expr))
+                let new_expr = self.generate_unconstrained_expr(expr, bump)?;
+                Ok(TypedASTStmt::Print(bump.alloc(new_expr)))
             }
             ASTStmt::Return(expr) => {
-                let new_expr = self.generate_unconstrained_expr(expr, bump);
-                TypedASTStmt::Return(bump.alloc(new_expr))
+                let new_expr = self.generate_unconstrained_expr(expr, bump)?;
+                Ok(TypedASTStmt::Return(bump.alloc(new_expr)))
             }
             ASTStmt::Verify(expr) => {
-                let new_expr = self.generate_unconstrained_expr(expr, bump);
-                TypedASTStmt::Verify(bump.alloc(new_expr))
+                let new_expr = self.generate_unconstrained_expr(expr, bump)?;
+                Ok(TypedASTStmt::Verify(bump.alloc(new_expr)))
             }
             ASTStmt::Variable(name, init) => {
-                let new_init = self.generate_unconstrained_expr(init, bump);
-                TypedASTStmt::Variable(name, bump.alloc(new_init))
+                let new_init = self.generate_unconstrained_expr(init, bump)?;
+                Ok(TypedASTStmt::Variable(name, bump.alloc(new_init)))
             }
             ASTStmt::Expression(expr) => {
-                let new_expr = self.generate_unconstrained_expr(expr, bump);
-                TypedASTStmt::Expression(bump.alloc(new_expr))
+                let new_expr = self.generate_unconstrained_expr(expr, bump)?;
+                Ok(TypedASTStmt::Expression(bump.alloc(new_expr)))
             }
         }
     }
 
     fn generate_unconstrained_expr<'a>(
         &mut self,
-        stmt: &'a ASTExpr<'a>,
+        expr: &'a ASTExpr<'a>,
         bump: &'a bump::BumpAllocator,
-    ) -> TypedASTExpr<'a> {
-        match stmt {
-            ASTExpr::Nil => TypedASTExpr::Nil,
-            ASTExpr::Boolean(v) => TypedASTExpr::Boolean(*v),
-            ASTExpr::Number(v) => TypedASTExpr::Number(*v),
-            ASTExpr::String(v) => TypedASTExpr::String(v),
-            _ => panic!(),
+    ) -> TypeResult<TypedASTExpr<'a>> {
+        match expr {
+            ASTExpr::Nil => Ok(TypedASTExpr::Nil),
+            ASTExpr::Boolean(v) => Ok(TypedASTExpr::Boolean(*v)),
+            ASTExpr::Number(v) => Ok(TypedASTExpr::Number(*v)),
+            ASTExpr::String(v) => Ok(TypedASTExpr::String(v)),
+            ASTExpr::Identifier(name) => {
+                Ok(TypedASTExpr::Identifier(name, self.generate_generic()))
+            }
+            ASTExpr::Call(func, args) => {
+                let new_args = bump.create_list();
+                for i in 0..args.len() {
+                    new_args.push(self.generate_unconstrained_expr(args.at(i), bump)?);
+                }
+                Ok(TypedASTExpr::Call(func, new_args, self.generate_generic()))
+            }
+            ASTExpr::Index(tensor, indices) => {
+                let new_tensor = self.generate_unconstrained_expr(tensor, bump)?;
+                let new_indices = bump.create_list();
+                for i in 0..indices.len() {
+                    new_indices.push(self.generate_unconstrained_expr(indices.at(i), bump)?);
+                }
+                Ok(TypedASTExpr::Index(bump.alloc(new_tensor), new_indices))
+            }
+            ASTExpr::ArrayLiteral(elements) => {
+                let new_elements = bump.create_list();
+                for i in 0..elements.len() {
+                    new_elements.push(self.generate_unconstrained_expr(elements.at(i), bump)?);
+                }
+                Ok(TypedASTExpr::ArrayLiteral(new_elements))
+            }
+            ASTExpr::Assign(left, right) => {
+                match left {
+                    ASTExpr::Identifier(_) => {}
+                    ASTExpr::Index(ASTExpr::Identifier(_), _) => {}
+                    _ => Err(
+                        "ERROR: Can only assign to a variable or indexing into a tensor variable.",
+                    )?,
+                }
+                let new_left = self.generate_unconstrained_expr(left, bump)?;
+                let new_right = self.generate_unconstrained_expr(right, bump)?;
+                Ok(TypedASTExpr::Assign(
+                    bump.alloc(new_left),
+                    bump.alloc(new_right),
+                    self.generate_generic(),
+                ))
+            }
+            ASTExpr::Unary(op, expr) => {
+                let new_expr = self.generate_unconstrained_expr(expr, bump)?;
+                Ok(TypedASTExpr::Unary(
+                    *op,
+                    bump.alloc(new_expr),
+                    self.generate_generic(),
+                ))
+            }
+            ASTExpr::Binary(op, left_expr, right_expr) => {
+                let new_left_expr = self.generate_unconstrained_expr(left_expr, bump)?;
+                let new_right_expr = self.generate_unconstrained_expr(right_expr, bump)?;
+                Ok(TypedASTExpr::Binary(
+                    *op,
+                    bump.alloc(new_left_expr),
+                    bump.alloc(new_right_expr),
+                    self.generate_generic(),
+                ))
+            }
+            ASTExpr::CustomBinary(op, left_expr, right_expr) => {
+                let new_left_expr = self.generate_unconstrained_expr(left_expr, bump)?;
+                let new_right_expr = self.generate_unconstrained_expr(right_expr, bump)?;
+                Ok(TypedASTExpr::CustomBinary(
+                    op,
+                    bump.alloc(new_left_expr),
+                    bump.alloc(new_right_expr),
+                    self.generate_generic(),
+                ))
+            }
         }
     }
 }
