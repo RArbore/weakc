@@ -94,6 +94,25 @@ pub fn typecheck_program<'a>(
     Err("Unimplemented!")
 }
 
+impl<'a> TypedASTExpr<'a> {
+    pub fn get_type(&self) -> Type {
+        match self {
+            TypedASTExpr::Nil => Type::Nil,
+            TypedASTExpr::Boolean(_) => Type::Boolean,
+            TypedASTExpr::Number(_) => Type::Number,
+            TypedASTExpr::String(_) => Type::String,
+            TypedASTExpr::Identifier(_, ty) => *ty,
+            TypedASTExpr::Call(_, _, ty) => *ty,
+            TypedASTExpr::Index(_, _) => Type::Number,
+            TypedASTExpr::ArrayLiteral(_) => Type::Tensor,
+            TypedASTExpr::Assign(_, _, ty) => *ty,
+            TypedASTExpr::Unary(_, _, ty) => *ty,
+            TypedASTExpr::Binary(_, _, _, ty) => *ty,
+            TypedASTExpr::CustomBinary(_, _, _, ty) => *ty,
+        }
+    }
+}
+
 impl TypeContext {
     fn new() -> Self {
         TypeContext { num_generics: 0 }
