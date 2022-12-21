@@ -146,6 +146,14 @@ impl TypeContext {
             ASTStmt::Block(stmts) => {
                 let contents = bump.create_list();
                 for i in 0..stmts.len() {
+                    match stmts.at(i) {
+                        ASTStmt::Return(_) => {
+                            if i + 1 < stmts.len() {
+                                Err("ERROR: Return statement found before end of function.")?
+                            }
+                        }
+                        _ => {}
+                    }
                     contents.push(self.generate_unconstrained_stmt(stmts.at(i), bump)?);
                 }
                 Ok(TypedASTStmt::Block(contents))
@@ -328,6 +336,38 @@ mod tests {
             )])
         );
 
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_unconstrained2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f myop (x, y) { r x + y; p x; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new();
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump);
+
+        assert_eq!(
+            unconstrained,
+            Err("ERROR: Return statement found before end of function.")
+        );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_unconstrained3() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f myop (x, y) { 3 = x; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new();
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump);
+
+        assert_eq!(
+            unconstrained,
+            Err("ERROR: Can only assign to a variable or indexing into a tensor variable.")
+        );
         assert_eq!(rest, &[]);
     }
 }
