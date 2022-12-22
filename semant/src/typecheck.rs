@@ -15,6 +15,9 @@
 extern crate bump;
 extern crate parse;
 
+use core::mem::swap;
+use std::collections::HashMap;
+
 use parse::ASTBinaryOp;
 use parse::ASTExpr;
 use parse::ASTStmt;
@@ -38,7 +41,8 @@ pub enum TypedASTStmt<'a> {
     Block(&'a bump::List<'a, TypedASTStmt<'a>>),
     Function(
         &'a [u8],
-        &'a bump::List<'a, (&'a [u8], Type)>,
+        &'a bump::List<'a, &'a [u8]>,
+        &'a bump::List<'a, Type>,
         &'a TypedASTStmt<'a>,
         Type,
     ),
@@ -81,10 +85,20 @@ pub enum TypedASTExpr<'a> {
     CustomBinary(&'a [u8], &'a TypedASTExpr<'a>, &'a TypedASTExpr<'a>, Type),
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+enum Constraint {
+    Symmetric(Type, Type),
+    Conformant(Type, Type),
+}
+
 #[derive(Debug, PartialEq)]
 struct TypeContext<'a> {
     num_generics: u32,
-    constraints: &'a mut bump::List<'a, (Type, Type)>,
+    constraints: &'a mut bump::List<'a, Constraint>,
+    funcs: HashMap<&'a [u8], (&'a bump::List<'a, Type>, Type)>,
+    ops: HashMap<&'a [u8], (Type, Type, Type)>,
+    vars: HashMap<&'a [u8], Type>,
+    ret_ty: Type,
 }
 
 pub fn typecheck_program<'a>(
@@ -115,6 +129,23 @@ fn join_types(ty1: Type, ty2: Type) -> TypeResult<Type> {
     }
 }
 
+fn is_conforming(constraint: Type, ty: Type) -> TypeResult<Type> {
+    match (constraint, ty) {
+        (Type::Nil, Type::Nil) => Ok(Type::Nil),
+        (Type::Number, Type::Number) => Ok(Type::Number),
+        (Type::Tensor, Type::Tensor) => Ok(Type::Tensor),
+        (Type::Boolean, Type::Boolean) => Ok(Type::Boolean),
+        (Type::String, Type::String) => Ok(Type::String),
+        (Type::Numeric(_), Type::Number) => Ok(Type::Number),
+        (Type::Numeric(_), Type::Tensor) => Ok(Type::Tensor),
+        (Type::Number, Type::Numeric(_)) => Ok(Type::Number),
+        (Type::Tensor, Type::Numeric(_)) => Ok(Type::Tensor),
+        (Type::Numeric(_), Type::Numeric(v)) => Ok(Type::Numeric(v)),
+        (Type::Generic(_), ty) => Ok(ty),
+        _ => Err("ERROR: Type is not conformant to requested type."),
+    }
+}
+
 impl<'a> TypedASTExpr<'a> {
     pub fn get_type(&self) -> Type {
         match self {
@@ -139,6 +170,10 @@ impl<'a> TypeContext<'a> {
         TypeContext {
             num_generics: 0,
             constraints: bump.create_list(),
+            funcs: HashMap::new(),
+            ops: HashMap::new(),
+            vars: HashMap::new(),
+            ret_ty: Type::Nil,
         }
     }
 
@@ -183,13 +218,16 @@ impl<'a> TypeContext<'a> {
             }
             ASTStmt::Function(name, params, body) => {
                 let new_params = bump.create_list();
+                let new_params_ty = bump.create_list();
                 for i in 0..params.len() {
-                    new_params.push((*params.at(i), self.generate_generic()));
+                    new_params.push(*params.at(i));
+                    new_params_ty.push(self.generate_generic());
                 }
                 let new_body = self.generate_unconstrained_stmt(body, bump)?;
                 Ok(TypedASTStmt::Function(
                     name,
                     new_params,
+                    new_params_ty,
                     bump.alloc(new_body),
                     self.generate_generic(),
                 ))
@@ -337,14 +375,41 @@ impl<'a> TypeContext<'a> {
                     self.generate_constraints_stmt(stmts.at(i));
                 }
             }
+            TypedASTStmt::Function(op, params, params_ty, body, ret_ty) => {
+                self.ret_ty = Type::Nil;
+                self.funcs.insert(op, (params_ty, *ret_ty));
+                let mut old_vars = HashMap::new();
+                swap(&mut self.vars, &mut old_vars);
+                for i in 0..params.len() {
+                    self.vars.insert(params.at(i), *params_ty.at(i));
+                }
+                self.generate_constraints_stmt(body);
+                self.constraints
+                    .push(Constraint::Symmetric(self.ret_ty, *ret_ty));
+                swap(&mut self.vars, &mut old_vars);
+            }
+            TypedASTStmt::Operator(op, left, right, left_ty, right_ty, body, ret_ty) => {
+                self.ret_ty = Type::Nil;
+                self.ops.insert(op, (*left_ty, *right_ty, *ret_ty));
+                let mut old_vars = HashMap::new();
+                swap(&mut self.vars, &mut old_vars);
+                self.vars.insert(left, *left_ty);
+                self.vars.insert(right, *right_ty);
+                self.generate_constraints_stmt(body);
+                self.constraints
+                    .push(Constraint::Symmetric(self.ret_ty, *ret_ty));
+                swap(&mut self.vars, &mut old_vars);
+            }
             TypedASTStmt::If(cond, body) => {
                 self.generate_constraints_expr(cond);
-                self.constraints.push((Type::Boolean, cond.get_type()));
+                self.constraints
+                    .push(Constraint::Symmetric(Type::Boolean, cond.get_type()));
                 self.generate_constraints_stmt(body);
             }
             TypedASTStmt::While(cond, body) => {
                 self.generate_constraints_expr(cond);
-                self.constraints.push((Type::Boolean, cond.get_type()));
+                self.constraints
+                    .push(Constraint::Symmetric(Type::Boolean, cond.get_type()));
                 self.generate_constraints_stmt(body);
             }
             TypedASTStmt::Print(expr) => {
@@ -352,11 +417,14 @@ impl<'a> TypeContext<'a> {
             }
             TypedASTStmt::Return(expr) => {
                 self.generate_constraints_expr(expr);
-                self.constraints.push((Type::Boolean, expr.get_type()));
+                self.constraints
+                    .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
+                self.ret_ty = expr.get_type();
             }
             TypedASTStmt::Verify(expr) => {
                 self.generate_constraints_expr(expr);
-                self.constraints.push((Type::Boolean, expr.get_type()));
+                self.constraints
+                    .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
             }
             TypedASTStmt::Expression(expr) => {
                 self.generate_constraints_expr(expr);
@@ -372,34 +440,47 @@ impl<'a> TypeContext<'a> {
             TypedASTExpr::Number(_) => {}
             TypedASTExpr::String(_) => {}
             TypedASTExpr::Index(tensor, indices) => {
-                self.constraints.push((Type::Tensor, tensor.get_type()));
+                self.constraints
+                    .push(Constraint::Symmetric(Type::Tensor, tensor.get_type()));
                 for i in 0..indices.len() {
-                    self.constraints
-                        .push((Type::Number, indices.at(i).get_type()));
+                    self.constraints.push(Constraint::Symmetric(
+                        Type::Number,
+                        indices.at(i).get_type(),
+                    ));
                 }
             }
             TypedASTExpr::ArrayLiteral(elements) => {
                 for i in 0..elements.len() {
-                    self.constraints
-                        .push((Type::Number, elements.at(i).get_type()));
+                    self.constraints.push(Constraint::Symmetric(
+                        Type::Number,
+                        elements.at(i).get_type(),
+                    ));
                 }
             }
             TypedASTExpr::Assign(left, right, ty) => {
-                self.constraints.push((left.get_type(), right.get_type()));
-                self.constraints.push((right.get_type(), *ty));
+                self.constraints
+                    .push(Constraint::Symmetric(left.get_type(), right.get_type()));
+                self.constraints
+                    .push(Constraint::Symmetric(right.get_type(), *ty));
             }
             TypedASTExpr::Unary(op, expr, ty) => match op {
                 ASTUnaryOp::Not => {
-                    self.constraints.push((Type::Boolean, expr.get_type()));
-                    self.constraints.push((Type::Boolean, *ty));
+                    self.constraints
+                        .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
+                    self.constraints
+                        .push(Constraint::Symmetric(Type::Boolean, *ty));
                 }
                 ASTUnaryOp::Negate => {
-                    self.constraints.push((Type::Number, expr.get_type()));
-                    self.constraints.push((Type::Number, *ty));
+                    self.constraints
+                        .push(Constraint::Symmetric(Type::Number, expr.get_type()));
+                    self.constraints
+                        .push(Constraint::Symmetric(Type::Number, *ty));
                 }
                 ASTUnaryOp::Shape => {
-                    self.constraints.push((Type::Tensor, expr.get_type()));
-                    self.constraints.push((Type::Tensor, *ty));
+                    self.constraints
+                        .push(Constraint::Symmetric(Type::Tensor, expr.get_type()));
+                    self.constraints
+                        .push(Constraint::Symmetric(Type::Tensor, *ty));
                 }
             },
             _ => panic!(),
@@ -424,10 +505,8 @@ mod tests {
             unconstrained,
             bump.create_list_with(&[TypedASTStmt::Function(
                 b"myop",
-                bump.create_list_with(&[
-                    (b"x" as &[_], Type::Generic(0)),
-                    (b"y" as &[_], Type::Generic(1))
-                ]),
+                bump.create_list_with(&[b"x" as &[_], b"y" as &[_]]),
+                bump.create_list_with(&[Type::Generic(0), Type::Generic(1)]),
                 bump.alloc(TypedASTStmt::Block(bump.create_list_with(&[
                     TypedASTStmt::Return(bump.alloc(TypedASTExpr::Binary(
                         ASTBinaryOp::Add,
