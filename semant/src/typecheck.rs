@@ -107,7 +107,7 @@ pub fn typecheck_program<'a>(
 ) -> TypeResult<&'a bump::List<'a, TypedASTStmt<'a>>> {
     let mut context = TypeContext::new(&bump);
     let unconstrained = context.generate_unconstrained_tree(program, bump)?;
-    context.generate_constraints_tree(unconstrained);
+    context.generate_constraints_tree(unconstrained)?;
     Err("Unimplemented!")
 }
 
@@ -362,18 +362,23 @@ impl<'a> TypeContext<'a> {
         }
     }
 
-    fn generate_constraints_tree(&mut self, program: &'a bump::List<'a, TypedASTStmt<'a>>) {
+    fn generate_constraints_tree(
+        &mut self,
+        program: &'a bump::List<'a, TypedASTStmt<'a>>,
+    ) -> TypeResult<()> {
         for i in 0..program.len() {
-            self.generate_constraints_stmt(program.at(i));
+            self.generate_constraints_stmt(program.at(i))?;
         }
+        Ok(())
     }
 
-    fn generate_constraints_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {
+    fn generate_constraints_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) -> TypeResult<()> {
         match stmt {
             TypedASTStmt::Block(stmts) => {
                 for i in 0..stmts.len() {
-                    self.generate_constraints_stmt(stmts.at(i));
+                    self.generate_constraints_stmt(stmts.at(i))?;
                 }
+                Ok(())
             }
             TypedASTStmt::Function(op, params, params_ty, body, ret_ty) => {
                 self.ret_ty = Type::Nil;
@@ -383,10 +388,11 @@ impl<'a> TypeContext<'a> {
                 for i in 0..params.len() {
                     self.vars.insert(params.at(i), *params_ty.at(i));
                 }
-                self.generate_constraints_stmt(body);
+                self.generate_constraints_stmt(body)?;
                 self.constraints
                     .push(Constraint::Symmetric(self.ret_ty, *ret_ty));
                 swap(&mut self.vars, &mut old_vars);
+                Ok(())
             }
             TypedASTStmt::Operator(op, left, right, left_ty, right_ty, body, ret_ty) => {
                 self.ret_ty = Type::Nil;
@@ -395,50 +401,69 @@ impl<'a> TypeContext<'a> {
                 swap(&mut self.vars, &mut old_vars);
                 self.vars.insert(left, *left_ty);
                 self.vars.insert(right, *right_ty);
-                self.generate_constraints_stmt(body);
+                self.generate_constraints_stmt(body)?;
                 self.constraints
                     .push(Constraint::Symmetric(self.ret_ty, *ret_ty));
                 swap(&mut self.vars, &mut old_vars);
+                Ok(())
             }
             TypedASTStmt::If(cond, body) => {
-                self.generate_constraints_expr(cond);
+                self.generate_constraints_expr(cond)?;
                 self.constraints
                     .push(Constraint::Symmetric(Type::Boolean, cond.get_type()));
-                self.generate_constraints_stmt(body);
+                self.generate_constraints_stmt(body)?;
+                Ok(())
             }
             TypedASTStmt::While(cond, body) => {
-                self.generate_constraints_expr(cond);
+                self.generate_constraints_expr(cond)?;
                 self.constraints
                     .push(Constraint::Symmetric(Type::Boolean, cond.get_type()));
-                self.generate_constraints_stmt(body);
+                self.generate_constraints_stmt(body)?;
+                Ok(())
             }
             TypedASTStmt::Print(expr) => {
-                self.generate_constraints_expr(expr);
+                self.generate_constraints_expr(expr)?;
+                Ok(())
             }
             TypedASTStmt::Return(expr) => {
-                self.generate_constraints_expr(expr);
+                self.generate_constraints_expr(expr)?;
                 self.constraints
                     .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
                 self.ret_ty = expr.get_type();
+                Ok(())
             }
             TypedASTStmt::Verify(expr) => {
-                self.generate_constraints_expr(expr);
+                self.generate_constraints_expr(expr)?;
                 self.constraints
                     .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
+                Ok(())
+            }
+            TypedASTStmt::Variable(name, expr) => {
+                self.generate_constraints_expr(expr)?;
+                self.vars.insert(name, expr.get_type());
+                Ok(())
             }
             TypedASTStmt::Expression(expr) => {
-                self.generate_constraints_expr(expr);
+                self.generate_constraints_expr(expr)?;
+                Ok(())
             }
-            _ => panic!(),
         }
     }
 
-    fn generate_constraints_expr(&mut self, expr: &'a TypedASTExpr<'a>) {
+    fn generate_constraints_expr(&mut self, expr: &'a TypedASTExpr<'a>) -> TypeResult<()> {
         match expr {
-            TypedASTExpr::Nil => {}
-            TypedASTExpr::Boolean(_) => {}
-            TypedASTExpr::Number(_) => {}
-            TypedASTExpr::String(_) => {}
+            TypedASTExpr::Nil => Ok(()),
+            TypedASTExpr::Boolean(_) => Ok(()),
+            TypedASTExpr::Number(_) => Ok(()),
+            TypedASTExpr::String(_) => Ok(()),
+            TypedASTExpr::Identifier(name, ty) => {
+                if let Some(decl_ty) = self.vars.get(name) {
+                    self.constraints.push(Constraint::Symmetric(*decl_ty, *ty));
+                    Ok(())
+                } else {
+                    Err("ERROR: Attempted to use variable not currently in scope.")?
+                }
+            }
             TypedASTExpr::Index(tensor, indices) => {
                 self.constraints
                     .push(Constraint::Symmetric(Type::Tensor, tensor.get_type()));
@@ -448,6 +473,7 @@ impl<'a> TypeContext<'a> {
                         indices.at(i).get_type(),
                     ));
                 }
+                Ok(())
             }
             TypedASTExpr::ArrayLiteral(elements) => {
                 for i in 0..elements.len() {
@@ -456,33 +482,38 @@ impl<'a> TypeContext<'a> {
                         elements.at(i).get_type(),
                     ));
                 }
+                Ok(())
             }
             TypedASTExpr::Assign(left, right, ty) => {
                 self.constraints
                     .push(Constraint::Symmetric(left.get_type(), right.get_type()));
                 self.constraints
                     .push(Constraint::Symmetric(right.get_type(), *ty));
+                Ok(())
             }
-            TypedASTExpr::Unary(op, expr, ty) => match op {
-                ASTUnaryOp::Not => {
-                    self.constraints
-                        .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
-                    self.constraints
-                        .push(Constraint::Symmetric(Type::Boolean, *ty));
+            TypedASTExpr::Unary(op, expr, ty) => {
+                match op {
+                    ASTUnaryOp::Not => {
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Boolean, *ty));
+                    }
+                    ASTUnaryOp::Negate => {
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Number, expr.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Number, *ty));
+                    }
+                    ASTUnaryOp::Shape => {
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Tensor, expr.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Tensor, *ty));
+                    }
                 }
-                ASTUnaryOp::Negate => {
-                    self.constraints
-                        .push(Constraint::Symmetric(Type::Number, expr.get_type()));
-                    self.constraints
-                        .push(Constraint::Symmetric(Type::Number, *ty));
-                }
-                ASTUnaryOp::Shape => {
-                    self.constraints
-                        .push(Constraint::Symmetric(Type::Tensor, expr.get_type()));
-                    self.constraints
-                        .push(Constraint::Symmetric(Type::Tensor, *ty));
-                }
-            },
+                Ok(())
+            }
             _ => panic!(),
         }
     }
