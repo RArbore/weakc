@@ -731,4 +731,93 @@ mod tests {
 
         assert_eq!(rest, &[]);
     }
+
+    #[test]
+    fn generate_constraints3() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"f myop (x, y) { p y; r x + 3; } p myop(8, \"Hello\");",
+            &bump,
+        )
+        .unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Generic(1), Type::Generic(2)),
+                Constraint::Symmetric(Type::Generic(0), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(7), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(7), Type::Number),
+                Constraint::Symmetric(Type::Numeric(7), Type::Generic(4)),
+                Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
+                Constraint::Conformant(Type::Generic(0), Type::Number),
+                Constraint::Conformant(Type::Generic(1), Type::String),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(6))
+            ])
+        );
+
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_constraints4() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"p [1, 2, 3, 4] sa [2, 2]; p 5 - 7; p \"hello\"; p ([1, 2, 3, 4] sa [1, 4]) @ ([5, 6, 7, 8] sa [4, 1]); p 9 ^ 2;",
+            &bump,
+        )
+        .unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Generic(0)),
+                Constraint::Symmetric(Type::Numeric(6), Type::Number),
+                Constraint::Symmetric(Type::Numeric(6), Type::Number),
+                Constraint::Symmetric(Type::Numeric(6), Type::Generic(1)),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Generic(2)),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Generic(3)),
+                Constraint::Symmetric(Type::Tensor, Type::Generic(2)),
+                Constraint::Symmetric(Type::Tensor, Type::Generic(3)),
+                Constraint::Symmetric(Type::Tensor, Type::Generic(4)),
+                Constraint::Symmetric(Type::Numeric(7), Type::Number),
+                Constraint::Symmetric(Type::Numeric(7), Type::Number),
+                Constraint::Symmetric(Type::Numeric(7), Type::Generic(5))
+            ])
+        );
+
+        assert_eq!(rest, &[]);
+    }
 }
