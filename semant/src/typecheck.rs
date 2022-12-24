@@ -183,6 +183,12 @@ impl<'a> TypeContext<'a> {
         ty
     }
 
+    fn generate_numeric(&mut self) -> Type {
+        let ty = Type::Numeric(self.num_generics);
+        self.num_generics += 1;
+        ty
+    }
+
     fn generate_unconstrained_tree(
         &mut self,
         program: &'a bump::List<'a, ASTStmt<'a>>,
@@ -427,8 +433,6 @@ impl<'a> TypeContext<'a> {
             }
             TypedASTStmt::Return(expr) => {
                 self.generate_constraints_expr(expr)?;
-                self.constraints
-                    .push(Constraint::Symmetric(Type::Boolean, expr.get_type()));
                 self.ret_ty = expr.get_type();
                 Ok(())
             }
@@ -464,7 +468,32 @@ impl<'a> TypeContext<'a> {
                     Err("ERROR: Attempted to use variable not currently in scope.")?
                 }
             }
+            TypedASTExpr::Call(op, args, ty) => {
+                for i in 0..args.len() {
+                    self.generate_constraints_expr(args.at(i))?;
+                }
+                if let Some((params_ty, ret_ty)) = self.funcs.get(op) {
+                    if params_ty.len() == args.len() {
+                        for i in 0..params_ty.len() {
+                            self.constraints.push(Constraint::Conformant(
+                                *params_ty.at(i),
+                                args.at(i).get_type(),
+                            ));
+                        }
+                        self.constraints.push(Constraint::Conformant(*ret_ty, *ty));
+                        Ok(())
+                    } else {
+                        Err("ERROR: Attempted to call function with wrong number of arguments.")?
+                    }
+                } else {
+                    Err("ERROR: Attempted to use function not currently in scope.")?
+                }
+            }
             TypedASTExpr::Index(tensor, indices) => {
+                self.generate_constraints_expr(tensor)?;
+                for i in 0..indices.len() {
+                    self.generate_constraints_expr(indices.at(i))?;
+                }
                 self.constraints
                     .push(Constraint::Symmetric(Type::Tensor, tensor.get_type()));
                 for i in 0..indices.len() {
@@ -477,6 +506,9 @@ impl<'a> TypeContext<'a> {
             }
             TypedASTExpr::ArrayLiteral(elements) => {
                 for i in 0..elements.len() {
+                    self.generate_constraints_expr(elements.at(i))?;
+                }
+                for i in 0..elements.len() {
                     self.constraints.push(Constraint::Symmetric(
                         Type::Number,
                         elements.at(i).get_type(),
@@ -485,6 +517,8 @@ impl<'a> TypeContext<'a> {
                 Ok(())
             }
             TypedASTExpr::Assign(left, right, ty) => {
+                self.generate_constraints_expr(left)?;
+                self.generate_constraints_expr(right)?;
                 self.constraints
                     .push(Constraint::Symmetric(left.get_type(), right.get_type()));
                 self.constraints
@@ -492,6 +526,7 @@ impl<'a> TypeContext<'a> {
                 Ok(())
             }
             TypedASTExpr::Unary(op, expr, ty) => {
+                self.generate_constraints_expr(expr)?;
                 match op {
                     ASTUnaryOp::Not => {
                         self.constraints
@@ -514,7 +549,75 @@ impl<'a> TypeContext<'a> {
                 }
                 Ok(())
             }
-            _ => panic!(),
+            TypedASTExpr::Binary(op, left, right, ty) => {
+                self.generate_constraints_expr(left)?;
+                self.generate_constraints_expr(right)?;
+                match op {
+                    ASTBinaryOp::ShapedAs | ASTBinaryOp::MatrixMultiply => {
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Tensor, left.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Tensor, right.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Tensor, *ty));
+                        Ok(())
+                    }
+                    ASTBinaryOp::Add
+                    | ASTBinaryOp::Subtract
+                    | ASTBinaryOp::Multiply
+                    | ASTBinaryOp::Divide
+                    | ASTBinaryOp::Power => {
+                        let numeric_var = self.generate_numeric();
+                        self.constraints
+                            .push(Constraint::Symmetric(numeric_var, left.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(numeric_var, right.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(numeric_var, *ty));
+                        Ok(())
+                    }
+                    ASTBinaryOp::Greater
+                    | ASTBinaryOp::Lesser
+                    | ASTBinaryOp::GreaterEquals
+                    | ASTBinaryOp::LesserEquals => {
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Number, left.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Number, right.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Number, *ty));
+                        Ok(())
+                    }
+                    ASTBinaryOp::EqualsEquals | ASTBinaryOp::NotEquals => {
+                        self.constraints
+                            .push(Constraint::Symmetric(left.get_type(), right.get_type()));
+                        Ok(())
+                    }
+                    ASTBinaryOp::And | ASTBinaryOp::Or => {
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Boolean, left.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Boolean, right.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Boolean, *ty));
+                        Ok(())
+                    }
+                }
+            }
+            TypedASTExpr::CustomBinary(op, left, right, ty) => {
+                self.generate_constraints_expr(left)?;
+                self.generate_constraints_expr(right)?;
+                if let Some((left_ty, right_ty, ret_ty)) = self.ops.get(op) {
+                    self.constraints
+                        .push(Constraint::Conformant(*left_ty, left.get_type()));
+                    self.constraints
+                        .push(Constraint::Conformant(*right_ty, right.get_type()));
+                    self.constraints.push(Constraint::Conformant(*ret_ty, *ty));
+                    Ok(())
+                } else {
+                    Err("ERROR: Attempted to use operation not currently in scope.")?
+                }
+            }
         }
     }
 }
@@ -582,6 +685,50 @@ mod tests {
             unconstrained,
             Err("ERROR: Can only assign to a variable or indexing into a tensor variable.")
         );
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_constraints1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f myop (x, y) { r x; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
+                Constraint::Symmetric(Type::Generic(2), Type::Generic(3))
+            ])
+        );
+
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_constraints2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f myop (x, y) { r x + y; }", &bump).unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
+                Constraint::Symmetric(Type::Generic(1), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(6), Type::Generic(2)),
+                Constraint::Symmetric(Type::Numeric(6), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(6), Type::Generic(4)),
+                Constraint::Symmetric(Type::Generic(4), Type::Generic(5))
+            ])
+        );
+
         assert_eq!(rest, &[]);
     }
 }
