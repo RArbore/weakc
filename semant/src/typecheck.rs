@@ -36,6 +36,15 @@ pub enum Type {
     Numeric(u32),
 }
 
+impl Type {
+    fn is_gen(&self) -> Option<u32> {
+        match self {
+            Type::Generic(var) | Type::Numeric(var) => Some(*var),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum TypedASTStmt<'a> {
     Block(&'a bump::List<'a, TypedASTStmt<'a>>),
@@ -107,7 +116,9 @@ pub fn typecheck_program<'a>(
 ) -> TypeResult<&'a bump::List<'a, TypedASTStmt<'a>>> {
     let mut context = TypeContext::new(&bump);
     let unconstrained = context.generate_unconstrained_tree(program, bump)?;
+    let num_pure_generics = context.num_generics;
     context.generate_constraints_tree(unconstrained)?;
+    let types = context.constrain_types(num_pure_generics, bump)?;
     Err("Unimplemented!")
 }
 
@@ -620,6 +631,69 @@ impl<'a> TypeContext<'a> {
             }
         }
     }
+
+    fn constrain_types(
+        &mut self,
+        num_pure_generics: u32,
+        bump: &'a bump::BumpAllocator,
+    ) -> TypeResult<&'a [Type]> {
+        let types = unsafe { bump.alloc_slice_raw(self.num_generics as usize) };
+        for i in 0..self.num_generics {
+            types[i as usize] = if i < num_pure_generics {
+                Type::Generic(i)
+            } else {
+                Type::Numeric(i)
+            };
+        }
+
+        let traverse = |mut idx: u32, types: &[Type]| {
+            while let Some(new_idx) = types[idx as usize].is_gen() {
+                if new_idx == idx {
+                    return idx as usize;
+                } else {
+                    idx = new_idx;
+                }
+            }
+            return idx as usize;
+        };
+
+        let get_concrete_type = |ty: Type, types: &[Type]| {
+            if let Some(idx) = ty.is_gen() {
+                types[traverse(idx, types)]
+            } else {
+                ty
+            }
+        };
+
+        for i in 0..self.constraints.len() {
+            match self.constraints.at(i) {
+                Constraint::Symmetric(Type::Nil, Type::Nil) => {}
+                Constraint::Symmetric(Type::Number, Type::Number) => {}
+                Constraint::Symmetric(Type::Tensor, Type::Tensor) => {}
+                Constraint::Symmetric(Type::Boolean, Type::Boolean) => {}
+                Constraint::Symmetric(Type::String, Type::String) => {}
+                Constraint::Symmetric(ty1, ty2) => {
+                    let joined = join_types(
+                        get_concrete_type(*ty1, types),
+                        get_concrete_type(*ty2, types),
+                    )?;
+                    if let Some(idx) = ty1.is_gen() {
+                        types[traverse(idx, types)] = joined;
+                    }
+                    if let Some(idx) = ty2.is_gen() {
+                        types[traverse(idx, types)] = joined;
+                    }
+                }
+                _ => panic!(),
+            }
+        }
+
+        for i in 0..types.len() {
+            types[i] = types[traverse(i as u32, types)];
+        }
+
+        Ok(types)
+    }
 }
 
 #[cfg(test)]
@@ -816,6 +890,136 @@ mod tests {
                 Constraint::Symmetric(Type::Numeric(7), Type::Number),
                 Constraint::Symmetric(Type::Numeric(7), Type::Generic(5))
             ])
+        );
+
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_constraints5() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"f myop (x, y) { r x + y; } p myop(1, 2); p myop([1], [2]);",
+            &bump,
+        )
+        .unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
+                Constraint::Symmetric(Type::Generic(1), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(8), Type::Generic(2)),
+                Constraint::Symmetric(Type::Numeric(8), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(8), Type::Generic(4)),
+                Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
+                Constraint::Conformant(Type::Generic(0), Type::Number),
+                Constraint::Conformant(Type::Generic(1), Type::Number),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(6)),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Conformant(Type::Generic(0), Type::Tensor),
+                Constraint::Conformant(Type::Generic(1), Type::Tensor),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(7))
+            ])
+        );
+
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_types1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"p N; p [10, -1.0, 3, 4] sa [2, 2]; p 10 - 3; p \"hello\";",
+            &bump,
+        )
+        .unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Generic(0)),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Generic(0)),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Number, Type::Number),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Tensor),
+                Constraint::Symmetric(Type::Tensor, Type::Generic(1)),
+                Constraint::Symmetric(Type::Numeric(3), Type::Number),
+                Constraint::Symmetric(Type::Numeric(3), Type::Number),
+                Constraint::Symmetric(Type::Numeric(3), Type::Generic(2))
+            ])
+        );
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[Type::Number, Type::Tensor, Type::Number, Type::Number]
+        );
+
+        assert_eq!(rest, &[]);
+    }
+
+    #[test]
+    fn generate_types2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"f myop1(x, y) { r x + y; } f myop2(x) { r x + 3; } p N;",
+            &bump,
+        )
+        .unwrap();
+        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
+                Constraint::Symmetric(Type::Generic(1), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(10), Type::Generic(2)),
+                Constraint::Symmetric(Type::Numeric(10), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(10), Type::Generic(4)),
+                Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
+                Constraint::Symmetric(Type::Generic(6), Type::Generic(7)),
+                Constraint::Symmetric(Type::Numeric(11), Type::Generic(7)),
+                Constraint::Symmetric(Type::Numeric(11), Type::Number),
+                Constraint::Symmetric(Type::Numeric(11), Type::Generic(8)),
+                Constraint::Symmetric(Type::Generic(8), Type::Generic(9))
+            ])
+        );
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[
+                Type::Numeric(10),
+                Type::Numeric(10),
+                Type::Numeric(10),
+                Type::Numeric(10),
+                Type::Numeric(10),
+                Type::Numeric(10),
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Numeric(10),
+                Type::Number
+            ]
         );
 
         assert_eq!(rest, &[]);
