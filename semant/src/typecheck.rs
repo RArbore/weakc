@@ -667,11 +667,6 @@ impl<'a> TypeContext<'a> {
 
         for i in 0..self.constraints.len() {
             match self.constraints.at(i) {
-                Constraint::Symmetric(Type::Nil, Type::Nil) => {}
-                Constraint::Symmetric(Type::Number, Type::Number) => {}
-                Constraint::Symmetric(Type::Tensor, Type::Tensor) => {}
-                Constraint::Symmetric(Type::Boolean, Type::Boolean) => {}
-                Constraint::Symmetric(Type::String, Type::String) => {}
                 Constraint::Symmetric(ty1, ty2) => {
                     let joined = join_types(
                         get_concrete_type(*ty1, types),
@@ -684,7 +679,15 @@ impl<'a> TypeContext<'a> {
                         types[traverse(idx, types)] = joined;
                     }
                 }
-                _ => panic!(),
+                Constraint::Conformant(ty1, ty2) => {
+                    let conformed = is_conforming(
+                        get_concrete_type(*ty1, types),
+                        get_concrete_type(*ty2, types),
+                    )?;
+                    if let Some(idx) = ty2.is_gen() {
+                        types[traverse(idx, types)] = conformed;
+                    }
+                }
             }
         }
 
@@ -704,7 +707,7 @@ mod tests {
     fn generate_unconstrained1() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f myop (x, y) { r x + y; }", &bump).unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
@@ -726,15 +729,13 @@ mod tests {
                 Type::Generic(5),
             )])
         );
-
-        assert_eq!(rest, &[]);
     }
 
     #[test]
     fn generate_unconstrained2() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f myop (x, y) { r x + y; p x; }", &bump).unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump);
@@ -743,14 +744,13 @@ mod tests {
             unconstrained,
             Err("ERROR: Return statement found before end of function.")
         );
-        assert_eq!(rest, &[]);
     }
 
     #[test]
     fn generate_unconstrained3() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f myop (x, y) { 3 = x; }", &bump).unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump);
@@ -759,14 +759,13 @@ mod tests {
             unconstrained,
             Err("ERROR: Can only assign to a variable or indexing into a tensor variable.")
         );
-        assert_eq!(rest, &[]);
     }
 
     #[test]
     fn generate_constraints1() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f myop (x, y) { r x; }", &bump).unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
@@ -778,15 +777,13 @@ mod tests {
                 Constraint::Symmetric(Type::Generic(2), Type::Generic(3))
             ])
         );
-
-        assert_eq!(rest, &[]);
     }
 
     #[test]
     fn generate_constraints2() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f myop (x, y) { r x + y; }", &bump).unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
@@ -802,8 +799,6 @@ mod tests {
                 Constraint::Symmetric(Type::Generic(4), Type::Generic(5))
             ])
         );
-
-        assert_eq!(rest, &[]);
     }
 
     #[test]
@@ -814,7 +809,7 @@ mod tests {
             &bump,
         )
         .unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
@@ -833,8 +828,6 @@ mod tests {
                 Constraint::Conformant(Type::Generic(5), Type::Generic(6))
             ])
         );
-
-        assert_eq!(rest, &[]);
     }
 
     #[test]
@@ -845,7 +838,7 @@ mod tests {
             &bump,
         )
         .unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
@@ -891,8 +884,6 @@ mod tests {
                 Constraint::Symmetric(Type::Numeric(7), Type::Generic(5))
             ])
         );
-
-        assert_eq!(rest, &[]);
     }
 
     #[test]
@@ -903,7 +894,7 @@ mod tests {
             &bump,
         )
         .unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
@@ -927,8 +918,6 @@ mod tests {
                 Constraint::Conformant(Type::Generic(5), Type::Generic(7))
             ])
         );
-
-        assert_eq!(rest, &[]);
     }
 
     #[test]
@@ -939,38 +928,17 @@ mod tests {
             &bump,
         )
         .unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
         let num_pure_generics = context.num_generics;
         context.generate_constraints_tree(unconstrained).unwrap();
-        assert_eq!(
-            context.constraints,
-            bump.create_list_with(&[
-                Constraint::Symmetric(Type::Number, Type::Number),
-                Constraint::Symmetric(Type::Number, Type::Generic(0)),
-                Constraint::Symmetric(Type::Number, Type::Number),
-                Constraint::Symmetric(Type::Number, Type::Generic(0)),
-                Constraint::Symmetric(Type::Number, Type::Number),
-                Constraint::Symmetric(Type::Number, Type::Number),
-                Constraint::Symmetric(Type::Number, Type::Number),
-                Constraint::Symmetric(Type::Number, Type::Number),
-                Constraint::Symmetric(Type::Tensor, Type::Tensor),
-                Constraint::Symmetric(Type::Tensor, Type::Tensor),
-                Constraint::Symmetric(Type::Tensor, Type::Generic(1)),
-                Constraint::Symmetric(Type::Numeric(3), Type::Number),
-                Constraint::Symmetric(Type::Numeric(3), Type::Number),
-                Constraint::Symmetric(Type::Numeric(3), Type::Generic(2))
-            ])
-        );
         let types = context.constrain_types(num_pure_generics, &bump).unwrap();
         assert_eq!(
             types,
             &[Type::Number, Type::Tensor, Type::Number, Type::Number]
         );
-
-        assert_eq!(rest, &[]);
     }
 
     #[test]
@@ -981,28 +949,12 @@ mod tests {
             &bump,
         )
         .unwrap();
-        let (ast, rest) = parse::parse_program(&tokens, &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
         let mut context = TypeContext::new(&bump);
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
         let num_pure_generics = context.num_generics;
         context.generate_constraints_tree(unconstrained).unwrap();
-        assert_eq!(
-            context.constraints,
-            bump.create_list_with(&[
-                Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
-                Constraint::Symmetric(Type::Generic(1), Type::Generic(3)),
-                Constraint::Symmetric(Type::Numeric(10), Type::Generic(2)),
-                Constraint::Symmetric(Type::Numeric(10), Type::Generic(3)),
-                Constraint::Symmetric(Type::Numeric(10), Type::Generic(4)),
-                Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
-                Constraint::Symmetric(Type::Generic(6), Type::Generic(7)),
-                Constraint::Symmetric(Type::Numeric(11), Type::Generic(7)),
-                Constraint::Symmetric(Type::Numeric(11), Type::Number),
-                Constraint::Symmetric(Type::Numeric(11), Type::Generic(8)),
-                Constraint::Symmetric(Type::Generic(8), Type::Generic(9))
-            ])
-        );
         let types = context.constrain_types(num_pure_generics, &bump).unwrap();
         assert_eq!(
             types,
@@ -1021,7 +973,33 @@ mod tests {
                 Type::Number
             ]
         );
+    }
 
-        assert_eq!(rest, &[]);
+    #[test]
+    fn generate_types3() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f myop(x, y) { r x + y; } p myop(3, 5);", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        assert_eq!(
+            context.constraints,
+            bump.create_list_with(&[
+                Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
+                Constraint::Symmetric(Type::Generic(1), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(7), Type::Generic(2)),
+                Constraint::Symmetric(Type::Numeric(7), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(7), Type::Generic(4)),
+                Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
+                Constraint::Conformant(Type::Generic(0), Type::Number),
+                Constraint::Conformant(Type::Generic(1), Type::Number),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(6))
+            ])
+        );
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(types, &[]);
     }
 }
