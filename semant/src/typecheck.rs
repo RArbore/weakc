@@ -97,12 +97,13 @@ pub enum TypedASTExpr<'a> {
 #[derive(Debug, PartialEq, Clone, Copy)]
 enum Constraint {
     Symmetric(Type, Type),
-    Conformant(Type, Type),
+    Conformant(Type, Type, u32),
 }
 
 #[derive(Debug, PartialEq)]
 struct TypeContext<'a> {
     num_generics: u32,
+    num_callsites: u32,
     constraints: &'a mut bump::List<'a, Constraint>,
     funcs: HashMap<&'a [u8], (&'a bump::List<'a, Type>, Type)>,
     ops: HashMap<&'a [u8], (Type, Type, Type)>,
@@ -133,27 +134,10 @@ fn join_types(ty1: Type, ty2: Type) -> TypeResult<Type> {
         (Type::Numeric(_), Type::Tensor) => Ok(Type::Tensor),
         (Type::Number, Type::Numeric(_)) => Ok(Type::Number),
         (Type::Tensor, Type::Numeric(_)) => Ok(Type::Tensor),
-        (Type::Numeric(v), Type::Numeric(_)) => Ok(Type::Numeric(v)),
-        (ty, Type::Generic(_)) => Ok(ty),
-        (Type::Generic(_), ty) => Ok(ty),
-        _ => Err("ERROR: Could not join incompatible types."),
-    }
-}
-
-fn is_conforming(constraint: Type, ty: Type) -> TypeResult<Type> {
-    match (constraint, ty) {
-        (Type::Nil, Type::Nil) => Ok(Type::Nil),
-        (Type::Number, Type::Number) => Ok(Type::Number),
-        (Type::Tensor, Type::Tensor) => Ok(Type::Tensor),
-        (Type::Boolean, Type::Boolean) => Ok(Type::Boolean),
-        (Type::String, Type::String) => Ok(Type::String),
-        (Type::Numeric(_), Type::Number) => Ok(Type::Number),
-        (Type::Numeric(_), Type::Tensor) => Ok(Type::Tensor),
-        (Type::Number, Type::Numeric(_)) => Ok(Type::Number),
-        (Type::Tensor, Type::Numeric(_)) => Ok(Type::Tensor),
         (Type::Numeric(_), Type::Numeric(v)) => Ok(Type::Numeric(v)),
         (Type::Generic(_), ty) => Ok(ty),
-        _ => Err("ERROR: Type is not conformant to requested type."),
+        (ty, Type::Generic(_)) => Ok(ty),
+        _ => Err("ERROR: Could not join incompatible types."),
     }
 }
 
@@ -180,6 +164,7 @@ impl<'a> TypeContext<'a> {
     fn new(bump: &'a bump::BumpAllocator) -> Self {
         TypeContext {
             num_generics: 0,
+            num_callsites: 0,
             constraints: bump.create_list(),
             funcs: HashMap::new(),
             ops: HashMap::new(),
@@ -489,9 +474,15 @@ impl<'a> TypeContext<'a> {
                             self.constraints.push(Constraint::Conformant(
                                 *params_ty.at(i),
                                 args.at(i).get_type(),
+                                self.num_callsites,
                             ));
                         }
-                        self.constraints.push(Constraint::Conformant(*ret_ty, *ty));
+                        self.constraints.push(Constraint::Conformant(
+                            *ret_ty,
+                            *ty,
+                            self.num_callsites,
+                        ));
+                        self.num_callsites += 1;
                         Ok(())
                     } else {
                         Err("ERROR: Attempted to call function with wrong number of arguments.")?
@@ -619,11 +610,19 @@ impl<'a> TypeContext<'a> {
                 self.generate_constraints_expr(left)?;
                 self.generate_constraints_expr(right)?;
                 if let Some((left_ty, right_ty, ret_ty)) = self.ops.get(op) {
+                    self.constraints.push(Constraint::Conformant(
+                        *left_ty,
+                        left.get_type(),
+                        self.num_callsites,
+                    ));
+                    self.constraints.push(Constraint::Conformant(
+                        *right_ty,
+                        right.get_type(),
+                        self.num_callsites,
+                    ));
                     self.constraints
-                        .push(Constraint::Conformant(*left_ty, left.get_type()));
-                    self.constraints
-                        .push(Constraint::Conformant(*right_ty, right.get_type()));
-                    self.constraints.push(Constraint::Conformant(*ret_ty, *ty));
+                        .push(Constraint::Conformant(*ret_ty, *ty, self.num_callsites));
+                    self.num_callsites += 1;
                     Ok(())
                 } else {
                     Err("ERROR: Attempted to use operation not currently in scope.")?
@@ -638,6 +637,8 @@ impl<'a> TypeContext<'a> {
         bump: &'a bump::BumpAllocator,
     ) -> TypeResult<&'a [Type]> {
         let types = unsafe { bump.alloc_slice_raw(self.num_generics as usize) };
+        let types_clone = unsafe { bump.alloc_slice_raw(self.num_generics as usize) };
+
         for i in 0..self.num_generics {
             types[i as usize] = if i < num_pure_generics {
                 Type::Generic(i)
@@ -665,35 +666,69 @@ impl<'a> TypeContext<'a> {
             }
         };
 
-        for i in 0..self.constraints.len() {
+        let cleanup_types = |types: &mut [Type]| {
+            for i in 0..types.len() {
+                types[i] = types[traverse(i as u32, types)];
+            }
+        };
+
+        let enforce_symmetric = |ty1: Type, ty2: Type, types: &mut [Type]| -> TypeResult<()> {
+            let joined = join_types(get_concrete_type(ty1, types), get_concrete_type(ty2, types))?;
+            if let Some(idx) = ty1.is_gen() {
+                types[traverse(idx, types)] = joined;
+            }
+            if let Some(idx) = ty2.is_gen() {
+                types[traverse(idx, types)] = joined;
+            }
+            Ok(())
+        };
+
+        let mut i = 0;
+
+        while i < self.constraints.len() {
             match self.constraints.at(i) {
                 Constraint::Symmetric(ty1, ty2) => {
-                    let joined = join_types(
-                        get_concrete_type(*ty1, types),
-                        get_concrete_type(*ty2, types),
-                    )?;
-                    if let Some(idx) = ty1.is_gen() {
-                        types[traverse(idx, types)] = joined;
-                    }
-                    if let Some(idx) = ty2.is_gen() {
-                        types[traverse(idx, types)] = joined;
-                    }
+                    enforce_symmetric(*ty1, *ty2, types)?;
+                    i += 1;
                 }
-                Constraint::Conformant(ty1, ty2) => {
-                    let conformed = is_conforming(
-                        get_concrete_type(*ty1, types),
-                        get_concrete_type(*ty2, types),
-                    )?;
-                    if let Some(idx) = ty2.is_gen() {
-                        types[traverse(idx, types)] = conformed;
+                Constraint::Conformant(_, _, callsite) => {
+                    let mut j = i;
+                    let mut constraints = vec![];
+                    while j < self.constraints.len() {
+                        match self.constraints.at(j) {
+                            Constraint::Conformant(ty1, ty2, future_callsite) => {
+                                if callsite != future_callsite {
+                                    break;
+                                } else {
+                                    constraints.push((ty1, ty2));
+                                }
+                            }
+                            _ => break,
+                        }
+                        j += 1;
                     }
+                    for k in 0..types.len() {
+                        types_clone[k] = types[k];
+                    }
+
+                    let mut latest_gen = -1;
+
+                    for (ty1, ty2) in constraints {
+                        enforce_symmetric(*ty1, *ty2, types)?;
+                        if let Some(var) = ty1.is_gen() {
+                            latest_gen = var as i64;
+                        }
+                    }
+
+                    for k in 0..=latest_gen {
+                        types[k as usize] = types_clone[k as usize];
+                    }
+                    i = j;
                 }
             }
         }
 
-        for i in 0..types.len() {
-            types[i] = types[traverse(i as u32, types)];
-        }
+        cleanup_types(types);
 
         Ok(types)
     }
@@ -823,9 +858,9 @@ mod tests {
                 Constraint::Symmetric(Type::Numeric(7), Type::Number),
                 Constraint::Symmetric(Type::Numeric(7), Type::Generic(4)),
                 Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
-                Constraint::Conformant(Type::Generic(0), Type::Number),
-                Constraint::Conformant(Type::Generic(1), Type::String),
-                Constraint::Conformant(Type::Generic(5), Type::Generic(6))
+                Constraint::Conformant(Type::Generic(0), Type::Number, 0),
+                Constraint::Conformant(Type::Generic(1), Type::String, 0),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(6), 0)
             ])
         );
     }
@@ -890,7 +925,7 @@ mod tests {
     fn generate_constraints5() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(
-            b"f myop (x, y) { r x + y; } p myop(1, 2); p myop([1], [2]);",
+            b"f myop (x, y) { r x + y; } p myop(1, 2); p myop([1], [2]); p myop(myop(4, 5), myop(myop(1, 1), 3));",
             &bump,
         )
         .unwrap();
@@ -904,18 +939,30 @@ mod tests {
             bump.create_list_with(&[
                 Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
                 Constraint::Symmetric(Type::Generic(1), Type::Generic(3)),
-                Constraint::Symmetric(Type::Numeric(8), Type::Generic(2)),
-                Constraint::Symmetric(Type::Numeric(8), Type::Generic(3)),
-                Constraint::Symmetric(Type::Numeric(8), Type::Generic(4)),
+                Constraint::Symmetric(Type::Numeric(12), Type::Generic(2)),
+                Constraint::Symmetric(Type::Numeric(12), Type::Generic(3)),
+                Constraint::Symmetric(Type::Numeric(12), Type::Generic(4)),
                 Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
-                Constraint::Conformant(Type::Generic(0), Type::Number),
-                Constraint::Conformant(Type::Generic(1), Type::Number),
-                Constraint::Conformant(Type::Generic(5), Type::Generic(6)),
+                Constraint::Conformant(Type::Generic(0), Type::Number, 0),
+                Constraint::Conformant(Type::Generic(1), Type::Number, 0),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(6), 0),
                 Constraint::Symmetric(Type::Number, Type::Number),
                 Constraint::Symmetric(Type::Number, Type::Number),
-                Constraint::Conformant(Type::Generic(0), Type::Tensor),
-                Constraint::Conformant(Type::Generic(1), Type::Tensor),
-                Constraint::Conformant(Type::Generic(5), Type::Generic(7))
+                Constraint::Conformant(Type::Generic(0), Type::Tensor, 1),
+                Constraint::Conformant(Type::Generic(1), Type::Tensor, 1),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(7), 1),
+                Constraint::Conformant(Type::Generic(0), Type::Number, 2),
+                Constraint::Conformant(Type::Generic(1), Type::Number, 2),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(8), 2),
+                Constraint::Conformant(Type::Generic(0), Type::Number, 3),
+                Constraint::Conformant(Type::Generic(1), Type::Number, 3),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(9), 3),
+                Constraint::Conformant(Type::Generic(0), Type::Generic(9), 4),
+                Constraint::Conformant(Type::Generic(1), Type::Number, 4),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(10), 4),
+                Constraint::Conformant(Type::Generic(0), Type::Generic(8), 5),
+                Constraint::Conformant(Type::Generic(1), Type::Generic(10), 5),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(11), 5)
             ])
         );
     }
@@ -978,6 +1025,65 @@ mod tests {
     #[test]
     fn generate_types3() {
         let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"[3, 5] ^ [1, 2]; p N; p [1, 2, 3] + [3 ^ 7 / 8, 2, 1 + 5]; p \"hello there\";",
+            &bump,
+        )
+        .unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Tensor,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Tensor
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_types4() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"o op(x, y) { r x ^ (y + 3); }", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_types5() {
+        let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f myop(x, y) { r x + y; } p myop(3, 5);", &bump).unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
 
@@ -994,12 +1100,24 @@ mod tests {
                 Constraint::Symmetric(Type::Numeric(7), Type::Generic(3)),
                 Constraint::Symmetric(Type::Numeric(7), Type::Generic(4)),
                 Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
-                Constraint::Conformant(Type::Generic(0), Type::Number),
-                Constraint::Conformant(Type::Generic(1), Type::Number),
-                Constraint::Conformant(Type::Generic(5), Type::Generic(6))
+                Constraint::Conformant(Type::Generic(0), Type::Number, 0),
+                Constraint::Conformant(Type::Generic(1), Type::Number, 0),
+                Constraint::Conformant(Type::Generic(5), Type::Generic(6), 0)
             ])
         );
         let types = context.constrain_types(num_pure_generics, &bump).unwrap();
-        assert_eq!(types, &[]);
+        assert_eq!(
+            types,
+            &[
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number
+            ]
+        );
     }
 }
