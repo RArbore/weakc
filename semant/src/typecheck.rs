@@ -648,12 +648,17 @@ impl<'a> TypeContext<'a> {
         }
 
         let traverse = |mut idx: u32, types: &[Type]| {
+            let mut num_iters = 0;
             while let Some(new_idx) = types[idx as usize].is_gen() {
+                if num_iters > types.len() {
+                    return idx as usize;
+                }
                 if new_idx == idx {
                     return idx as usize;
                 } else {
                     idx = new_idx;
                 }
+                num_iters += 1;
             }
             return idx as usize;
         };
@@ -711,16 +716,20 @@ impl<'a> TypeContext<'a> {
                         types_clone[k] = types[k];
                     }
 
+                    let mut first_gen = -1;
                     let mut latest_gen = -1;
 
                     for (ty1, ty2) in constraints {
                         enforce_symmetric(*ty1, *ty2, types)?;
                         if let Some(var) = ty1.is_gen() {
+                            if first_gen == -1 {
+                                first_gen = var as i64;
+                            }
                             latest_gen = var as i64;
                         }
                     }
 
-                    for k in 0..=latest_gen {
+                    for k in std::cmp::max(0, first_gen)..=latest_gen {
                         types[traverse(k as u32, types)] =
                             types_clone[traverse(k as u32, types_clone)];
                     }
@@ -1179,6 +1188,71 @@ mod tests {
                 Type::Numeric(19),
                 Type::Numeric(20),
                 Type::Numeric(20)
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_types8() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f ab(x) { f cd(x) { r x; } r cd(x); } p ab(5);", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[
+                Type::Generic(6),
+                Type::Generic(6),
+                Type::Generic(6),
+                Type::Generic(6),
+                Type::Generic(6),
+                Type::Generic(6),
+                Type::Generic(6),
+                Type::Number
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_types9() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"f ab(x) { f cd(x, y) { f ef(x) { r x; } r ef(x) + y; } r cd(3, x); } p ab(5);",
+            &bump,
+        )
+        .unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        println!("{:?}", unconstrained);
+        assert_eq!(
+            types,
+            &[
+                Type::Number,
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Numeric(15),
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Numeric(15),
             ]
         );
     }
