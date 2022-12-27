@@ -721,7 +721,8 @@ impl<'a> TypeContext<'a> {
                     }
 
                     for k in 0..=latest_gen {
-                        types[k as usize] = types_clone[k as usize];
+                        types[traverse(k as u32, types)] =
+                            types_clone[traverse(k as u32, types_clone)];
                     }
                     i = j;
                 }
@@ -1091,32 +1092,93 @@ mod tests {
         let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
         let num_pure_generics = context.num_generics;
         context.generate_constraints_tree(unconstrained).unwrap();
-        assert_eq!(
-            context.constraints,
-            bump.create_list_with(&[
-                Constraint::Symmetric(Type::Generic(0), Type::Generic(2)),
-                Constraint::Symmetric(Type::Generic(1), Type::Generic(3)),
-                Constraint::Symmetric(Type::Numeric(7), Type::Generic(2)),
-                Constraint::Symmetric(Type::Numeric(7), Type::Generic(3)),
-                Constraint::Symmetric(Type::Numeric(7), Type::Generic(4)),
-                Constraint::Symmetric(Type::Generic(4), Type::Generic(5)),
-                Constraint::Conformant(Type::Generic(0), Type::Number, 0),
-                Constraint::Conformant(Type::Generic(1), Type::Number, 0),
-                Constraint::Conformant(Type::Generic(5), Type::Generic(6), 0)
-            ])
-        );
         let types = context.constrain_types(num_pure_generics, &bump).unwrap();
         assert_eq!(
             types,
             &[
+                Type::Numeric(7),
+                Type::Numeric(7),
+                Type::Numeric(7),
+                Type::Numeric(7),
+                Type::Numeric(7),
+                Type::Numeric(7),
+                Type::Number,
+                Type::Numeric(7)
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_types6() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"f myop(x, y) { r x + y; } p myop(3, 5); p myop([3], [5]);",
+            &bump,
+        )
+        .unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[
+                Type::Numeric(8),
+                Type::Numeric(8),
+                Type::Numeric(8),
+                Type::Numeric(8),
+                Type::Numeric(8),
+                Type::Numeric(8),
+                Type::Number,
+                Type::Tensor,
+                Type::Numeric(8)
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_types7() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"o myop(x, y) { r x + y; } f xyz(x, y, z, ww) { p ww; r x + y + z; } p xyz(5, 2 myop 8, 3, N);",
+            &bump,
+        )
+        .unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[
+                Type::Numeric(19),
+                Type::Numeric(19),
+                Type::Numeric(19),
+                Type::Numeric(19),
+                Type::Numeric(19),
+                Type::Numeric(19),
+                Type::Numeric(20),
+                Type::Numeric(20),
+                Type::Numeric(20),
+                Type::Generic(10),
+                Type::Generic(10),
+                Type::Numeric(20),
+                Type::Numeric(20),
+                Type::Numeric(20),
+                Type::Numeric(20),
+                Type::Numeric(20),
+                Type::Numeric(20),
                 Type::Number,
                 Type::Number,
-                Type::Number,
-                Type::Number,
-                Type::Number,
-                Type::Number,
-                Type::Number,
-                Type::Number
+                Type::Numeric(19),
+                Type::Numeric(20),
+                Type::Numeric(20)
             ]
         );
     }
