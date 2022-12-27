@@ -233,7 +233,7 @@ impl<'a, T: Sized + Clone + PartialEq + fmt::Debug> List<'a, T> {
         } else {
             match &self.next {
                 Some(next) => next.at(idx - self.chunk.len()),
-                None => panic!("ERROR: Index {} out of bounds.", idx),
+                None => panic!("PANIC: Index {} out of bounds.", idx),
             }
         }
     }
@@ -244,7 +244,7 @@ impl<'a, T: Sized + Clone + PartialEq + fmt::Debug> List<'a, T> {
         } else {
             match &mut self.next {
                 Some(next) => next.at_mut(idx - self.chunk.len()),
-                None => panic!("ERROR: Index {} out of bounds.", idx),
+                None => panic!("PANIC: Index {} out of bounds.", idx),
             }
         }
     }

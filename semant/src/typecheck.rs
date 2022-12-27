@@ -111,16 +111,29 @@ struct TypeContext<'a> {
     ret_ty: Type,
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct TypedProgram<'a>(&'a bump::List<'a, TypedASTStmt<'a>>, &'a [Type]);
+
+impl<'a> TypedProgram<'a> {
+    pub fn get_type(&self, expr: &'a TypedASTExpr<'a>) -> Type {
+        if let Type::Generic(var) = expr.get_type() {
+            self.1[var as usize]
+        } else {
+            panic!("PANIC: Non-generic type in unconstrained typed AST.")
+        }
+    }
+}
+
 pub fn typecheck_program<'a>(
     program: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
-) -> TypeResult<(&'a bump::List<'a, TypedASTStmt<'a>>, &[Type])> {
+) -> TypeResult<TypedProgram> {
     let mut context = TypeContext::new(&bump);
     let unconstrained = context.generate_unconstrained_tree(program, bump)?;
     let num_pure_generics = context.num_generics;
     context.generate_constraints_tree(unconstrained)?;
     let types = context.constrain_types(num_pure_generics, bump)?;
-    Ok((unconstrained, types))
+    Ok(TypedProgram(unconstrained, types))
 }
 
 fn join_types(ty1: Type, ty2: Type) -> TypeResult<Type> {
@@ -1403,43 +1416,58 @@ mod tests {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f xyz(x, y) { r x + y; } p xyz(1, 2);", &bump).unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
-        let (tast, types) = typecheck_program(ast, &bump).unwrap();
+        let typed_program = typecheck_program(ast, &bump).unwrap();
         assert_eq!(
-            tast,
-            bump.create_list_with(&[
-                TypedASTStmt::Function(
-                    b"xyz" as &[u8],
-                    bump.create_list_with(&[b"x" as &[u8], b"y"]),
-                    bump.create_list_with(&[Type::Generic(0), Type::Generic(1)]),
-                    bump.alloc(TypedASTStmt::Block(bump.create_list_with(&[
-                        TypedASTStmt::Return(bump.alloc(TypedASTExpr::Binary(
-                            ASTBinaryOp::Add,
-                            bump.alloc(TypedASTExpr::Identifier(b"x" as &[u8], Type::Generic(2))),
-                            bump.alloc(TypedASTExpr::Identifier(b"y" as &[u8], Type::Generic(3))),
-                            Type::Generic(4)
-                        )))
-                    ]))),
-                    Type::Generic(5)
-                ),
-                TypedASTStmt::Print(bump.alloc(TypedASTExpr::Call(
-                    b"xyz" as &[u8],
-                    bump.create_list_with(&[TypedASTExpr::Number(1.0), TypedASTExpr::Number(2.0)]),
-                    Type::Generic(6)
-                )))
-            ])
+            typed_program,
+            TypedProgram(
+                bump.create_list_with(&[
+                    TypedASTStmt::Function(
+                        b"xyz" as &[u8],
+                        bump.create_list_with(&[b"x" as &[u8], b"y"]),
+                        bump.create_list_with(&[Type::Generic(0), Type::Generic(1)]),
+                        bump.alloc(TypedASTStmt::Block(bump.create_list_with(&[
+                            TypedASTStmt::Return(bump.alloc(TypedASTExpr::Binary(
+                                ASTBinaryOp::Add,
+                                bump.alloc(TypedASTExpr::Identifier(
+                                    b"x" as &[u8],
+                                    Type::Generic(2)
+                                )),
+                                bump.alloc(TypedASTExpr::Identifier(
+                                    b"y" as &[u8],
+                                    Type::Generic(3)
+                                )),
+                                Type::Generic(4)
+                            )))
+                        ]))),
+                        Type::Generic(5)
+                    ),
+                    TypedASTStmt::Print(bump.alloc(TypedASTExpr::Call(
+                        b"xyz" as &[u8],
+                        bump.create_list_with(&[
+                            TypedASTExpr::Number(1.0),
+                            TypedASTExpr::Number(2.0)
+                        ]),
+                        Type::Generic(6)
+                    )))
+                ]),
+                &[
+                    Type::Numeric(7),
+                    Type::Numeric(7),
+                    Type::Numeric(7),
+                    Type::Numeric(7),
+                    Type::Numeric(7),
+                    Type::Numeric(7),
+                    Type::Number,
+                    Type::Numeric(7)
+                ]
+            ),
         );
-        assert_eq!(
-            types,
-            &[
-                Type::Numeric(7),
-                Type::Numeric(7),
-                Type::Numeric(7),
-                Type::Numeric(7),
-                Type::Numeric(7),
-                Type::Numeric(7),
-                Type::Number,
-                Type::Numeric(7)
-            ]
+        let some_expr = TypedASTExpr::Binary(
+            ASTBinaryOp::Add,
+            bump.alloc(TypedASTExpr::Identifier(b"x" as &[u8], Type::Generic(2))),
+            bump.alloc(TypedASTExpr::Identifier(b"y" as &[u8], Type::Generic(3))),
+            Type::Generic(4),
         );
+        assert_eq!(typed_program.get_type(&some_expr), Type::Numeric(7));
     }
 }
