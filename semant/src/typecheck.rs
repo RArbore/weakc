@@ -1370,4 +1370,31 @@ mod tests {
             ]
         );
     }
+
+    #[test]
+    fn generate_types11() {
+        let bad_programs = &[
+            b"f ab(x) { f cd(x, y) { f ef(x) { r x; } r ef(x) + y; } r cd(3, x); } p ab(\"uh oh\");"
+                as &[_],
+            b"3 + N;",
+            b"3 + 9; f xx(x) { r x + 3; } xx([3]);",
+            b"f ab(x) { f cd(x, y) { f ef(x) { r x; } r ef(x) + y; } r cd([3], x); } p ab(3);",
+            b"(3 > 5) + 1;",
+            b"v 5 + 3;",
+            b"5 @ 3;",
+            b"\"hhh\" + \"aaa\";",
+        ];
+        for bad_program in bad_programs {
+            let bump = bump::BumpAllocator::new();
+            let tokens = parse::lex(bad_program, &bump).unwrap();
+            let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+            let mut context = TypeContext::new(&bump);
+            let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+            let num_pure_generics = context.num_generics;
+            context.generate_constraints_tree(unconstrained).unwrap();
+            let types = context.constrain_types(num_pure_generics, &bump);
+            assert_eq!(types, Err("ERROR: Could not join incompatible types."));
+        }
+    }
 }
