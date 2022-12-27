@@ -587,12 +587,14 @@ impl<'a> TypeContext<'a> {
                         self.constraints
                             .push(Constraint::Symmetric(Type::Number, right.get_type()));
                         self.constraints
-                            .push(Constraint::Symmetric(Type::Number, *ty));
+                            .push(Constraint::Symmetric(Type::Boolean, *ty));
                         Ok(())
                     }
                     ASTBinaryOp::EqualsEquals | ASTBinaryOp::NotEquals => {
                         self.constraints
                             .push(Constraint::Symmetric(left.get_type(), right.get_type()));
+                        self.constraints
+                            .push(Constraint::Symmetric(Type::Boolean, *ty));
                         Ok(())
                     }
                     ASTBinaryOp::And | ASTBinaryOp::Or => {
@@ -1233,7 +1235,6 @@ mod tests {
         let num_pure_generics = context.num_generics;
         context.generate_constraints_tree(unconstrained).unwrap();
         let types = context.constrain_types(num_pure_generics, &bump).unwrap();
-        println!("{:?}", unconstrained);
         assert_eq!(
             types,
             &[
@@ -1253,6 +1254,119 @@ mod tests {
                 Type::Number,
                 Type::Number,
                 Type::Numeric(15),
+            ]
+        );
+    }
+
+    #[test]
+    fn generate_types10() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);",
+            &bump,
+        )
+        .unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+
+        let mut context = TypeContext::new(&bump);
+        let unconstrained = context.generate_unconstrained_tree(ast, &bump).unwrap();
+        let num_pure_generics = context.num_generics;
+        context.generate_constraints_tree(unconstrained).unwrap();
+        let types = context.constrain_types(num_pure_generics, &bump).unwrap();
+        assert_eq!(
+            types,
+            &[
+                Type::Tensor,
+                Type::Tensor,
+                Type::Tensor,
+                Type::Tensor,
+                Type::Number,
+                Type::Tensor,
+                Type::Tensor,
+                Type::Number,
+                Type::Boolean,
+                Type::Tensor,
+                Type::Tensor,
+                Type::Number,
+                Type::Tensor,
+                Type::Tensor,
+                Type::Number,
+                Type::Boolean,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Boolean,
+                Type::Number,
+                Type::Number,
+                Type::Boolean,
+                Type::Tensor,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Boolean,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Tensor,
+                Type::Tensor,
+                Type::Number,
+                Type::Boolean,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Boolean,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Boolean,
+                Type::Tensor,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Tensor,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number,
+                Type::Number
             ]
         );
     }
