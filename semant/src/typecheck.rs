@@ -112,17 +112,7 @@ struct TypeContext<'a> {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct TypedProgram<'a>(&'a bump::List<'a, TypedASTStmt<'a>>, &'a [Type]);
-
-impl<'a> TypedProgram<'a> {
-    pub fn get_type(&self, expr: &'a TypedASTExpr<'a>) -> Type {
-        if let Type::Generic(var) = expr.get_type() {
-            self.1[var as usize]
-        } else {
-            panic!("PANIC: Non-generic type in unconstrained typed AST.")
-        }
-    }
-}
+pub struct TypedProgram<'a>(pub &'a bump::List<'a, TypedASTStmt<'a>>, pub &'a [Type]);
 
 pub fn typecheck_program<'a>(
     program: &'a bump::List<'a, ASTStmt<'a>>,
@@ -1462,12 +1452,5 @@ mod tests {
                 ]
             ),
         );
-        let some_expr = TypedASTExpr::Binary(
-            ASTBinaryOp::Add,
-            bump.alloc(TypedASTExpr::Identifier(b"x" as &[u8], Type::Generic(2))),
-            bump.alloc(TypedASTExpr::Identifier(b"y" as &[u8], Type::Generic(3))),
-            Type::Generic(4),
-        );
-        assert_eq!(typed_program.get_type(&some_expr), Type::Numeric(7));
     }
 }

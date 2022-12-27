@@ -307,6 +307,19 @@ impl<T: Sized + PartialEq + fmt::Debug> fmt::Debug for List<'_, T> {
     }
 }
 
+#[macro_export]
+macro_rules! bump_list {
+    ($b:ident, $($x:expr),*) => {
+        {
+            let list = $b.create_list();
+            $(
+                list.push($x);
+            )*
+                list
+        }
+    };
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

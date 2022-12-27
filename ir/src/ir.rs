@@ -89,7 +89,7 @@ pub enum IRInstruction<'a> {
     BranchCond(IRRegister, IRBasicBlockID, IRBasicBlockID),
     Call(IRRegister, IRFunctionID, &'a bump::List<'a, IRRegister>),
     Print(IRRegister),
-    IR(IRRegister),
+    Verify(IRRegister),
     Return(IRRegister),
 }
 

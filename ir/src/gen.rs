@@ -19,28 +19,41 @@ extern crate semant;
 use std::collections::HashMap;
 
 use crate::*;
+use bump::bump_list;
 use parse::ASTBinaryOp;
 use parse::ASTUnaryOp;
 use semant::Type;
 use semant::TypedASTExpr;
 use semant::TypedASTStmt;
+use semant::TypedProgram;
 
-pub fn irgen<'a>(
-    program: &'a bump::List<'a, TypedASTStmt<'a>>,
-    bump: &'a bump::BumpAllocator,
-) -> IRModule {
+const TEMP_BUF_SIZE: usize = 64;
+
+pub fn irgen<'a>(program: TypedProgram<'a>, bump: &'a bump::BumpAllocator) -> IRModule<'a> {
     let mut context = IRGenContext::new(bump);
     context.irgen_program(program);
     context.module
 }
 
+fn convert_type(ty: Type) -> IRType {
+    match ty {
+        Type::Nil => IRType::Nil,
+        Type::Number => IRType::Number,
+        Type::Tensor => IRType::Tensor,
+        Type::Boolean => IRType::Boolean,
+        Type::String => IRType::String,
+        _ => panic!("PANIC: Can't convert type variable to concrete IR type."),
+    }
+}
+
 struct IRGenContext<'a> {
     module: IRModule<'a>,
+    ast_types: &'a [Type],
     curr_func: IRFunctionID,
     curr_block: IRBasicBlockID,
     curr_vars: HashMap<&'a [u8], IRRegister>,
     curr_num_regs: IRRegisterID,
-    funcs_to_gen: HashMap<
+    func_defs: HashMap<
         &'a [u8],
         (
             &'a [u8],
@@ -50,6 +63,7 @@ struct IRGenContext<'a> {
             Type,
         ),
     >,
+    called_funcs: HashMap<&'a [u8], IRFunctionID>,
     bump: &'a bump::BumpAllocator,
 }
 
@@ -69,11 +83,13 @@ impl<'a> IRGenContext<'a> {
             module: IRModule {
                 funcs: bump.create_list(),
             },
+            ast_types: &[],
             curr_func: 0,
             curr_block: 0,
             curr_vars: HashMap::new(),
             curr_num_regs: 0,
-            funcs_to_gen: HashMap::new(),
+            func_defs: HashMap::new(),
+            called_funcs: HashMap::new(),
             bump,
         };
         context.module.funcs.push(func);
@@ -116,13 +132,80 @@ impl<'a> IRGenContext<'a> {
         self.get_curr_block_mut().insts.push(inst);
     }
 
-    fn irgen_program(&mut self, program: &'a bump::List<'a, TypedASTStmt<'a>>) {
-        for i in 0..program.len() {
-            self.irgen_stmt(program.at(i));
+    fn get_type(&self, expr: &'a TypedASTExpr<'a>) -> Type {
+        if let Type::Generic(var) = expr.get_type() {
+            self.ast_types[var as usize]
+        } else if let Type::Numeric(_) = expr.get_type() {
+            panic!("PANIC: Numeric type variable in unconstrained typed AST.")
+        } else {
+            expr.get_type()
         }
     }
 
-    fn irgen_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {}
+    fn get_irfunc_name(
+        &self,
+        func: &'a [u8],
+        args: &'a bump::List<'a, IRRegister>,
+        func_or_op: bool,
+    ) -> &'a [u8] {
+        let size = 3 + func.len() + args.len();
+        let name = unsafe { self.bump.alloc_slice_raw(size) };
+        name[0] = b'@';
+        name[1] = if func_or_op { b'f' } else { b'o' };
+        name[2] = b'_';
+        for i in 0..func.len() {
+            name[i + 1] = func[i];
+        }
+        for i in 0..args.len() {
+            name[i + func.len() + 1] = match args.at(i).1 {
+                IRType::Nil => 0,
+                IRType::Boolean => 1,
+                IRType::String => 2,
+                IRType::Number => 3,
+                IRType::Tensor => 4,
+            };
+        }
+        name
+    }
+
+    fn irgen_program(&mut self, program: TypedProgram<'a>) {
+        self.ast_types = program.1;
+        for i in 0..program.0.len() {
+            self.irgen_stmt(program.0.at(i));
+        }
+    }
+
+    fn irgen_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {
+        match stmt {
+            TypedASTStmt::Block(stmts) => {
+                for i in 0..stmts.len() {
+                    self.irgen_stmt(stmts.at(i));
+                }
+            }
+            TypedASTStmt::Print(expr) => {
+                let reg = self.irgen_expr(expr);
+                self.add_inst(IRInstruction::Print(reg));
+            }
+            TypedASTStmt::Return(expr) => {
+                let reg = self.irgen_expr(expr);
+                self.add_inst(IRInstruction::Return(reg));
+            }
+            TypedASTStmt::Verify(expr) => {
+                let reg = self.irgen_expr(expr);
+                self.add_inst(IRInstruction::Verify(reg));
+            }
+            TypedASTStmt::Variable(name, expr) => {
+                let reg = self.irgen_expr(expr);
+                let var_reg = self.fresh_reg(convert_type(self.get_type(expr)));
+                self.curr_vars.insert(name, var_reg);
+                self.add_inst(IRInstruction::Copy(var_reg, reg));
+            }
+            TypedASTStmt::Expression(expr) => {
+                self.irgen_expr(expr);
+            }
+            _ => panic!(),
+        }
+    }
 
     fn irgen_expr(&mut self, expr: &'a TypedASTExpr<'a>) -> IRRegister {
         match expr {
@@ -131,7 +214,84 @@ impl<'a> IRGenContext<'a> {
                 self.add_inst(IRInstruction::Immediate(reg, IRValue::Nil));
                 reg
             }
+            TypedASTExpr::Boolean(v) => {
+                let reg = self.fresh_reg(IRType::Boolean);
+                self.add_inst(IRInstruction::Immediate(reg, IRValue::Boolean(*v)));
+                reg
+            }
+            TypedASTExpr::Number(v) => {
+                let reg = self.fresh_reg(IRType::Number);
+                self.add_inst(IRInstruction::Immediate(reg, IRValue::Number(*v)));
+                reg
+            }
+            TypedASTExpr::String(v) => {
+                let reg = self.fresh_reg(IRType::String);
+                self.add_inst(IRInstruction::Immediate(reg, IRValue::String(*v)));
+                reg
+            }
+            TypedASTExpr::Identifier(v, _) => *self.curr_vars.get(v).unwrap(),
+            TypedASTExpr::Call(func, args, ty) => {
+                let arg_regs = self.bump.create_list();
+                for i in 0..args.len() {
+                    arg_regs.push(self.irgen_expr(args.at(i)));
+                }
+                let result_reg = self.fresh_reg(convert_type(*ty));
+                let mut cp = self.bump.create_checkpoint();
+                let func_name = self.get_irfunc_name(func, arg_regs, true);
+                let func_id = self
+                    .called_funcs
+                    .get(func_name)
+                    .map(|x| *x)
+                    .unwrap_or_else(|| {
+                        let func_id = self.called_funcs.len() as u32;
+                        self.called_funcs.insert(func_name, func_id);
+                        cp.commit();
+                        func_id
+                    });
+                self.add_inst(IRInstruction::Call(result_reg, func_id, arg_regs));
+                result_reg
+            }
             _ => panic!(),
         }
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn irgen1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"a x = 0; p x;", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+        let ir_program = irgen(typed_program, &bump);
+        assert_eq!(
+            ir_program,
+            IRModule {
+                funcs: bump_list!(
+                    bump,
+                    IRFunction {
+                        name: b"@main",
+                        params: bump.create_list(),
+                        ret_type: IRType::Nil,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate(
+                                        (0, IRType::Number),
+                                        IRValue::Number(0.0)
+                                    ),
+                                    IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
+                                    IRInstruction::Print((1, IRType::Number))
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+        );
     }
 }
