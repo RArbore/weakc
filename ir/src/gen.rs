@@ -16,17 +16,103 @@ extern crate bump;
 extern crate parse;
 extern crate semant;
 
+use std::collections::HashMap;
+
 use crate::*;
 use parse::ASTBinaryOp;
 use parse::ASTUnaryOp;
+use semant::Type;
 use semant::TypedASTExpr;
 use semant::TypedASTStmt;
 
-pub fn irgen_program<'a>(
+pub fn irgen<'a>(
     program: &'a bump::List<'a, TypedASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
 ) -> IRModule {
-    IRModule {
-        funcs: bump.create_list(),
+    let mut context = IRGenContext::new(bump);
+    context.irgen_program(program);
+    context.module
+}
+
+struct IRGenContext<'a> {
+    module: IRModule<'a>,
+    curr_func: IRFunctionID,
+    curr_block: IRBasicBlockID,
+    curr_vars: HashMap<&'a [u8], IRRegister>,
+    funcs_to_gen: HashMap<
+        &'a [u8],
+        (
+            &'a [u8],
+            &'a bump::List<'a, &'a [u8]>,
+            &'a bump::List<'a, Type>,
+            &'a TypedASTStmt<'a>,
+            Type,
+        ),
+    >,
+    bump: &'a bump::BumpAllocator,
+}
+
+impl<'a> IRGenContext<'a> {
+    fn new(bump: &'a bump::BumpAllocator) -> Self {
+        let block = IRBasicBlock {
+            insts: bump.create_list(),
+        };
+        let func = IRFunction {
+            name: b"@main",
+            params: bump.create_list(),
+            ret_type: IRType::Nil,
+            blocks: bump.create_list(),
+        };
+        func.blocks.push(block);
+        let context = IRGenContext {
+            module: IRModule {
+                funcs: bump.create_list(),
+            },
+            curr_func: 0,
+            curr_block: 0,
+            curr_vars: HashMap::new(),
+            funcs_to_gen: HashMap::new(),
+            bump,
+        };
+        context.module.funcs.push(func);
+        context
+    }
+
+    fn get_curr_func(&self) -> &IRFunction<'a> {
+        return self.module.funcs.at(self.curr_func as usize);
+    }
+
+    fn get_curr_func_mut(&mut self) -> &mut IRFunction<'a> {
+        return self.module.funcs.at_mut(self.curr_func as usize);
+    }
+
+    fn get_curr_block(&self) -> &IRBasicBlock<'a> {
+        return self
+            .module
+            .funcs
+            .at(self.curr_func as usize)
+            .blocks
+            .at(self.curr_block as usize);
+    }
+
+    fn get_curr_block_mut(&mut self) -> &mut IRBasicBlock<'a> {
+        return self
+            .module
+            .funcs
+            .at_mut(self.curr_func as usize)
+            .blocks
+            .at_mut(self.curr_block as usize);
+    }
+
+    fn irgen_program(&mut self, program: &'a bump::List<'a, TypedASTStmt<'a>>) {
+        for i in 0..program.len() {
+            self.irgen_stmt(program.at(i));
+        }
+    }
+
+    fn irgen_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {}
+
+    fn irgen_expr(&mut self, expr: &'a TypedASTExpr<'a>) -> IRRegister {
+        (0, IRType::Nil)
     }
 }

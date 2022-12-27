@@ -34,8 +34,9 @@ pub enum IRType {
     Tensor,
 }
 
-type IRRegister = (u32, IRType);
-type IRBasicBlockID = u32;
+pub type IRRegister = (u32, IRType);
+pub type IRFunctionID = u32;
+pub type IRBasicBlockID = u32;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum IRUnaryOp {
@@ -85,26 +86,26 @@ pub enum IRInstruction<'a> {
     Index(IRRegister, IRRegister, &'a bump::List<'a, IRRegister>),
     BranchUncond(IRBasicBlockID),
     BranchCond(IRRegister, IRBasicBlockID, IRBasicBlockID),
-    Call(IRRegister, &'a [u8], &'a bump::List<'a, IRRegister>),
+    Call(IRRegister, IRFunctionID, &'a bump::List<'a, IRRegister>),
     Print(IRRegister),
     IR(IRRegister),
     Return(IRRegister),
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct IRBasicBlock<'a> {
-    pub(crate) insts: &'a bump::List<'a, IRInstruction<'a>>,
+    pub(crate) insts: &'a mut bump::List<'a, IRInstruction<'a>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct IRFunction<'a> {
     pub(crate) name: &'a [u8],
     pub(crate) params: &'a bump::List<'a, IRRegister>,
     pub(crate) ret_type: IRType,
-    pub(crate) blocks: &'a bump::List<'a, IRBasicBlock<'a>>,
+    pub(crate) blocks: &'a mut bump::List<'a, IRBasicBlock<'a>>,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq)]
 pub struct IRModule<'a> {
-    pub(crate) funcs: &'a bump::List<'a, IRFunction<'a>>,
+    pub(crate) funcs: &'a mut bump::List<'a, IRFunction<'a>>,
 }

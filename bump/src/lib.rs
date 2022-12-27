@@ -37,7 +37,7 @@ pub struct Checkpoint<'a> {
     commit: bool,
 }
 
-pub struct List<'a, T: Sized + Clone + PartialEq + fmt::Debug> {
+pub struct List<'a, T: Sized + PartialEq + fmt::Debug> {
     chunk: &'a mut [T],
     size: usize,
     next: Option<&'a mut List<'a, T>>,
@@ -117,7 +117,7 @@ impl BumpAllocator {
         return alloc;
     }
 
-    pub unsafe fn alloc_slice_raw<'a, 'b, T: Sized + Clone>(&'a self, len: usize) -> &'a mut [T] {
+    pub unsafe fn alloc_slice_raw<'a, 'b, T: Sized>(&'a self, len: usize) -> &'a mut [T] {
         let layout = alloc::alloc::Layout::new::<T>();
         let alloc = self.alloc_impl(layout.size() * len, layout.align()) as *mut T;
         slice::from_raw_parts_mut(alloc, len)
@@ -155,10 +155,7 @@ impl BumpAllocator {
             .truncate(mut_self.snapshots.len() - drop_num);
     }
 
-    fn create_list_impl<T: Sized + Clone + PartialEq + fmt::Debug>(
-        &self,
-        size: usize,
-    ) -> &mut List<T> {
+    fn create_list_impl<T: Sized + PartialEq + fmt::Debug>(&self, size: usize) -> &mut List<T> {
         assert!(size > 0, "ERROR: Cannot allocate a slice of size 0.");
         let layout = alloc::alloc::Layout::new::<T>();
         let alloc = self.alloc_impl(layout.size() * size, layout.align()) as *mut T;
@@ -171,7 +168,7 @@ impl BumpAllocator {
         })
     }
 
-    pub fn create_list<T: Sized + Clone + PartialEq + fmt::Debug>(&self) -> &mut List<T> {
+    pub fn create_list<T: Sized + PartialEq + fmt::Debug>(&self) -> &mut List<T> {
         self.create_list_impl(MINIMUM_LIST_ALLOC)
     }
 
@@ -208,7 +205,7 @@ impl Drop for Checkpoint<'_> {
     }
 }
 
-impl<'a, T: Sized + Clone + PartialEq + fmt::Debug> List<'a, T> {
+impl<'a, T: Sized + PartialEq + fmt::Debug> List<'a, T> {
     pub fn push(&mut self, item: T) {
         match &mut self.next {
             None => {
@@ -294,13 +291,13 @@ impl<'a, T: Sized + Clone + PartialEq + fmt::Debug> List<'a, T> {
     }
 }
 
-impl<T: Sized + Clone + PartialEq + fmt::Debug> PartialEq for List<'_, T> {
+impl<T: Sized + PartialEq + fmt::Debug> PartialEq for List<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.eq_impl(other, 0, 0)
     }
 }
 
-impl<T: Sized + Clone + PartialEq + fmt::Debug> fmt::Debug for List<'_, T> {
+impl<T: Sized + PartialEq + fmt::Debug> fmt::Debug for List<'_, T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut fmt_list = f.debug_list();
         for i in 0..self.len() {
