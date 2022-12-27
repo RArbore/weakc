@@ -39,6 +39,7 @@ struct IRGenContext<'a> {
     curr_func: IRFunctionID,
     curr_block: IRBasicBlockID,
     curr_vars: HashMap<&'a [u8], IRRegister>,
+    curr_num_regs: IRRegisterID,
     funcs_to_gen: HashMap<
         &'a [u8],
         (
@@ -71,6 +72,7 @@ impl<'a> IRGenContext<'a> {
             curr_func: 0,
             curr_block: 0,
             curr_vars: HashMap::new(),
+            curr_num_regs: 0,
             funcs_to_gen: HashMap::new(),
             bump,
         };
@@ -104,6 +106,16 @@ impl<'a> IRGenContext<'a> {
             .at_mut(self.curr_block as usize);
     }
 
+    fn fresh_reg(&mut self, ty: IRType) -> IRRegister {
+        let id = self.curr_num_regs;
+        self.curr_num_regs += 1;
+        (id, ty)
+    }
+
+    fn add_inst(&mut self, inst: IRInstruction<'a>) {
+        self.get_curr_block_mut().insts.push(inst);
+    }
+
     fn irgen_program(&mut self, program: &'a bump::List<'a, TypedASTStmt<'a>>) {
         for i in 0..program.len() {
             self.irgen_stmt(program.at(i));
@@ -113,6 +125,13 @@ impl<'a> IRGenContext<'a> {
     fn irgen_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {}
 
     fn irgen_expr(&mut self, expr: &'a TypedASTExpr<'a>) -> IRRegister {
-        (0, IRType::Nil)
+        match expr {
+            TypedASTExpr::Nil => {
+                let reg = self.fresh_reg(IRType::Nil);
+                self.add_inst(IRInstruction::Immediate(reg, IRValue::Nil));
+                reg
+            }
+            _ => panic!(),
+        }
     }
 }

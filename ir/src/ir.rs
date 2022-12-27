@@ -34,9 +34,10 @@ pub enum IRType {
     Tensor,
 }
 
-pub type IRRegister = (u32, IRType);
+pub type IRRegisterID = u32;
 pub type IRFunctionID = u32;
 pub type IRBasicBlockID = u32;
+pub type IRRegister = (IRRegisterID, IRType);
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum IRUnaryOp {
