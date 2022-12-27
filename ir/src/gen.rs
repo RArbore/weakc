@@ -12,8 +12,21 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod gen;
-pub mod ir;
+extern crate bump;
+extern crate parse;
+extern crate semant;
 
-pub use crate::gen::*;
-pub use crate::ir::*;
+use crate::*;
+use parse::ASTBinaryOp;
+use parse::ASTUnaryOp;
+use semant::TypedASTExpr;
+use semant::TypedASTStmt;
+
+pub fn irgen_program<'a>(
+    program: &'a bump::List<'a, TypedASTStmt<'a>>,
+    bump: &'a bump::BumpAllocator,
+) -> IRModule {
+    IRModule {
+        funcs: bump.create_list(),
+    }
+}

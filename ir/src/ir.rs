@@ -108,29 +108,3 @@ pub struct IRFunction<'a> {
 pub struct IRModule<'a> {
     pub(crate) funcs: &'a bump::List<'a, IRFunction<'a>>,
 }
-
-pub type IRResult<T> = Result<T, &'static str>;
-
-impl<'a> IRModule<'a> {
-    pub fn verify_module(&self) -> IRResult<()> {
-        for i in 0..self.funcs.len() {
-            self.verify_func(i)?;
-        }
-        Ok(())
-    }
-
-    fn verify_func(&self, func_idx: usize) -> IRResult<()> {
-        let func = self.funcs.at(func_idx);
-        Ok(())
-    }
-
-    fn query_func(&self, name: &'a [u8]) -> IRResult<(&'a bump::List<'a, IRRegister>, IRType)> {
-        for i in 0..self.funcs.len() {
-            let func = self.funcs.at(i);
-            if func.name == name {
-                return Ok((func.params, func.ret_type));
-            }
-        }
-        Err("ERROR: Function not found in IR module.")
-    }
-}
