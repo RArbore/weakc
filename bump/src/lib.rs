@@ -309,7 +309,7 @@ impl<T: Sized + PartialEq + fmt::Debug> fmt::Debug for List<'_, T> {
 
 #[macro_export]
 macro_rules! bump_list {
-    ($b:ident, $($x:expr),*) => {
+    ($b:expr, $($x:expr),*) => {
         {
             let list = $b.create_list();
             $(

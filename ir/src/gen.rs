@@ -211,25 +211,28 @@ impl<'a> IRGenContext<'a> {
         match expr {
             TypedASTExpr::Nil => {
                 let reg = self.fresh_reg(IRType::Nil);
-                self.add_inst(IRInstruction::Immediate(reg, IRValue::Nil));
+                self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
                 reg
             }
             TypedASTExpr::Boolean(v) => {
                 let reg = self.fresh_reg(IRType::Boolean);
-                self.add_inst(IRInstruction::Immediate(reg, IRValue::Boolean(*v)));
+                self.add_inst(IRInstruction::Immediate(reg, IRConstant::Boolean(*v)));
                 reg
             }
             TypedASTExpr::Number(v) => {
                 let reg = self.fresh_reg(IRType::Number);
-                self.add_inst(IRInstruction::Immediate(reg, IRValue::Number(*v)));
+                self.add_inst(IRInstruction::Immediate(reg, IRConstant::Number(*v)));
                 reg
             }
             TypedASTExpr::String(v) => {
                 let reg = self.fresh_reg(IRType::String);
-                self.add_inst(IRInstruction::Immediate(reg, IRValue::String(*v)));
+                self.add_inst(IRInstruction::Immediate(reg, IRConstant::String(*v)));
                 reg
             }
-            TypedASTExpr::Identifier(v, _) => *self.curr_vars.get(v).unwrap(),
+            TypedASTExpr::Identifier(v, _) => *self
+                .curr_vars
+                .get(v)
+                .expect("PANIC: Variable not in scope."),
             TypedASTExpr::Call(func, args, ty) => {
                 let arg_regs = self.bump.create_list();
                 for i in 0..args.len() {
@@ -250,6 +253,45 @@ impl<'a> IRGenContext<'a> {
                     });
                 self.add_inst(IRInstruction::Call(result_reg, func_id, arg_regs));
                 result_reg
+            }
+            TypedASTExpr::Index(tensor, indices) => {
+                let tensor_reg = self.irgen_expr(tensor);
+                let index_regs = self.bump.create_list();
+                for i in 0..indices.len() {
+                    index_regs.push(self.irgen_expr(indices.at(i)));
+                }
+                let result_reg = self.fresh_reg(IRType::Number);
+                self.add_inst(IRInstruction::Index(result_reg, tensor_reg, index_regs));
+                result_reg
+            }
+            TypedASTExpr::ArrayLiteral(elements) => {
+                let contents = self.bump.create_list();
+                for i in 0..elements.len() {
+                    contents.push(self.irgen_expr(elements.at(i)));
+                }
+                let result_reg = self.fresh_reg(IRType::Tensor);
+                self.add_inst(IRInstruction::Array(result_reg, contents));
+                result_reg
+            }
+            TypedASTExpr::Assign(left, right, _) => {
+                let right_reg = self.irgen_expr(right);
+                match left {
+                    TypedASTExpr::Identifier(left_var, _) => {
+                        let var_reg = *self.curr_vars.get(left_var).expect("PANIC: Variable not in scope.");
+                        self.add_inst(IRInstruction::Copy(var_reg, right_reg));
+                        right_reg
+                    }
+                    TypedASTExpr::Index(TypedASTExpr::Identifier(left_var, _), indices) => {
+                        let var_reg = *self.curr_vars.get(left_var).expect("PANIC: Variable not in scope.");
+                        let index_regs = self.bump.create_list();
+                        for i in 0..indices.len() {
+                            index_regs.push(self.irgen_expr(indices.at(i)));
+                        }
+                        self.add_inst(IRInstruction::Index(var_reg, right_reg, index_regs));
+                        right_reg
+                    }
+                    _ => panic!("PANIC: Something other than identifier or indexing an identifier on left-hand side of assign expression.")
+                }
             }
             _ => panic!(),
         }
@@ -282,7 +324,7 @@ mod tests {
                                     bump,
                                     IRInstruction::Immediate(
                                         (0, IRType::Number),
-                                        IRValue::Number(0.0)
+                                        IRConstant::Number(0.0)
                                     ),
                                     IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
                                     IRInstruction::Print((1, IRType::Number))

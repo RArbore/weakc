@@ -17,7 +17,7 @@ extern crate parse;
 extern crate semant;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum IRValue<'a> {
+pub enum IRConstant<'a> {
     Nil,
     Boolean(bool),
     Number(f64),
@@ -80,11 +80,12 @@ pub enum IRBinaryOp {
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IRInstruction<'a> {
-    Immediate(IRRegister, IRValue<'a>),
+    Immediate(IRRegister, IRConstant<'a>),
     Copy(IRRegister, IRRegister),
     Unary(IRRegister, IRUnaryOp, IRRegister),
     Binary(IRRegister, IRBinaryOp, IRRegister, IRRegister),
     Index(IRRegister, IRRegister, &'a bump::List<'a, IRRegister>),
+    Array(IRRegister, &'a bump::List<'a, IRRegister>),
     BranchUncond(IRBasicBlockID),
     BranchCond(IRRegister, IRBasicBlockID, IRBasicBlockID),
     Call(IRRegister, IRFunctionID, &'a bump::List<'a, IRRegister>),
