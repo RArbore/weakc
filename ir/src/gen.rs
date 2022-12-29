@@ -551,83 +551,82 @@ mod tests {
     use super::*;
 
     #[test]
-    fn irgen1() {
+    fn irgen_simple() {
         let bump = bump::BumpAllocator::new();
-        let tokens = parse::lex(b"a x = 0; p x;", &bump).unwrap();
-        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
-        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let ir_program = irgen(typed_program, &bump);
-        assert_eq!(
-            ir_program,
-            IRModule {
-                funcs: bump_list!(
+        let pairs = &mut [
+            (
+                b"a x = 0; p x;" as &[_],
+                bump_list!(
                     bump,
-                    IRFunction {
-                        name: b"@main",
-                        params: bump.create_list(),
-                        ret_type: IRType::Nil,
-                        blocks: bump_list!(
-                            bump,
-                            IRBasicBlock {
-                                insts: bump_list!(
-                                    bump,
-                                    IRInstruction::Immediate(
-                                        (0, IRType::Number),
-                                        IRConstant::Number(0.0)
-                                    ),
-                                    IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
-                                    IRInstruction::Print((1, IRType::Number))
-                                )
-                            }
-                        )
-                    }
-                )
-            }
-        );
-    }
-
-    #[test]
-    fn irgen2() {
-        let bump = bump::BumpAllocator::new();
-        let tokens = parse::lex(b"p 3 + 5;", &bump).unwrap();
-        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
-        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let ir_program = irgen(typed_program, &bump);
-        assert_eq!(
-            ir_program,
-            IRModule {
-                funcs: bump_list!(
+                    IRInstruction::Immediate((0, IRType::Number), IRConstant::Number(0.0)),
+                    IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
+                    IRInstruction::Print((1, IRType::Number))
+                ),
+            ),
+            (
+                b"p 3 + 5;",
+                bump_list!(
                     bump,
-                    IRFunction {
-                        name: b"@main",
-                        params: bump.create_list(),
-                        ret_type: IRType::Nil,
-                        blocks: bump_list!(
-                            bump,
-                            IRBasicBlock {
-                                insts: bump_list!(
-                                    bump,
-                                    IRInstruction::Immediate(
-                                        (0, IRType::Number),
-                                        IRConstant::Number(3.0)
-                                    ),
-                                    IRInstruction::Immediate(
-                                        (1, IRType::Number),
-                                        IRConstant::Number(5.0)
-                                    ),
-                                    IRInstruction::Binary(
-                                        (2, IRType::Number),
-                                        IRBinaryOp::AddNumbers,
-                                        (0, IRType::Number),
-                                        (1, IRType::Number)
-                                    ),
-                                    IRInstruction::Print((2, IRType::Number))
-                                )
-                            }
-                        )
-                    }
-                )
-            }
-        );
+                    IRInstruction::Immediate((0, IRType::Number), IRConstant::Number(3.0)),
+                    IRInstruction::Immediate((1, IRType::Number), IRConstant::Number(5.0)),
+                    IRInstruction::Binary(
+                        (2, IRType::Number),
+                        IRBinaryOp::AddNumbers,
+                        (0, IRType::Number),
+                        (1, IRType::Number)
+                    ),
+                    IRInstruction::Print((2, IRType::Number))
+                ),
+            ),
+            (
+                b"a x = 5; p 3 + x; a y = x ^ 2; a z = [y];",
+                bump_list!(
+                    bump,
+                    IRInstruction::Immediate((0, IRType::Number), IRConstant::Number(5.0)),
+                    IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
+                    IRInstruction::Immediate((2, IRType::Number), IRConstant::Number(3.0)),
+                    IRInstruction::Binary(
+                        (3, IRType::Number),
+                        IRBinaryOp::AddNumbers,
+                        (2, IRType::Number),
+                        (1, IRType::Number)
+                    ),
+                    IRInstruction::Print((3, IRType::Number)),
+                    IRInstruction::Immediate((4, IRType::Number), IRConstant::Number(2.0)),
+                    IRInstruction::Binary(
+                        (5, IRType::Number),
+                        IRBinaryOp::PowerNumbers,
+                        (1, IRType::Number),
+                        (4, IRType::Number)
+                    ),
+                    IRInstruction::Copy((6, IRType::Number), (5, IRType::Number)),
+                    IRInstruction::Array(
+                        (7, IRType::Tensor),
+                        bump_list!(bump, (6, IRType::Number))
+                    ),
+                    IRInstruction::Copy((8, IRType::Tensor), (7, IRType::Tensor))
+                ),
+            ),
+        ];
+        for (input, output) in pairs.iter_mut() {
+            let tokens = parse::lex(input, &bump).unwrap();
+            let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+            let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+            let ir_program = irgen(typed_program, &bump);
+            assert_eq!(
+                ir_program,
+                IRModule {
+                    funcs: bump_list!(
+                        bump,
+                        IRFunction {
+                            name: b"@main",
+                            params: bump.create_list(),
+                            ret_type: IRType::Nil,
+                            blocks: bump_list!(bump, IRBasicBlock { insts: *output })
+                        }
+                    )
+                }
+            );
+        }
     }
 }
