@@ -56,13 +56,13 @@ struct IRGenContext<'a> {
     func_defs: HashMap<
         &'a [u8],
         (
-            &'a [u8],
             &'a bump::List<'a, &'a [u8]>,
             &'a bump::List<'a, Type>,
             &'a TypedASTStmt<'a>,
             Type,
         ),
     >,
+    op_defs: HashMap<&'a [u8], (&'a [u8], &'a [u8], Type, Type, &'a TypedASTStmt<'a>, Type)>,
     called_funcs: HashMap<&'a [u8], IRFunctionID>,
     bump: &'a bump::BumpAllocator,
 }
@@ -89,6 +89,7 @@ impl<'a> IRGenContext<'a> {
             curr_vars: HashMap::new(),
             curr_num_regs: 0,
             func_defs: HashMap::new(),
+            op_defs: HashMap::new(),
             called_funcs: HashMap::new(),
             bump,
         };
@@ -213,6 +214,31 @@ impl<'a> IRGenContext<'a> {
                     self.irgen_stmt(stmts.at(i));
                 }
             }
+            TypedASTStmt::Function(name, params, params_ty, body, ret_ty) => {
+                self.func_defs
+                    .insert(name, (params, params_ty, body, *ret_ty));
+            }
+            TypedASTStmt::Operator(
+                name,
+                left_param,
+                right_param,
+                left_param_ty,
+                right_param_ty,
+                body,
+                ret_ty,
+            ) => {
+                self.op_defs.insert(
+                    name,
+                    (
+                        left_param,
+                        right_param,
+                        *left_param_ty,
+                        *right_param_ty,
+                        body,
+                        *ret_ty,
+                    ),
+                );
+            }
             TypedASTStmt::If(cond, body) => {
                 let cond_reg = self.irgen_expr(cond);
                 let body_block = self.fresh_block();
@@ -257,7 +283,6 @@ impl<'a> IRGenContext<'a> {
             TypedASTStmt::Expression(expr) => {
                 self.irgen_expr(expr);
             }
-            _ => panic!(),
         }
     }
 
@@ -305,6 +330,7 @@ impl<'a> IRGenContext<'a> {
                         cp.commit();
                         func_id
                     });
+                core::mem::drop(cp);
                 self.add_inst(IRInstruction::Call(result_reg, func_id, arg_regs));
                 result_reg
             }
@@ -418,6 +444,7 @@ impl<'a> IRGenContext<'a> {
                         cp.commit();
                         func_id
                     });
+                core::mem::drop(cp);
                 self.add_inst(IRInstruction::Call(result_reg, func_id, arg_regs));
                 result_reg
             }

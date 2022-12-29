@@ -96,18 +96,18 @@ pub enum IRInstruction<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct IRBasicBlock<'a> {
-    pub(crate) insts: &'a mut bump::List<'a, IRInstruction<'a>>,
+    pub insts: &'a mut bump::List<'a, IRInstruction<'a>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct IRFunction<'a> {
-    pub(crate) name: &'a [u8],
-    pub(crate) params: &'a mut bump::List<'a, IRRegister>,
-    pub(crate) ret_type: IRType,
-    pub(crate) blocks: &'a mut bump::List<'a, IRBasicBlock<'a>>,
+    pub name: &'a [u8],
+    pub params: &'a mut bump::List<'a, IRRegister>,
+    pub ret_type: IRType,
+    pub blocks: &'a mut bump::List<'a, IRBasicBlock<'a>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct IRModule<'a> {
-    pub(crate) funcs: &'a mut bump::List<'a, IRFunction<'a>>,
+    pub funcs: &'a mut bump::List<'a, IRFunction<'a>>,
 }
