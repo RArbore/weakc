@@ -37,7 +37,7 @@ pub enum Type {
 }
 
 impl Type {
-    fn is_gen(&self) -> Option<u32> {
+    pub fn is_gen(&self) -> Option<u32> {
         match self {
             Type::Generic(var) | Type::Numeric(var) => Some(*var),
             _ => None,
@@ -160,6 +160,28 @@ impl<'a> TypedASTExpr<'a> {
             TypedASTExpr::Binary(_, _, _, ty) => *ty,
             TypedASTExpr::CustomBinary(_, _, _, ty) => *ty,
         }
+    }
+}
+
+pub fn traverse(mut idx: u32, types: &[Type]) -> usize {
+    let mut num_iters = 0;
+    while let Some(new_idx) = types[idx as usize].is_gen() {
+        if num_iters > types.len() {
+            return idx as usize;
+        }
+        if new_idx == idx {
+            return idx as usize;
+        } else {
+            idx = new_idx;
+        }
+        num_iters += 1;
+    }
+    return idx as usize;
+}
+
+pub fn cleanup_types(types: &mut [Type]) {
+    for i in 0..types.len() {
+        types[i] = types[traverse(i as u32, types)];
     }
 }
 
@@ -652,33 +674,11 @@ impl<'a> TypeContext<'a> {
             };
         }
 
-        let traverse = |mut idx: u32, types: &[Type]| {
-            let mut num_iters = 0;
-            while let Some(new_idx) = types[idx as usize].is_gen() {
-                if num_iters > types.len() {
-                    return idx as usize;
-                }
-                if new_idx == idx {
-                    return idx as usize;
-                } else {
-                    idx = new_idx;
-                }
-                num_iters += 1;
-            }
-            return idx as usize;
-        };
-
         let get_concrete_type = |ty: Type, types: &[Type]| {
             if let Some(idx) = ty.is_gen() {
                 types[traverse(idx, types)]
             } else {
                 ty
-            }
-        };
-
-        let cleanup_types = |types: &mut [Type]| {
-            for i in 0..types.len() {
-                types[i] = types[traverse(i as u32, types)];
             }
         };
 

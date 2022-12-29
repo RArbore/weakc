@@ -69,19 +69,22 @@ struct IRGenContext<'a> {
 
 impl<'a> IRGenContext<'a> {
     fn new(bump: &'a bump::BumpAllocator) -> Self {
-        let block = IRBasicBlock {
-            insts: bump.create_list(),
-        };
-        let func = IRFunction {
-            name: b"@main",
-            params: bump.create_list(),
-            ret_type: IRType::Nil,
-            blocks: bump.create_list(),
-        };
-        func.blocks.push(block);
         let context = IRGenContext {
             module: IRModule {
-                funcs: bump.create_list(),
+                funcs: bump_list!(
+                    bump,
+                    IRFunction {
+                        name: b"@main",
+                        params: bump.create_list(),
+                        ret_type: IRType::Nil,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump.create_list(),
+                            }
+                        ),
+                    }
+                ),
             },
             ast_types: &[],
             curr_func: 0,
@@ -93,7 +96,6 @@ impl<'a> IRGenContext<'a> {
             called_funcs: HashMap::new(),
             bump,
         };
-        context.module.funcs.push(func);
         context
     }
 
@@ -137,6 +139,29 @@ impl<'a> IRGenContext<'a> {
         let id = func.blocks.len() as IRBasicBlockID;
         func.blocks.push(block);
         id
+    }
+
+    fn fresh_func(
+        &mut self,
+        name: &'a [u8],
+        params: &'a mut bump::List<'a, IRRegister>,
+        ret_type: IRType,
+    ) -> IRFunctionID {
+        let func_id = self.module.funcs.len() as IRFunctionID;
+        self.module.funcs.push(IRFunction {
+            name,
+            params,
+            ret_type,
+            blocks: bump_list!(
+                self.bump,
+                IRBasicBlock {
+                    insts: self.bump.create_list()
+                }
+            ),
+        });
+        self.curr_func = func_id;
+        self.curr_block = 0;
+        func_id
     }
 
     fn add_inst(&mut self, inst: IRInstruction<'a>) {
@@ -325,9 +350,41 @@ impl<'a> IRGenContext<'a> {
                     .get(func_name)
                     .map(|x| *x)
                     .unwrap_or_else(|| {
-                        let func_id = self.called_funcs.len() as u32;
-                        self.called_funcs.insert(func_name, func_id);
                         cp.commit();
+                        let new_ast_types = self.bump.alloc_slice(self.ast_types);
+                        let func_def = self
+                            .func_defs
+                            .get(func)
+                            .expect("PANIC: Function called before definition.");
+                        for i in 0..args.len() {
+                            if let Type::Generic(var) = func_def.1.at(i) {
+                                let new_type = self.get_type(args.at(i));
+                                assert!(
+                                    new_type.is_gen().is_none(),
+                                    "PANIC: New type is not concrete."
+                                );
+                                new_ast_types[semant::traverse(*var, new_ast_types)] = new_type;
+                            }
+                        }
+                        semant::cleanup_types(new_ast_types);
+
+                        let params = self.bump.create_list();
+                        for i in 0..arg_regs.len() {
+                            params.push((i as u32, arg_regs.at(i).1));
+                        }
+                        let body = func_def.2;
+
+                        let old_ast_types = self.ast_types;
+                        self.ast_types = new_ast_types;
+                        let old_func_id = self.curr_func;
+                        let old_block_id = self.curr_block;
+                        let func_id = self.fresh_func(func_name, params, convert_type(*ty));
+                        self.irgen_stmt(body);
+                        self.curr_func = old_func_id;
+                        self.curr_block = old_block_id;
+                        self.ast_types = old_ast_types;
+
+                        self.called_funcs.insert(func_name, func_id);
                         func_id
                     });
                 core::mem::drop(cp);
@@ -439,9 +496,47 @@ impl<'a> IRGenContext<'a> {
                     .get(func_name)
                     .map(|x| *x)
                     .unwrap_or_else(|| {
-                        let func_id = self.called_funcs.len() as u32;
-                        self.called_funcs.insert(func_name, func_id);
                         cp.commit();
+                        let new_ast_types = self.bump.alloc_slice(self.ast_types);
+                        let op_def = self
+                            .op_defs
+                            .get(func)
+                            .expect("PANIC: Operator called before definition.");
+                        if let Type::Generic(var) = op_def.2 {
+                            let new_type = self.get_type(left);
+                            assert!(
+                                new_type.is_gen().is_none(),
+                                "PANIC: New type is not concrete."
+                            );
+                            new_ast_types[semant::traverse(var, new_ast_types)] = new_type;
+                        }
+                        if let Type::Generic(var) = op_def.3 {
+                            let new_type = self.get_type(right);
+                            assert!(
+                                new_type.is_gen().is_none(),
+                                "PANIC: New type is not concrete."
+                            );
+                            new_ast_types[semant::traverse(var, new_ast_types)] = new_type;
+                        }
+                        semant::cleanup_types(new_ast_types);
+
+                        let params = self.bump.create_list();
+                        for i in 0..arg_regs.len() {
+                            params.push((i as u32, arg_regs.at(i).1));
+                        }
+                        let body = op_def.4;
+
+                        let old_ast_types = self.ast_types;
+                        self.ast_types = new_ast_types;
+                        let old_func_id = self.curr_func;
+                        let old_block_id = self.curr_block;
+                        let func_id = self.fresh_func(func_name, params, convert_type(*ty));
+                        self.irgen_stmt(body);
+                        self.curr_func = old_func_id;
+                        self.curr_block = old_block_id;
+                        self.ast_types = old_ast_types;
+
+                        self.called_funcs.insert(func_name, func_id);
                         func_id
                     });
                 core::mem::drop(cp);
