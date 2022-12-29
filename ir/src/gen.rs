@@ -183,15 +183,15 @@ impl<'a> IRGenContext<'a> {
         name[1] = b'f';
         name[2] = b'_';
         for i in 0..func.len() {
-            name[i + 1] = func[i];
+            name[i + 3] = func[i];
         }
         for i in 0..args.len() {
-            name[i + func.len() + 1] = match args.at(i).1 {
-                IRType::Nil => 0,
-                IRType::Boolean => 1,
-                IRType::String => 2,
-                IRType::Number => 3,
-                IRType::Tensor => 4,
+            name[i + func.len() + 3] = match args.at(i).1 {
+                IRType::Nil => b'0',
+                IRType::Boolean => b'1',
+                IRType::String => b'2',
+                IRType::Number => b'3',
+                IRType::Tensor => b'4',
             };
         }
         name
@@ -204,21 +204,21 @@ impl<'a> IRGenContext<'a> {
         name[1] = b'o';
         name[2] = b'_';
         for i in 0..func.len() {
-            name[i + 1] = func[i];
+            name[i + 3] = func[i];
         }
-        name[func.len() + 1] = match left.1 {
-            IRType::Nil => 0,
-            IRType::Boolean => 1,
-            IRType::String => 2,
-            IRType::Number => 3,
-            IRType::Tensor => 4,
+        name[func.len() + 3] = match left.1 {
+            IRType::Nil => b'0',
+            IRType::Boolean => b'1',
+            IRType::String => b'2',
+            IRType::Number => b'3',
+            IRType::Tensor => b'4',
         };
-        name[func.len() + 2] = match right.1 {
-            IRType::Nil => 0,
-            IRType::Boolean => 1,
-            IRType::String => 2,
-            IRType::Number => 3,
-            IRType::Tensor => 4,
+        name[func.len() + 3] = match right.1 {
+            IRType::Nil => b'0',
+            IRType::Boolean => b'1',
+            IRType::String => b'2',
+            IRType::Number => b'3',
+            IRType::Tensor => b'4',
         };
         name
     }
@@ -366,9 +366,16 @@ impl<'a> IRGenContext<'a> {
                         }
                         semant::cleanup_types(new_ast_types);
 
+                        let mut old_curr_vars = HashMap::new();
+                        core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
+                        let old_num_regs = self.curr_num_regs;
+                        self.curr_num_regs = 0;
+
                         let params = self.bump.create_list();
                         for i in 0..arg_regs.len() {
-                            params.push((i as u32, arg_regs.at(i).1));
+                            let param_reg = (i as u32, arg_regs.at(i).1);
+                            params.push(param_reg);
+                            self.curr_vars.insert(func_def.0.at(i), param_reg);
                         }
                         let body = func_def.2;
 
@@ -378,6 +385,8 @@ impl<'a> IRGenContext<'a> {
                         let old_block_id = self.curr_block;
                         let func_id = self.fresh_func(func_name, params, result_reg.1);
                         self.irgen_stmt(body);
+                        self.curr_num_regs = old_num_regs;
+                        core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         self.curr_func = old_func_id;
                         self.curr_block = old_block_id;
                         self.ast_types = old_ast_types;
@@ -518,9 +527,16 @@ impl<'a> IRGenContext<'a> {
                         }
                         semant::cleanup_types(new_ast_types);
 
+                        let mut old_curr_vars = HashMap::new();
+                        core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
+                        let old_num_regs = self.curr_num_regs;
+                        self.curr_num_regs = 0;
+
                         let params = self.bump.create_list();
                         for i in 0..arg_regs.len() {
-                            params.push((i as u32, arg_regs.at(i).1));
+                            let param_reg = (i as u32, arg_regs.at(i).1);
+                            params.push(param_reg);
+                            self.curr_vars.insert(&[op_def.0, op_def.1][i], param_reg);
                         }
                         let body = op_def.4;
 
@@ -530,6 +546,8 @@ impl<'a> IRGenContext<'a> {
                         let old_block_id = self.curr_block;
                         let func_id = self.fresh_func(func_name, params, result_reg.1);
                         self.irgen_stmt(body);
+                        self.curr_num_regs = old_num_regs;
+                        core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         self.curr_func = old_func_id;
                         self.curr_block = old_block_id;
                         self.ast_types = old_ast_types;
@@ -687,6 +705,137 @@ mod tests {
                             },
                             IRBasicBlock {
                                 insts: bump_list!(bump,)
+                            }
+                        )
+                    }
+                )
+            }
+        );
+    }
+
+    #[test]
+    fn irgen_complex2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"f xyz() { p N; r 5; } p xyz();", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+        let ir_program = irgen(typed_program, &bump);
+        assert_eq!(
+            ir_program,
+            IRModule {
+                funcs: bump_list!(
+                    bump,
+                    IRFunction {
+                        name: b"@main",
+                        params: bump.create_list(),
+                        ret_type: IRType::Nil,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Call((0, IRType::Number), 1, bump_list!(bump,)),
+                                    IRInstruction::Print((0, IRType::Number))
+                                )
+                            }
+                        )
+                    },
+                    IRFunction {
+                        name: b"@f_xyz",
+                        params: bump.create_list(),
+                        ret_type: IRType::Number,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate((0, IRType::Nil), IRConstant::Nil),
+                                    IRInstruction::Print((0, IRType::Nil)),
+                                    IRInstruction::Immediate(
+                                        (1, IRType::Number),
+                                        IRConstant::Number(5.0)
+                                    ),
+                                    IRInstruction::Return((1, IRType::Number))
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+        );
+    }
+
+    #[test]
+    fn irgen_complex3() {
+        let bump = bump::BumpAllocator::new();
+        let tokens =
+            parse::lex(b"f xyz(x, y) { r x + y; } p xyz(5, 4); p xyz(1, 2);", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+        let ir_program = irgen(typed_program, &bump);
+        assert_eq!(
+            ir_program,
+            IRModule {
+                funcs: bump_list!(
+                    bump,
+                    IRFunction {
+                        name: b"@main",
+                        params: bump.create_list(),
+                        ret_type: IRType::Nil,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate(
+                                        (0, IRType::Number),
+                                        IRConstant::Number(5.0)
+                                    ),
+                                    IRInstruction::Immediate(
+                                        (1, IRType::Number),
+                                        IRConstant::Number(4.0)
+                                    ),
+                                    IRInstruction::Call(
+                                        (2, IRType::Number),
+                                        1,
+                                        bump_list!(bump, (0, IRType::Number), (1, IRType::Number))
+                                    ),
+                                    IRInstruction::Print((2, IRType::Number)),
+                                    IRInstruction::Immediate(
+                                        (3, IRType::Number),
+                                        IRConstant::Number(1.0)
+                                    ),
+                                    IRInstruction::Immediate(
+                                        (4, IRType::Number),
+                                        IRConstant::Number(2.0)
+                                    ),
+                                    IRInstruction::Call(
+                                        (5, IRType::Number),
+                                        1,
+                                        bump_list!(bump, (3, IRType::Number), (4, IRType::Number))
+                                    ),
+                                    IRInstruction::Print((5, IRType::Number))
+                                )
+                            }
+                        )
+                    },
+                    IRFunction {
+                        name: b"@f_xyz33",
+                        params: bump_list!(bump, (0, IRType::Number), (1, IRType::Number)),
+                        ret_type: IRType::Number,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Binary(
+                                        (0, IRType::Number),
+                                        IRBinaryOp::AddNumbers,
+                                        (0, IRType::Number),
+                                        (1, IRType::Number)
+                                    ),
+                                    IRInstruction::Return((0, IRType::Number))
+                                )
                             }
                         )
                     }
