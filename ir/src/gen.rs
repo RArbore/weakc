@@ -142,16 +142,11 @@ impl<'a> IRGenContext<'a> {
         }
     }
 
-    fn get_irfunc_name(
-        &self,
-        func: &'a [u8],
-        args: &'a bump::List<'a, IRRegister>,
-        func_or_op: bool,
-    ) -> &'a [u8] {
+    fn get_irfunc_name(&self, func: &'a [u8], args: &'a bump::List<'a, IRRegister>) -> &'a [u8] {
         let size = 3 + func.len() + args.len();
         let name = unsafe { self.bump.alloc_slice_raw(size) };
         name[0] = b'@';
-        name[1] = if func_or_op { b'f' } else { b'o' };
+        name[1] = b'f';
         name[2] = b'_';
         for i in 0..func.len() {
             name[i + 1] = func[i];
@@ -165,6 +160,32 @@ impl<'a> IRGenContext<'a> {
                 IRType::Tensor => 4,
             };
         }
+        name
+    }
+
+    fn get_irop_name(&self, func: &'a [u8], left: IRRegister, right: IRRegister) -> &'a [u8] {
+        let size = 3 + func.len() + 2;
+        let name = unsafe { self.bump.alloc_slice_raw(size) };
+        name[0] = b'@';
+        name[1] = b'o';
+        name[2] = b'_';
+        for i in 0..func.len() {
+            name[i + 1] = func[i];
+        }
+        name[func.len() + 1] = match left.1 {
+            IRType::Nil => 0,
+            IRType::Boolean => 1,
+            IRType::String => 2,
+            IRType::Number => 3,
+            IRType::Tensor => 4,
+        };
+        name[func.len() + 2] = match right.1 {
+            IRType::Nil => 0,
+            IRType::Boolean => 1,
+            IRType::String => 2,
+            IRType::Number => 3,
+            IRType::Tensor => 4,
+        };
         name
     }
 
@@ -240,7 +261,7 @@ impl<'a> IRGenContext<'a> {
                 }
                 let result_reg = self.fresh_reg(convert_type(*ty));
                 let mut cp = self.bump.create_checkpoint();
-                let func_name = self.get_irfunc_name(func, arg_regs, true);
+                let func_name = self.get_irfunc_name(func, arg_regs);
                 let func_id = self
                     .called_funcs
                     .get(func_name)
@@ -293,7 +314,80 @@ impl<'a> IRGenContext<'a> {
                     _ => panic!("PANIC: Something other than identifier or indexing an identifier on left-hand side of assign expression.")
                 }
             }
-            _ => panic!(),
+            TypedASTExpr::Unary(op, expr, ty) => {
+                let right_reg = self.irgen_expr(expr);
+                let result_reg = self.fresh_reg(convert_type(*ty));
+                self.add_inst(IRInstruction::Unary(
+                    result_reg,
+                    match op {
+                        ASTUnaryOp::Not => IRUnaryOp::Not,
+                        ASTUnaryOp::Negate => IRUnaryOp::Negate,
+                        ASTUnaryOp::Shape => IRUnaryOp::Shape,
+                    },
+                    right_reg,
+                ));
+                result_reg
+            }
+            TypedASTExpr::Binary(op, left, right, ty) => {
+                let left_reg = self.irgen_expr(left);
+                let right_reg = self.irgen_expr(right);
+                let result_reg = self.fresh_reg(convert_type(*ty));
+                let op = match (op, left_reg.1) {
+                    (ASTBinaryOp::ShapedAs, _) => IRBinaryOp::ShapedAs,
+                    (ASTBinaryOp::Add, IRType::Number) => IRBinaryOp::AddNumbers,
+                    (ASTBinaryOp::Add, IRType::Tensor) => IRBinaryOp::AddTensors,
+                    (ASTBinaryOp::Subtract, IRType::Number) => IRBinaryOp::SubtractNumbers,
+                    (ASTBinaryOp::Subtract, IRType::Tensor) => IRBinaryOp::SubtractTensors,
+                    (ASTBinaryOp::Multiply, IRType::Number) => IRBinaryOp::MultiplyNumbers,
+                    (ASTBinaryOp::Multiply, IRType::Tensor) => IRBinaryOp::MultiplyTensors,
+                    (ASTBinaryOp::Divide, IRType::Number) => IRBinaryOp::DivideNumbers,
+                    (ASTBinaryOp::Divide, IRType::Tensor) => IRBinaryOp::DivideTensors,
+                    (ASTBinaryOp::Power, IRType::Number) => IRBinaryOp::PowerNumbers,
+                    (ASTBinaryOp::Power, IRType::Tensor) => IRBinaryOp::PowerTensors,
+                    (ASTBinaryOp::MatrixMultiply, _) => IRBinaryOp::MatrixMultiply,
+                    (ASTBinaryOp::Greater, _) => IRBinaryOp::Greater,
+                    (ASTBinaryOp::Lesser, _) => IRBinaryOp::Lesser,
+                    (ASTBinaryOp::NotEquals, IRType::Nil) => IRBinaryOp::NotEqualsNils,
+                    (ASTBinaryOp::NotEquals, IRType::Boolean) => IRBinaryOp::NotEqualsBooleans,
+                    (ASTBinaryOp::NotEquals, IRType::String) => IRBinaryOp::NotEqualsStrings,
+                    (ASTBinaryOp::NotEquals, IRType::Number) => IRBinaryOp::NotEqualsNumbers,
+                    (ASTBinaryOp::NotEquals, IRType::Tensor) => IRBinaryOp::NotEqualsTensors,
+                    (ASTBinaryOp::EqualsEquals, IRType::Nil) => IRBinaryOp::EqualsEqualsNils,
+                    (ASTBinaryOp::EqualsEquals, IRType::Boolean) => {
+                        IRBinaryOp::EqualsEqualsBooleans
+                    }
+                    (ASTBinaryOp::EqualsEquals, IRType::String) => IRBinaryOp::EqualsEqualsStrings,
+                    (ASTBinaryOp::EqualsEquals, IRType::Number) => IRBinaryOp::EqualsEqualsNumbers,
+                    (ASTBinaryOp::EqualsEquals, IRType::Tensor) => IRBinaryOp::EqualsEqualsTensors,
+                    (ASTBinaryOp::GreaterEquals, _) => IRBinaryOp::GreaterEquals,
+                    (ASTBinaryOp::LesserEquals, _) => IRBinaryOp::LesserEquals,
+                    (ASTBinaryOp::And, _) => IRBinaryOp::And,
+                    (ASTBinaryOp::Or, _) => IRBinaryOp::Or,
+                    _ => panic!("PANIC: Unsupported binary operation configuration."),
+                };
+                self.add_inst(IRInstruction::Binary(result_reg, op, left_reg, right_reg));
+                result_reg
+            }
+            TypedASTExpr::CustomBinary(func, left, right, ty) => {
+                let left_reg = self.irgen_expr(left);
+                let right_reg = self.irgen_expr(right);
+                let arg_regs = bump_list!(self.bump, left_reg, right_reg);
+                let result_reg = self.fresh_reg(convert_type(*ty));
+                let mut cp = self.bump.create_checkpoint();
+                let func_name = self.get_irop_name(func, left_reg, right_reg);
+                let func_id = self
+                    .called_funcs
+                    .get(func_name)
+                    .map(|x| *x)
+                    .unwrap_or_else(|| {
+                        let func_id = self.called_funcs.len() as u32;
+                        self.called_funcs.insert(func_name, func_id);
+                        cp.commit();
+                        func_id
+                    });
+                self.add_inst(IRInstruction::Call(result_reg, func_id, arg_regs));
+                result_reg
+            }
         }
     }
 }
