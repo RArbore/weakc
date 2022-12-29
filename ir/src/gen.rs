@@ -768,8 +768,11 @@ mod tests {
     #[test]
     fn irgen_complex3() {
         let bump = bump::BumpAllocator::new();
-        let tokens =
-            parse::lex(b"f xyz(x, y) { r x + y; } p xyz(5, 4); p xyz(1, 2);", &bump).unwrap();
+        let tokens = parse::lex(
+            b"f xyz(x, y) { r x + y; } p xyz(5, 4); p xyz(1, 2); p xyz([2], [7]);",
+            &bump,
+        )
+        .unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
         let ir_program = irgen(typed_program, &bump);
@@ -814,7 +817,29 @@ mod tests {
                                         1,
                                         bump_list!(bump, (3, IRType::Number), (4, IRType::Number))
                                     ),
-                                    IRInstruction::Print((5, IRType::Number))
+                                    IRInstruction::Print((5, IRType::Number)),
+                                    IRInstruction::Immediate(
+                                        (6, IRType::Number),
+                                        IRConstant::Number(2.0)
+                                    ),
+                                    IRInstruction::Array(
+                                        (7, IRType::Tensor),
+                                        bump_list!(bump, (6, IRType::Number))
+                                    ),
+                                    IRInstruction::Immediate(
+                                        (8, IRType::Number),
+                                        IRConstant::Number(7.0)
+                                    ),
+                                    IRInstruction::Array(
+                                        (9, IRType::Tensor),
+                                        bump_list!(bump, (8, IRType::Number))
+                                    ),
+                                    IRInstruction::Call(
+                                        (10, IRType::Tensor),
+                                        2,
+                                        bump_list!(bump, (7, IRType::Tensor), (9, IRType::Tensor))
+                                    ),
+                                    IRInstruction::Print((10, IRType::Tensor))
                                 )
                             }
                         )
@@ -835,6 +860,26 @@ mod tests {
                                         (1, IRType::Number)
                                     ),
                                     IRInstruction::Return((0, IRType::Number))
+                                )
+                            }
+                        )
+                    },
+                    IRFunction {
+                        name: b"@f_xyz44",
+                        params: bump_list!(bump, (0, IRType::Tensor), (1, IRType::Tensor)),
+                        ret_type: IRType::Tensor,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Binary(
+                                        (0, IRType::Tensor),
+                                        IRBinaryOp::AddTensors,
+                                        (0, IRType::Tensor),
+                                        (1, IRType::Tensor)
+                                    ),
+                                    IRInstruction::Return((0, IRType::Tensor))
                                 )
                             }
                         )
