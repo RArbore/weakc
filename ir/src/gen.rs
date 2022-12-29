@@ -369,7 +369,7 @@ impl<'a> IRGenContext<'a> {
                         let mut old_curr_vars = HashMap::new();
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         let old_num_regs = self.curr_num_regs;
-                        self.curr_num_regs = 0;
+                        self.curr_num_regs = arg_regs.len() as IRRegisterID;
 
                         let params = self.bump.create_list();
                         for i in 0..arg_regs.len() {
@@ -530,7 +530,7 @@ impl<'a> IRGenContext<'a> {
                         let mut old_curr_vars = HashMap::new();
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         let old_num_regs = self.curr_num_regs;
-                        self.curr_num_regs = 0;
+                        self.curr_num_regs = arg_regs.len() as IRRegisterID;
 
                         let params = self.bump.create_list();
                         for i in 0..arg_regs.len() {
@@ -854,12 +854,12 @@ mod tests {
                                 insts: bump_list!(
                                     bump,
                                     IRInstruction::Binary(
-                                        (0, IRType::Number),
+                                        (2, IRType::Number),
                                         IRBinaryOp::AddNumbers,
                                         (0, IRType::Number),
                                         (1, IRType::Number)
                                     ),
-                                    IRInstruction::Return((0, IRType::Number))
+                                    IRInstruction::Return((2, IRType::Number))
                                 )
                             }
                         )
@@ -874,12 +874,12 @@ mod tests {
                                 insts: bump_list!(
                                     bump,
                                     IRInstruction::Binary(
-                                        (0, IRType::Tensor),
+                                        (2, IRType::Tensor),
                                         IRBinaryOp::AddTensors,
                                         (0, IRType::Tensor),
                                         (1, IRType::Tensor)
                                     ),
-                                    IRInstruction::Return((0, IRType::Tensor))
+                                    IRInstruction::Return((2, IRType::Tensor))
                                 )
                             }
                         )
