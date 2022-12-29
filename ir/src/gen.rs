@@ -27,8 +27,6 @@ use semant::TypedASTExpr;
 use semant::TypedASTStmt;
 use semant::TypedProgram;
 
-const TEMP_BUF_SIZE: usize = 64;
-
 pub fn irgen<'a>(program: TypedProgram<'a>, bump: &'a bump::BumpAllocator) -> IRModule<'a> {
     let mut context = IRGenContext::new(bump);
     context.irgen_program(program);
@@ -628,5 +626,72 @@ mod tests {
                 }
             );
         }
+    }
+
+    #[test]
+    fn irgen_complex1() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"i (T) { p N; } w (T) { p N; }", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+        let ir_program = irgen(typed_program, &bump);
+        assert_eq!(
+            ir_program,
+            IRModule {
+                funcs: bump_list!(
+                    bump,
+                    IRFunction {
+                        name: b"@main",
+                        params: bump.create_list(),
+                        ret_type: IRType::Nil,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate(
+                                        (0, IRType::Boolean),
+                                        IRConstant::Boolean(true)
+                                    ),
+                                    IRInstruction::BranchCond((0, IRType::Boolean), 1, 2)
+                                )
+                            },
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate((1, IRType::Nil), IRConstant::Nil),
+                                    IRInstruction::Print((1, IRType::Nil)),
+                                    IRInstruction::BranchUncond(2)
+                                )
+                            },
+                            IRBasicBlock {
+                                insts: bump_list!(bump, IRInstruction::BranchUncond(3))
+                            },
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate(
+                                        (2, IRType::Boolean),
+                                        IRConstant::Boolean(true)
+                                    ),
+                                    IRInstruction::BranchCond((2, IRType::Boolean), 4, 5)
+                                )
+                            },
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate((3, IRType::Nil), IRConstant::Nil),
+                                    IRInstruction::Print((3, IRType::Nil)),
+                                    IRInstruction::BranchUncond(3)
+                                )
+                            },
+                            IRBasicBlock {
+                                insts: bump_list!(bump,)
+                            }
+                        )
+                    }
+                )
+            }
+        );
     }
 }
