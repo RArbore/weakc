@@ -128,6 +128,16 @@ impl<'a> IRGenContext<'a> {
         (id, ty)
     }
 
+    fn fresh_block(&mut self) -> IRBasicBlockID {
+        let block = IRBasicBlock {
+            insts: self.bump.create_list(),
+        };
+        let func = self.get_curr_func_mut();
+        let id = func.blocks.len() as IRBasicBlockID;
+        func.blocks.push(block);
+        id
+    }
+
     fn add_inst(&mut self, inst: IRInstruction<'a>) {
         self.get_curr_block_mut().insts.push(inst);
     }
@@ -202,6 +212,29 @@ impl<'a> IRGenContext<'a> {
                 for i in 0..stmts.len() {
                     self.irgen_stmt(stmts.at(i));
                 }
+            }
+            TypedASTStmt::If(cond, body) => {
+                let cond_reg = self.irgen_expr(cond);
+                let body_block = self.fresh_block();
+                let post_block = self.fresh_block();
+                self.add_inst(IRInstruction::BranchCond(cond_reg, body_block, post_block));
+                self.curr_block = body_block;
+                self.irgen_stmt(body);
+                self.add_inst(IRInstruction::BranchUncond(post_block));
+                self.curr_block = post_block;
+            }
+            TypedASTStmt::While(cond, body) => {
+                let cond_block = self.fresh_block();
+                let body_block = self.fresh_block();
+                let post_block = self.fresh_block();
+                self.add_inst(IRInstruction::BranchUncond(cond_block));
+                self.curr_block = cond_block;
+                let cond_reg = self.irgen_expr(cond);
+                self.add_inst(IRInstruction::BranchCond(cond_reg, body_block, post_block));
+                self.curr_block = body_block;
+                self.irgen_stmt(body);
+                self.add_inst(IRInstruction::BranchUncond(cond_block));
+                self.curr_block = post_block;
             }
             TypedASTStmt::Print(expr) => {
                 let reg = self.irgen_expr(expr);

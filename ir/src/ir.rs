@@ -102,7 +102,7 @@ pub struct IRBasicBlock<'a> {
 #[derive(Debug, PartialEq)]
 pub struct IRFunction<'a> {
     pub(crate) name: &'a [u8],
-    pub(crate) params: &'a bump::List<'a, IRRegister>,
+    pub(crate) params: &'a mut bump::List<'a, IRRegister>,
     pub(crate) ret_type: IRType,
     pub(crate) blocks: &'a mut bump::List<'a, IRBasicBlock<'a>>,
 }
