@@ -337,12 +337,12 @@ impl<'a> IRGenContext<'a> {
                 .curr_vars
                 .get(v)
                 .expect("PANIC: Variable not in scope."),
-            TypedASTExpr::Call(func, args, ty) => {
+            TypedASTExpr::Call(func, args, _) => {
                 let arg_regs = self.bump.create_list();
                 for i in 0..args.len() {
                     arg_regs.push(self.irgen_expr(args.at(i)));
                 }
-                let result_reg = self.fresh_reg(convert_type(*ty));
+                let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
                 let mut cp = self.bump.create_checkpoint();
                 let func_name = self.get_irfunc_name(func, arg_regs);
                 let func_id = self
@@ -378,7 +378,7 @@ impl<'a> IRGenContext<'a> {
                         self.ast_types = new_ast_types;
                         let old_func_id = self.curr_func;
                         let old_block_id = self.curr_block;
-                        let func_id = self.fresh_func(func_name, params, convert_type(*ty));
+                        let func_id = self.fresh_func(func_name, params, result_reg.1);
                         self.irgen_stmt(body);
                         self.curr_func = old_func_id;
                         self.curr_block = old_block_id;
@@ -430,9 +430,9 @@ impl<'a> IRGenContext<'a> {
                     _ => panic!("PANIC: Something other than identifier or indexing an identifier on left-hand side of assign expression.")
                 }
             }
-            TypedASTExpr::Unary(op, expr, ty) => {
+            TypedASTExpr::Unary(op, expr, _) => {
                 let right_reg = self.irgen_expr(expr);
-                let result_reg = self.fresh_reg(convert_type(*ty));
+                let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
                 self.add_inst(IRInstruction::Unary(
                     result_reg,
                     match op {
@@ -444,10 +444,10 @@ impl<'a> IRGenContext<'a> {
                 ));
                 result_reg
             }
-            TypedASTExpr::Binary(op, left, right, ty) => {
+            TypedASTExpr::Binary(op, left, right, _) => {
                 let left_reg = self.irgen_expr(left);
                 let right_reg = self.irgen_expr(right);
-                let result_reg = self.fresh_reg(convert_type(*ty));
+                let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
                 let op = match (op, left_reg.1) {
                     (ASTBinaryOp::ShapedAs, _) => IRBinaryOp::ShapedAs,
                     (ASTBinaryOp::Add, IRType::Number) => IRBinaryOp::AddNumbers,
@@ -484,11 +484,11 @@ impl<'a> IRGenContext<'a> {
                 self.add_inst(IRInstruction::Binary(result_reg, op, left_reg, right_reg));
                 result_reg
             }
-            TypedASTExpr::CustomBinary(func, left, right, ty) => {
+            TypedASTExpr::CustomBinary(func, left, right, _) => {
                 let left_reg = self.irgen_expr(left);
                 let right_reg = self.irgen_expr(right);
                 let arg_regs = bump_list!(self.bump, left_reg, right_reg);
-                let result_reg = self.fresh_reg(convert_type(*ty));
+                let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
                 let mut cp = self.bump.create_checkpoint();
                 let func_name = self.get_irop_name(func, left_reg, right_reg);
                 let func_id = self
@@ -530,7 +530,7 @@ impl<'a> IRGenContext<'a> {
                         self.ast_types = new_ast_types;
                         let old_func_id = self.curr_func;
                         let old_block_id = self.curr_block;
-                        let func_id = self.fresh_func(func_name, params, convert_type(*ty));
+                        let func_id = self.fresh_func(func_name, params, result_reg.1);
                         self.irgen_stmt(body);
                         self.curr_func = old_func_id;
                         self.curr_block = old_block_id;
@@ -577,6 +577,51 @@ mod tests {
                                     ),
                                     IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
                                     IRInstruction::Print((1, IRType::Number))
+                                )
+                            }
+                        )
+                    }
+                )
+            }
+        );
+    }
+
+    #[test]
+    fn irgen2() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"p 3 + 5;", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+        let ir_program = irgen(typed_program, &bump);
+        assert_eq!(
+            ir_program,
+            IRModule {
+                funcs: bump_list!(
+                    bump,
+                    IRFunction {
+                        name: b"@main",
+                        params: bump.create_list(),
+                        ret_type: IRType::Nil,
+                        blocks: bump_list!(
+                            bump,
+                            IRBasicBlock {
+                                insts: bump_list!(
+                                    bump,
+                                    IRInstruction::Immediate(
+                                        (0, IRType::Number),
+                                        IRConstant::Number(3.0)
+                                    ),
+                                    IRInstruction::Immediate(
+                                        (1, IRType::Number),
+                                        IRConstant::Number(5.0)
+                                    ),
+                                    IRInstruction::Binary(
+                                        (2, IRType::Number),
+                                        IRBinaryOp::AddNumbers,
+                                        (0, IRType::Number),
+                                        (1, IRType::Number)
+                                    ),
+                                    IRInstruction::Print((2, IRType::Number))
                                 )
                             }
                         )
