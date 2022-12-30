@@ -56,7 +56,9 @@ fn parse_options(args: &[String]) -> Result<(Vec<Option>, &[String]), String> {
                 options.push(Option::Output(output));
                 cursor += 2;
             }
-            _ => Err("ERROR: Unsupported option used.")?,
+            _ => {
+                break;
+            }
         }
     }
     Ok((options, &args[cursor..]))
@@ -71,7 +73,7 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                 .ok_or("ERROR: No input program provided.")?
                 .clone();
             let mut output = if &input[input.len() - 5..] == ".weak" {
-                String::from(&input[input.len() - 5..]) + ".s"
+                String::from(&input[..input.len() - 5]) + ".s"
             } else {
                 input.clone() + ".s"
             };
@@ -132,7 +134,7 @@ fn main() {
                             .expect("PANIC: Something went wrong during typechecking.");
                         let ir_program = ir::irgen(typed_program, &bump);
                         let mut file =
-                            File::open(output).expect("PANIC: Unable to open output file.");
+                            File::create(output).expect("PANIC: Unable to open output file.");
                         file.write_all(ir_program.to_string().as_bytes())
                             .expect("PANIC: Unable to write output file.");
                     }

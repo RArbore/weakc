@@ -97,6 +97,7 @@ impl<'a> IRGenContext<'a> {
         context
     }
 
+    #[allow(dead_code)]
     fn get_curr_func(&self) -> &IRFunction<'a> {
         return self.module.funcs.at(self.curr_func as usize);
     }
@@ -105,6 +106,7 @@ impl<'a> IRGenContext<'a> {
         return self.module.funcs.at_mut(self.curr_func as usize);
     }
 
+    #[allow(dead_code)]
     fn get_curr_block(&self) -> &IRBasicBlock<'a> {
         return self
             .module
@@ -566,6 +568,7 @@ impl<'a> IRGenContext<'a> {
 }
 
 mod tests {
+    #[allow(unused_imports)]
     use super::*;
 
     #[test]
