@@ -341,14 +341,12 @@ impl<'a> IRGenContext<'a> {
                     arg_regs.push(self.irgen_expr(args.at(i)));
                 }
                 let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
-                let mut cp = self.bump.create_checkpoint();
                 let func_name = self.get_irfunc_name(func, arg_regs);
                 let func_id = self
                     .called_funcs
                     .get(func_name)
                     .map(|x| *x)
                     .unwrap_or_else(|| {
-                        cp.commit();
                         let new_ast_types = self.bump.alloc_slice(self.ast_types);
                         let func_def = self
                             .func_defs
@@ -394,8 +392,11 @@ impl<'a> IRGenContext<'a> {
                         self.called_funcs.insert(func_name, func_id);
                         func_id
                     });
-                core::mem::drop(cp);
-                self.add_inst(IRInstruction::Call(result_reg, func_id, arg_regs));
+                self.add_inst(IRInstruction::Call(
+                    result_reg,
+                    (func_id, func_name),
+                    arg_regs,
+                ));
                 result_reg
             }
             TypedASTExpr::Index(tensor, indices) => {
@@ -496,14 +497,12 @@ impl<'a> IRGenContext<'a> {
                 let right_reg = self.irgen_expr(right);
                 let arg_regs = bump_list!(self.bump, left_reg, right_reg);
                 let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
-                let mut cp = self.bump.create_checkpoint();
                 let func_name = self.get_irop_name(func, left_reg, right_reg);
                 let func_id = self
                     .called_funcs
                     .get(func_name)
                     .map(|x| *x)
                     .unwrap_or_else(|| {
-                        cp.commit();
                         let new_ast_types = self.bump.alloc_slice(self.ast_types);
                         let op_def = self
                             .op_defs
@@ -555,8 +554,11 @@ impl<'a> IRGenContext<'a> {
                         self.called_funcs.insert(func_name, func_id);
                         func_id
                     });
-                core::mem::drop(cp);
-                self.add_inst(IRInstruction::Call(result_reg, func_id, arg_regs));
+                self.add_inst(IRInstruction::Call(
+                    result_reg,
+                    (func_id, func_name),
+                    arg_regs,
+                ));
                 result_reg
             }
         }
@@ -734,7 +736,11 @@ mod tests {
                             IRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Call((0, IRType::Number), 1, bump_list!(bump,)),
+                                    IRInstruction::Call(
+                                        (0, IRType::Number),
+                                        (1, b"@f_xyz"),
+                                        bump_list!(bump,)
+                                    ),
                                     IRInstruction::Print((0, IRType::Number))
                                 )
                             }
@@ -800,7 +806,7 @@ mod tests {
                                     ),
                                     IRInstruction::Call(
                                         (2, IRType::Number),
-                                        1,
+                                        (1, b"@f_xyz33"),
                                         bump_list!(bump, (0, IRType::Number), (1, IRType::Number))
                                     ),
                                     IRInstruction::Print((2, IRType::Number)),
@@ -814,7 +820,7 @@ mod tests {
                                     ),
                                     IRInstruction::Call(
                                         (5, IRType::Number),
-                                        1,
+                                        (1, b"@f_xyz33"),
                                         bump_list!(bump, (3, IRType::Number), (4, IRType::Number))
                                     ),
                                     IRInstruction::Print((5, IRType::Number)),
@@ -836,7 +842,7 @@ mod tests {
                                     ),
                                     IRInstruction::Call(
                                         (10, IRType::Tensor),
-                                        2,
+                                        (2, b"@f_xyz44"),
                                         bump_list!(bump, (7, IRType::Tensor), (9, IRType::Tensor))
                                     ),
                                     IRInstruction::Print((10, IRType::Tensor))

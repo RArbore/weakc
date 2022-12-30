@@ -16,6 +16,8 @@ extern crate bump;
 extern crate parse;
 extern crate semant;
 
+use core::fmt;
+
 #[derive(Debug, PartialEq, Clone)]
 pub enum IRConstant<'a> {
     Nil,
@@ -88,7 +90,11 @@ pub enum IRInstruction<'a> {
     Array(IRRegister, &'a bump::List<'a, IRRegister>),
     BranchUncond(IRBasicBlockID),
     BranchCond(IRRegister, IRBasicBlockID, IRBasicBlockID),
-    Call(IRRegister, IRFunctionID, &'a bump::List<'a, IRRegister>),
+    Call(
+        IRRegister,
+        (IRFunctionID, &'a [u8]),
+        &'a bump::List<'a, IRRegister>,
+    ),
     Print(IRRegister),
     Verify(IRRegister),
     Return(IRRegister),
@@ -110,4 +116,156 @@ pub struct IRFunction<'a> {
 #[derive(Debug, PartialEq)]
 pub struct IRModule<'a> {
     pub funcs: &'a mut bump::List<'a, IRFunction<'a>>,
+}
+
+impl<'a> fmt::Display for IRConstant<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IRConstant::Nil => {
+                write!(f, "Nil")?;
+            }
+            IRConstant::Boolean(v) => {
+                write!(f, "{}", v)?;
+            }
+            IRConstant::Number(v) => {
+                write!(f, "{}", v)?;
+            }
+            IRConstant::String(v) => {
+                write!(f, "{:?}", v)?;
+            }
+            IRConstant::Tensor(s, v) => {
+                write!(f, "{:?} sa {:?}", v, s)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a> fmt::Display for IRInstruction<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            IRInstruction::Immediate(reg, cons) => {
+                write!(f, "im %{}, {}", reg.0, cons)?;
+            }
+            IRInstruction::Copy(reg1, reg2) => {
+                write!(f, "cp %{}, %{}", reg1.0, reg2.0)?;
+            }
+            IRInstruction::Unary(reg1, op, reg2) => {
+                write!(f, "un %{}, {:?}, %{}", reg1.0, op, reg2.0)?;
+            }
+            IRInstruction::Binary(reg1, op, reg2, reg3) => {
+                write!(f, "bi %{}, {:?}, %{}, %{}", reg1.0, op, reg2.0, reg3.0)?;
+            }
+            IRInstruction::Index(reg1, reg2, indices) => {
+                match (reg1.1, reg2.1) {
+                    (IRType::Number, IRType::Tensor) => {
+                        write!(f, "in %{} <= %{}, [", reg1.0, reg2.0)?;
+                    }
+                    (IRType::Tensor, IRType::Number) => {
+                        write!(f, "in %{} >= %{}, [", reg1.0, reg2.0)?;
+                    }
+                    _ => panic!("PANIC: Can't print invalid IR."),
+                };
+                for i in 0..indices.len() {
+                    if i == 0 {
+                        write!(f, "%{}", indices.at(i).0)?;
+                    } else {
+                        write!(f, ", %{}", indices.at(i).0)?;
+                    }
+                }
+                write!(f, "]")?;
+            }
+            IRInstruction::Array(reg, elems) => {
+                write!(f, "ar %{}, [", reg.0)?;
+                for i in 0..elems.len() {
+                    if i == 0 {
+                        write!(f, "%{}", elems.at(i).0)?;
+                    } else {
+                        write!(f, ", %{}", elems.at(i).0)?;
+                    }
+                }
+                write!(f, "]")?;
+            }
+            IRInstruction::BranchUncond(block) => {
+                write!(f, "ju {}", block)?;
+            }
+            IRInstruction::BranchCond(reg, block1, block2) => {
+                write!(f, "br %{}, {}, {}", reg.0, block1, block2)?;
+            }
+            IRInstruction::Call(reg, func, args) => {
+                write!(
+                    f,
+                    "ca %{}, {}, (",
+                    reg.0,
+                    std::str::from_utf8(func.1)
+                        .expect("PANIC: Function name not convertable to Rust str.")
+                )?;
+                for i in 0..args.len() {
+                    if i == 0 {
+                        write!(f, "%{}", args.at(i).0)?;
+                    } else {
+                        write!(f, ", %{}", args.at(i).0)?;
+                    }
+                }
+                write!(f, ")")?;
+            }
+            IRInstruction::Print(reg) => {
+                write!(f, "pr %{}", reg.0)?;
+            }
+            IRInstruction::Verify(reg) => {
+                write!(f, "ve %{}", reg.0)?;
+            }
+            IRInstruction::Return(reg) => {
+                write!(f, "re %{}", reg.0)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<'a> fmt::Display for IRBasicBlock<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for i in 0..self.insts.len() {
+            write!(f, "    {}\n", self.insts.at(i))?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> fmt::Display for IRFunction<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "fn {}(",
+            std::str::from_utf8(self.name)
+                .expect("PANIC: Function name not convertable to Rust str.")
+        )?;
+        for i in 0..self.params.len() {
+            let param = self.params.at(i);
+            if i == 0 {
+                write!(f, "%{}: {:?}", param.0, param.1)?;
+            } else {
+                write!(f, ", %{}: {:?}", param.0, param.1)?;
+            }
+        }
+        write!(f, ") -> {:?} {{\n", self.ret_type)?;
+        for i in 0..self.blocks.len() {
+            write!(f, "{}:\n{}", i, self.blocks.at(i))?;
+        }
+        write!(f, "}}")?;
+        Ok(())
+    }
+}
+
+impl<'a> fmt::Display for IRModule<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        for i in 0..self.funcs.len() {
+            if i == 0 {
+                write!(f, "{}", self.funcs.at(i))?;
+            } else {
+                write!(f, "\n\n{}", self.funcs.at(i))?;
+            }
+        }
+        Ok(())
+    }
 }
