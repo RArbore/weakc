@@ -894,4 +894,19 @@ mod tests {
             }
         );
     }
+
+    #[test]
+    fn irgen_complex4() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(
+            b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);",
+            &bump,
+        )
+        .unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+        let ir_program = irgen(typed_program, &bump);
+        let correct_program = "fn @main() -> Nil {\n0:\n    im %0, 199\n    im %1, 200\n    im %2, 208\n    im %3, 210\n    im %4, 200\n    im %5, 207\n    im %6, 240\n    im %7, 269\n    im %8, 260\n    im %9, 263\n    ar %10, [%0, %1, %2, %3, %4, %5, %6, %7, %8, %9]\n    cp %11, %10\n    ca %12, @f_part_one4, (%11)\n    pr %12\n    ca %13, @f_part_two4, (%11)\n    pr %13\n}\n\nfn @f_part_one4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    ca %4, @f_len4, (%0)\n    cp %5, %4\n    im %6, 1\n    bi %7, GreaterEquals, %5, %6\n    ve %7\n    im %8, 1\n    cp %9, %8\n    im %10, 0\n    cp %11, %10\n    ju 1\n1:\n    bi %12, Lesser, %9, %5\n    br %12, 2, 3\n2:\n    in %13 <= %0, [%9]\n    im %14, 1\n    bi %15, SubtractNumbers, %9, %14\n    in %16 <= %0, [%15]\n    bi %17, Greater, %13, %16\n    br %17, 4, 5\n3:\n    re %11\n4:\n    im %18, 1\n    bi %19, AddNumbers, %11, %18\n    cp %11, %19\n    ju 5\n5:\n    im %20, 1\n    bi %21, AddNumbers, %9, %20\n    cp %9, %21\n    ju 1\n}\n\nfn @f_dim4(%0: Tensor) -> Number {\n0:\n    un %1, Shape, %0\n    un %2, Shape, %1\n    im %3, 0\n    in %4 <= %2, [%3]\n    re %4\n}\n\nfn @f_len4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    un %4, Shape, %0\n    im %5, 0\n    in %6 <= %4, [%5]\n    re %6\n}\n\nfn @f_part_two4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    ca %4, @f_len4, (%0)\n    cp %5, %4\n    im %6, 1\n    bi %7, GreaterEquals, %5, %6\n    ve %7\n    im %8, 0\n    cp %9, %8\n    im %10, 0\n    ar %11, [%10]\n    ar %12, [%5]\n    bi %13, ShapedAs, %11, %12\n    cp %14, %13\n    im %15, 0\n    cp %16, %15\n    ju 1\n1:\n    im %17, 2\n    bi %18, SubtractNumbers, %5, %17\n    bi %19, Lesser, %9, %18\n    br %19, 2, 3\n2:\n    in %20 <= %0, [%9]\n    im %21, 1\n    bi %22, AddNumbers, %9, %21\n    in %23 <= %0, [%22]\n    bi %24, AddNumbers, %20, %23\n    im %25, 2\n    bi %26, AddNumbers, %9, %25\n    in %27 <= %0, [%26]\n    bi %28, AddNumbers, %24, %27\n    in %14 >= %28, [%16]\n    im %29, 1\n    bi %30, AddNumbers, %16, %29\n    cp %16, %30\n    im %31, 1\n    bi %32, AddNumbers, %9, %31\n    cp %9, %32\n    ju 1\n3:\n    ca %33, @f_part_one4, (%14)\n    re %33\n}";
+        assert_eq!(ir_program.to_string(), correct_program);
+    }
 }
