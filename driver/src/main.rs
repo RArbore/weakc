@@ -72,8 +72,11 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                 .get(0)
                 .ok_or("ERROR: No input program provided.")?
                 .clone();
-            let mut output = if &input[input.len() - 5..] == ".weak" {
-                String::from(&input[..input.len() - 5]) + ".s"
+            if args.len() > 1 {
+                Err("ERROR: Provided too many arguments.")?;
+            }
+            let mut output = if input.len() > 2 && &input[input.len() - 2..] == ".w" {
+                String::from(&input[..input.len() - 2]) + ".s"
             } else {
                 input.clone() + ".s"
             };
@@ -103,62 +106,53 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
             let command = Command::Run(input);
             Ok((command, &args[1..]))
         }
+        "-h" | "--help" => Err("")?,
         _ => Err("ERROR: Unsupported command used.")?,
     }
 }
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    match args.len() {
-        0 => panic!("PANIC: Received 0 arguments from standard input."),
-        1 | 2 => {
-            println!("ERROR: Must provide at least 2 arguments. See usage below");
-            print_help();
-        }
-        _ => {
-            let command = parse_command(&args[1..]);
-            match command {
-                Ok((command, _)) => match command {
-                    Command::Build(input, output) => {
-                        let mut file =
-                            File::open(input).expect("PANIC: Unable to open input file.");
-                        let mut program = vec![];
-                        file.read_to_end(&mut program)
-                            .expect("PANIC: Unable to read input file.");
-                        let bump = bump::BumpAllocator::new();
-                        let tokens = parse::lex(&program, &bump)
-                            .expect("PANIC: Something went wrong during lexing.");
-                        let (ast, _) = parse::parse_program(&tokens, &bump)
-                            .expect("PANIC: Something went wrong during parsing.");
-                        let typed_program = semant::typecheck_program(ast, &bump)
-                            .expect("PANIC: Something went wrong during typechecking.");
-                        let ir_program = ir::irgen(typed_program, &bump);
-                        let mut file =
-                            File::create(output).expect("PANIC: Unable to open output file.");
-                        file.write_all(ir_program.to_string().as_bytes())
-                            .expect("PANIC: Unable to write output file.");
-                    }
-                    Command::Run(input) => {
-                        let mut file =
-                            File::open(input).expect("PANIC: Unable to open input file.");
-                        let mut program = vec![];
-                        file.read_to_end(&mut program)
-                            .expect("PANIC: Unable to read input file.");
-                        let bump = bump::BumpAllocator::new();
-                        let tokens = parse::lex(&program, &bump)
-                            .expect("PANIC: Something went wrong during lexing.");
-                        let (ast, _) = parse::parse_program(&tokens, &bump)
-                            .expect("PANIC: Something went wrong during parsing.");
-                        let context = semant::InterpContext::default();
-                        semant::eval_program(bump.alloc(ast), context)
-                            .expect("PANIC: Something went wrong during interpretation.");
-                    }
-                },
-                Err(error) => {
-                    println!("{}", error);
-                    print_help();
-                }
+    let command = parse_command(&args[1..]);
+    match command {
+        Ok((command, _)) => match command {
+            Command::Build(input, output) => {
+                let mut file = File::open(input).expect("PANIC: Unable to open input file.");
+                let mut program = vec![];
+                file.read_to_end(&mut program)
+                    .expect("PANIC: Unable to read input file.");
+                let bump = bump::BumpAllocator::new();
+                let tokens = parse::lex(&program, &bump)
+                    .expect("PANIC: Something went wrong during lexing.");
+                let (ast, _) = parse::parse_program(&tokens, &bump)
+                    .expect("PANIC: Something went wrong during parsing.");
+                let typed_program = semant::typecheck_program(ast, &bump)
+                    .expect("PANIC: Something went wrong during typechecking.");
+                let ir_program = ir::irgen(typed_program, &bump);
+                let mut file = File::create(output).expect("PANIC: Unable to open output file.");
+                file.write_all(ir_program.to_string().as_bytes())
+                    .expect("PANIC: Unable to write output file.");
             }
+            Command::Run(input) => {
+                let mut file = File::open(input).expect("PANIC: Unable to open input file.");
+                let mut program = vec![];
+                file.read_to_end(&mut program)
+                    .expect("PANIC: Unable to read input file.");
+                let bump = bump::BumpAllocator::new();
+                let tokens = parse::lex(&program, &bump)
+                    .expect("PANIC: Something went wrong during lexing.");
+                let (ast, _) = parse::parse_program(&tokens, &bump)
+                    .expect("PANIC: Something went wrong during parsing.");
+                let context = semant::InterpContext::default();
+                semant::eval_program(bump.alloc(ast), context)
+                    .expect("PANIC: Something went wrong during interpretation.");
+            }
+        },
+        Err(error) => {
+            if error.len() > 0 {
+                println!("{}", error);
+            }
+            print_help();
         }
     }
 }
