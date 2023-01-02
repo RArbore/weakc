@@ -410,7 +410,8 @@ impl<'a> TypeContext<'a> {
                 Ok(())
             }
             TypedASTStmt::Function(op, params, params_ty, body, ret_ty) => {
-                self.ret_ty = Type::Nil;
+                let old_ret_ty = self.ret_ty;
+                self.ret_ty = *ret_ty;
                 self.funcs.insert(op, (params_ty, *ret_ty));
                 let mut old_vars = HashMap::new();
                 swap(&mut self.vars, &mut old_vars);
@@ -418,22 +419,21 @@ impl<'a> TypeContext<'a> {
                     self.vars.insert(params.at(i), *params_ty.at(i));
                 }
                 self.generate_constraints_stmt(body)?;
-                self.constraints
-                    .push(Constraint::Symmetric(self.ret_ty, *ret_ty));
                 swap(&mut self.vars, &mut old_vars);
+                self.ret_ty = old_ret_ty;
                 Ok(())
             }
             TypedASTStmt::Operator(op, left, right, left_ty, right_ty, body, ret_ty) => {
-                self.ret_ty = Type::Nil;
+                let old_ret_ty = self.ret_ty;
+                self.ret_ty = *ret_ty;
                 self.ops.insert(op, (*left_ty, *right_ty, *ret_ty));
                 let mut old_vars = HashMap::new();
                 swap(&mut self.vars, &mut old_vars);
                 self.vars.insert(left, *left_ty);
                 self.vars.insert(right, *right_ty);
                 self.generate_constraints_stmt(body)?;
-                self.constraints
-                    .push(Constraint::Symmetric(self.ret_ty, *ret_ty));
                 swap(&mut self.vars, &mut old_vars);
+                self.ret_ty = old_ret_ty;
                 Ok(())
             }
             TypedASTStmt::If(cond, body) => {
@@ -465,7 +465,8 @@ impl<'a> TypeContext<'a> {
             }
             TypedASTStmt::Return(expr) => {
                 self.generate_constraints_expr(expr)?;
-                self.ret_ty = expr.get_type();
+                self.constraints
+                    .push(Constraint::Symmetric(expr.get_type(), self.ret_ty));
                 Ok(())
             }
             TypedASTStmt::Verify(expr) => {

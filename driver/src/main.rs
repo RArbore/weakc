@@ -30,17 +30,19 @@ Commands:
 Options:
     -h, --help            Display this message
     -o, --output <OUTPUT> Set the output file when building
+    -dot-cfg              Output a dot CFG instead of textual IR
 "#;
     println!("{}", text);
 }
 
 enum Command {
-    Build(String, String),
+    Build(String, String, bool),
     Run(String),
 }
 
 enum Option {
     Output(String),
+    DotCFG,
 }
 
 fn parse_options(args: &[String]) -> Result<(Vec<Option>, &[String]), String> {
@@ -55,6 +57,10 @@ fn parse_options(args: &[String]) -> Result<(Vec<Option>, &[String]), String> {
                 let output = args[cursor + 1].clone();
                 options.push(Option::Output(output));
                 cursor += 2;
+            }
+            "-dot-cfg" => {
+                options.push(Option::DotCFG);
+                cursor += 1;
             }
             _ => {
                 break;
@@ -75,19 +81,27 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
             if args.len() > 1 {
                 Err("ERROR: Provided too many arguments.")?;
             }
-            let mut output = if input.len() > 2 && &input[input.len() - 2..] == ".w" {
-                String::from(&input[..input.len() - 2]) + ".s"
-            } else {
-                input.clone() + ".s"
-            };
+            let mut output = String::new();
+            let mut dot = false;
             for option in options {
                 match option {
                     Option::Output(out) => {
                         output = out;
                     }
+                    Option::DotCFG => {
+                        dot = true;
+                    }
                 }
             }
-            let command = Command::Build(input, output);
+            if output == "" {
+                let suffix = if dot { ".dot" } else { ".s" };
+                output = if input.len() > 2 && &input[input.len() - 2..] == ".w" {
+                    String::from(&input[..input.len() - 2]) + suffix
+                } else {
+                    input.clone() + suffix
+                };
+            }
+            let command = Command::Build(input, output, dot);
             Ok((command, &args[1..]))
         }
         "run" => {
@@ -99,6 +113,9 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
             for option in options {
                 match option {
                     Option::Output(_) => {
+                        Err("ERROR: Unsupported argument for command \"run\".")?;
+                    }
+                    Option::DotCFG => {
                         Err("ERROR: Unsupported argument for command \"run\".")?;
                     }
                 }
@@ -116,7 +133,7 @@ fn main() {
     let command = parse_command(&args[1..]);
     match command {
         Ok((command, _)) => match command {
-            Command::Build(input, output) => {
+            Command::Build(input, output, isdot) => {
                 let mut file = File::open(input).expect("PANIC: Unable to open input file.");
                 let mut program = vec![];
                 file.read_to_end(&mut program)
@@ -130,8 +147,12 @@ fn main() {
                     .expect("PANIC: Something went wrong during typechecking.");
                 let ir_program = ir::irgen(typed_program, &bump);
                 let mut file = File::create(output).expect("PANIC: Unable to open output file.");
-                file.write_all(ir_program.to_string().as_bytes())
-                    .expect("PANIC: Unable to write output file.");
+                if isdot {
+                    ir::write_dot_graph(&ir_program, file);
+                } else {
+                    file.write_all(ir_program.to_string().as_bytes())
+                        .expect("PANIC: Unable to write output file.");
+                }
             }
             Command::Run(input) => {
                 let mut file = File::open(input).expect("PANIC: Unable to open input file.");

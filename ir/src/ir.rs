@@ -17,6 +17,8 @@ extern crate parse;
 extern crate semant;
 
 use core::fmt;
+use core::str;
+use std::io::Write;
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum IRConstant<'a> {
@@ -106,6 +108,39 @@ pub struct IRBasicBlock<'a> {
     pub insts: &'a mut bump::List<'a, IRInstruction<'a>>,
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum IRBasicBlockSuccessors {
+    Returns,
+    Jumps(IRBasicBlockID),
+    Branches(IRBasicBlockID, IRBasicBlockID),
+}
+
+impl<'a> IRBasicBlock<'a> {
+    pub fn successors(&self) -> IRBasicBlockSuccessors {
+        assert!(self.insts.len() > 0, "PANIC: Empty basic block.");
+        let last_inst = self.insts.at(self.insts.len() - 1);
+        match last_inst {
+            IRInstruction::Return(_) => IRBasicBlockSuccessors::Returns,
+            IRInstruction::BranchUncond(b) => IRBasicBlockSuccessors::Jumps(*b),
+            IRInstruction::BranchCond(_, b1, b2) => IRBasicBlockSuccessors::Branches(*b1, *b2),
+            _ => panic!("PANIC: Found invalid terminating instruction of basic block."),
+        }
+    }
+
+    pub fn is_terminated(&self) -> bool {
+        if self.insts.len() > 0 {
+            match self.insts.at(self.insts.len() - 1) {
+                IRInstruction::Return(_) => true,
+                IRInstruction::BranchUncond(_) => true,
+                IRInstruction::BranchCond(_, _, _) => true,
+                _ => false,
+            }
+        } else {
+            false
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct IRFunction<'a> {
     pub name: &'a [u8],
@@ -132,7 +167,11 @@ impl<'a> fmt::Display for IRConstant<'a> {
                 write!(f, "{}", v)?;
             }
             IRConstant::String(v) => {
-                write!(f, "{:?}", v)?;
+                write!(
+                    f,
+                    "{:?}",
+                    str::from_utf8(v).expect("PANIC: Couldn't convert string to utf8.")
+                )?;
             }
             IRConstant::Tensor(s, v) => {
                 write!(f, "{:?} sa {:?}", v, s)?;
@@ -271,5 +310,113 @@ impl<'a> fmt::Display for IRModule<'a> {
             }
         }
         Ok(())
+    }
+}
+
+struct DotContext<W: Write> {
+    writer: W,
+}
+
+impl<W: Write> DotContext<W> {
+    fn new(w: W) -> Self {
+        DotContext { writer: w }
+    }
+
+    fn write_dot_program<'a>(&mut self, module: &'a IRModule<'a>) {
+        for i in 0..module.funcs.len() {
+            self.write_dot_function(module.funcs.at(i));
+        }
+    }
+
+    fn write_dot_function<'a>(&mut self, function: &'a IRFunction<'a>) {
+        self.writer.write(b"digraph \"CFG for \'").unwrap();
+        self.writer.write(function.name).unwrap();
+        self.writer
+            .write(b"\' function\" {\nlabel=\"CFG for \'")
+            .unwrap();
+        self.writer.write(function.name).unwrap();
+        self.writer.write(b"\' function\";\n").unwrap();
+        for i in 0..function.blocks.len() {
+            self.write_dot_basic_block(function.blocks.at(i), i as IRBasicBlockID);
+        }
+        self.writer.write(b"}").unwrap();
+    }
+
+    fn write_dot_basic_block<'a>(&mut self, basic_block: &'a IRBasicBlock<'a>, id: IRBasicBlockID) {
+        let mut name = [0; 14];
+        write_basic_block_id(id, &mut name);
+        self.writer.write(&name).unwrap();
+        self.writer
+            .write(b" [shape=record, style=filled, fillcolor=\"#b70d2870\"];\n")
+            .unwrap();
+        match basic_block.successors() {
+            IRBasicBlockSuccessors::Returns => {}
+            IRBasicBlockSuccessors::Jumps(id) => {
+                self.writer.write(&name).unwrap();
+                self.writer.write(b" -> ").unwrap();
+                write_basic_block_id(id, &mut name);
+                self.writer.write(&name).unwrap();
+                self.writer.write(b"\n;").unwrap();
+            }
+            IRBasicBlockSuccessors::Branches(id1, id2) => {
+                let mut dest = [0; 14];
+                write_basic_block_id(id1, &mut dest);
+                self.writer.write(&name).unwrap();
+                self.writer.write(b" -> ").unwrap();
+                self.writer.write(&dest).unwrap();
+                self.writer.write(b"\n;").unwrap();
+                write_basic_block_id(id2, &mut dest);
+                self.writer.write(&name).unwrap();
+                self.writer.write(b" -> ").unwrap();
+                self.writer.write(&dest).unwrap();
+                self.writer.write(b"\n;").unwrap();
+            }
+        }
+    }
+}
+
+fn write_basic_block_id(id: IRBasicBlockID, buf: &mut [u8]) {
+    let conv = |x| {
+        if x < 10 {
+            x + b'0'
+        } else {
+            x - 10 + b'A'
+        }
+    };
+
+    buf[0] = b'N';
+    buf[1] = b'o';
+    buf[2] = b'd';
+    buf[3] = b'e';
+    buf[4] = b'0';
+    buf[5] = b'x';
+    buf[6] = conv((id >> 28) as u8);
+    buf[7] = conv((id >> 24 & 15) as u8);
+    buf[8] = conv((id >> 20 & 15) as u8);
+    buf[9] = conv((id >> 16 & 15) as u8);
+    buf[10] = conv((id >> 12 & 15) as u8);
+    buf[11] = conv((id >> 8 & 15) as u8);
+    buf[12] = conv((id >> 4 & 15) as u8);
+    buf[13] = conv((id & 15) as u8);
+}
+
+pub fn write_dot_graph<'a, W: Write>(ir: &'a IRModule<'a>, w: W) {
+    let mut context = DotContext::new(w);
+    context.write_dot_program(ir);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_write_id() {
+        let mut buf = [0; 14];
+        write_basic_block_id(0xF, &mut buf);
+        assert_eq!(&buf, b"Node0x0000000F");
+        write_basic_block_id(0xA86BC, &mut buf);
+        assert_eq!(&buf, b"Node0x000A86BC");
+        write_basic_block_id(0x8756A7B, &mut buf);
+        assert_eq!(&buf, b"Node0x08756A7B");
     }
 }

@@ -271,7 +271,9 @@ impl<'a> IRGenContext<'a> {
                 self.add_inst(IRInstruction::BranchCond(cond_reg, body_block, post_block));
                 self.curr_block = body_block;
                 self.irgen_stmt(body);
-                self.add_inst(IRInstruction::BranchUncond(post_block));
+                if !self.get_curr_block().is_terminated() {
+                    self.add_inst(IRInstruction::BranchUncond(post_block));
+                }
                 self.curr_block = post_block;
             }
             TypedASTStmt::While(cond, body) => {
@@ -284,7 +286,9 @@ impl<'a> IRGenContext<'a> {
                 self.add_inst(IRInstruction::BranchCond(cond_reg, body_block, post_block));
                 self.curr_block = body_block;
                 self.irgen_stmt(body);
-                self.add_inst(IRInstruction::BranchUncond(cond_block));
+                if !self.get_curr_block().is_terminated() {
+                    self.add_inst(IRInstruction::BranchUncond(cond_block));
+                }
                 self.curr_block = post_block;
             }
             TypedASTStmt::Print(expr) => {
