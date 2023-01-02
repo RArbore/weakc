@@ -19,7 +19,7 @@ use core::cell::RefCell;
 use core::fmt;
 use core::str;
 use std::collections::HashMap;
-use std::io::{stdout, Stdout, Write};
+use std::io::{stdin, stdout, Stdout, Write};
 use std::rc::Rc;
 
 use parse::ASTBinaryOp;
@@ -123,7 +123,7 @@ fn eval_stmt<'a, W: Write>(
             let mut block_context = context.spawn_block();
             for i in 0..stmts.len() {
                 if block_context.ret_val.is_some() {
-                    Err("ERROR: Attempted to evaluate statement after return in block.")?
+                    break;
                 }
                 block_context = eval_stmt(stmts.at(i), block_context)?;
             }
@@ -182,6 +182,28 @@ fn eval_stmt<'a, W: Write>(
                 .borrow_mut()
                 .write(format!("{}\n", value).as_bytes())
                 .unwrap();
+            Ok(context)
+        }
+        ASTStmt::Line(name) => {
+            let var = context
+                .vars
+                .get_mut(name)
+                .ok_or("ERROR: Attempted to reference an undefined variable.")?;
+            let mut line = String::new();
+            match stdin().read_line(&mut line) {
+                Ok(_) => {
+                    let mut content_vals = vec![];
+                    let line = line.as_bytes();
+                    for b in line {
+                        content_vals.push(*b as f64);
+                    }
+                    *var = Value::Tensor(
+                        Box::new([content_vals.len()]),
+                        content_vals.into_boxed_slice(),
+                    );
+                }
+                Err(_) => Err("ERROR: Couldn't read from stdin.")?,
+            }
             Ok(context)
         }
         ASTStmt::Return(expr) => {

@@ -106,10 +106,9 @@ impl BumpAllocator {
     }
 
     pub fn alloc_slice<'a, 'b, T: Sized + Clone>(&'a self, to_alloc: &'b [T]) -> &'a mut [T] {
-        assert!(
-            to_alloc.len() > 0,
-            "ERROR: Cannot allocate a slice of size 0."
-        );
+        if to_alloc.len() == 0 {
+            return &mut [];
+        }
         let layout = alloc::alloc::Layout::new::<T>();
         let alloc = self.alloc_impl(layout.size() * to_alloc.len(), layout.align()) as *mut T;
         let alloc = unsafe { slice::from_raw_parts_mut(alloc, to_alloc.len()) };

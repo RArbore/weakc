@@ -67,6 +67,7 @@ pub enum TypedASTStmt<'a> {
     If(&'a TypedASTExpr<'a>, &'a TypedASTStmt<'a>),
     While(&'a TypedASTExpr<'a>, &'a TypedASTStmt<'a>),
     Print(&'a TypedASTExpr<'a>),
+    Line(&'a [u8]),
     Return(&'a TypedASTExpr<'a>),
     Verify(&'a TypedASTExpr<'a>),
     Variable(&'a [u8], &'a TypedASTExpr<'a>),
@@ -288,6 +289,7 @@ impl<'a> TypeContext<'a> {
                 let new_expr = self.generate_unconstrained_expr(expr, bump)?;
                 Ok(TypedASTStmt::Print(bump.alloc(new_expr)))
             }
+            ASTStmt::Line(name) => Ok(TypedASTStmt::Line(name)),
             ASTStmt::Return(expr) => {
                 let new_expr = self.generate_unconstrained_expr(expr, bump)?;
                 Ok(TypedASTStmt::Return(bump.alloc(new_expr)))
@@ -451,6 +453,15 @@ impl<'a> TypeContext<'a> {
             TypedASTStmt::Print(expr) => {
                 self.generate_constraints_expr(expr)?;
                 Ok(())
+            }
+            TypedASTStmt::Line(name) => {
+                if let Some(decl_ty) = self.vars.get(name) {
+                    self.constraints
+                        .push(Constraint::Symmetric(*decl_ty, Type::Tensor));
+                    Ok(())
+                } else {
+                    Err("ERROR: Attempted to use variable not currently in scope.")?
+                }
             }
             TypedASTStmt::Return(expr) => {
                 self.generate_constraints_expr(expr)?;

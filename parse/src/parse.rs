@@ -25,6 +25,7 @@ pub enum ASTStmt<'a> {
     If(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
     While(&'a ASTExpr<'a>, &'a ASTStmt<'a>),
     Print(&'a ASTExpr<'a>),
+    Line(&'a [u8]),
     Return(&'a ASTExpr<'a>),
     Verify(&'a ASTExpr<'a>),
     Variable(&'a [u8], &'a ASTExpr<'a>),
@@ -130,6 +131,7 @@ pub fn parse_stmt<'a, 'b>(
             &parse_if,
             &parse_while,
             &parse_print,
+            &parse_line,
             &parse_return,
             &parse_verify,
             &parse_var,
@@ -242,6 +244,18 @@ fn parse_print<'a, 'b>(
     let rest = combi::parse_token_consume(rest, lex::Token::Semicolon)?;
     cp.commit();
     Some((ASTStmt::Print(bump.alloc(expr)), rest))
+}
+
+fn parse_line<'a, 'b>(
+    tokens: &'a [lex::Token<'b>],
+    bump: &'b bump::BumpAllocator,
+) -> Option<(ASTStmt<'b>, &'a [lex::Token<'b>])> {
+    let mut cp = bump.create_checkpoint();
+    let rest = combi::parse_token_consume(tokens, lex::Token::Line)?;
+    let (name, rest) = parse_identifier(rest, bump)?;
+    let rest = combi::parse_token_consume(rest, lex::Token::Semicolon)?;
+    cp.commit();
+    Some((ASTStmt::Line(name), rest))
 }
 
 fn parse_return<'a, 'b>(

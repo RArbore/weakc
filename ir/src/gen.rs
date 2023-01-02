@@ -291,6 +291,13 @@ impl<'a> IRGenContext<'a> {
                 let reg = self.irgen_expr(expr);
                 self.add_inst(IRInstruction::Print(reg));
             }
+            TypedASTStmt::Line(name) => {
+                let reg = *self
+                    .curr_vars
+                    .get(name)
+                    .expect("PANIC: Variable not in scope.");
+                self.add_inst(IRInstruction::Line(reg));
+            }
             TypedASTStmt::Return(expr) => {
                 let reg = self.irgen_expr(expr);
                 self.add_inst(IRInstruction::Return(reg));

@@ -23,6 +23,7 @@ pub enum Token<'a> {
     True,
 
     Print,
+    Line,
     Variable,
     Shape,
     ShapedAs,
@@ -67,6 +68,7 @@ const ALPHA_TOKENS: &[(&[u8], Token)] = &[
     (b"F", Token::False),
     (b"T", Token::True),
     (b"p", Token::Print),
+    (b"l", Token::Line),
     (b"a", Token::Variable),
     (b"s", Token::Shape),
     (b"i", Token::If),

@@ -96,6 +96,7 @@ pub enum IRInstruction<'a> {
         &'a bump::List<'a, IRRegister>,
     ),
     Print(IRRegister),
+    Line(IRRegister),
     Verify(IRRegister),
     Return(IRRegister),
 }
@@ -211,6 +212,9 @@ impl<'a> fmt::Display for IRInstruction<'a> {
             }
             IRInstruction::Print(reg) => {
                 write!(f, "pr %{}", reg.0)?;
+            }
+            IRInstruction::Line(reg) => {
+                write!(f, "li %{}", reg.0)?;
             }
             IRInstruction::Verify(reg) => {
                 write!(f, "ve %{}", reg.0)?;
