@@ -94,7 +94,7 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                 }
             }
             if output == "" {
-                let suffix = if dot { ".dot" } else { ".s" };
+                let suffix = ".s";
                 output = if input.len() > 2 && &input[input.len() - 2..] == ".w" {
                     String::from(&input[..input.len() - 2]) + suffix
                 } else {

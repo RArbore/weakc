@@ -167,11 +167,19 @@ impl<'a> fmt::Display for IRConstant<'a> {
                 write!(f, "{}", v)?;
             }
             IRConstant::String(v) => {
-                write!(
-                    f,
-                    "{:?}",
-                    str::from_utf8(v).expect("PANIC: Couldn't convert string to utf8.")
-                )?;
+                if f.alternate() {
+                    write!(
+                        f,
+                        "\\\"{}\\\"",
+                        str::from_utf8(v).expect("PANIC: Couldn't convert string to utf8.")
+                    )?;
+                } else {
+                    write!(
+                        f,
+                        "\"{}\"",
+                        str::from_utf8(v).expect("PANIC: Couldn't convert string to utf8.")
+                    )?;
+                }
             }
             IRConstant::Tensor(s, v) => {
                 write!(f, "{:?} sa {:?}", v, s)?;
@@ -185,7 +193,11 @@ impl<'a> fmt::Display for IRInstruction<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             IRInstruction::Immediate(reg, cons) => {
-                write!(f, "im %{}, {}", reg.0, cons)?;
+                if f.alternate() {
+                    write!(f, "im %{}, {:#}", reg.0, cons)?;
+                } else {
+                    write!(f, "im %{}, {}", reg.0, cons)?;
+                }
             }
             IRInstruction::Copy(reg1, reg2) => {
                 write!(f, "cp %{}, %{}", reg1.0, reg2.0)?;
@@ -197,12 +209,17 @@ impl<'a> fmt::Display for IRInstruction<'a> {
                 write!(f, "bi %{}, {:?}, %{}, %{}", reg1.0, op, reg2.0, reg3.0)?;
             }
             IRInstruction::Index(reg1, reg2, indices) => {
+                let op = if f.alternate() {
+                    ("\\<=", "\\>=")
+                } else {
+                    ("<=", ">=")
+                };
                 match (reg1.1, reg2.1) {
                     (IRType::Number, IRType::Tensor) => {
-                        write!(f, "in %{} <= %{}, [", reg1.0, reg2.0)?;
+                        write!(f, "in %{} {} %{}, [", reg1.0, op.0, reg2.0)?;
                     }
                     (IRType::Tensor, IRType::Number) => {
-                        write!(f, "in %{} >= %{}, [", reg1.0, reg2.0)?;
+                        write!(f, "in %{} {} %{}, [", reg1.0, op.1, reg2.0)?;
                     }
                     _ => panic!("PANIC: Can't print invalid IR."),
                 };
@@ -268,8 +285,14 @@ impl<'a> fmt::Display for IRInstruction<'a> {
 
 impl<'a> fmt::Display for IRBasicBlock<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for i in 0..self.insts.len() {
-            write!(f, "    {}\n", self.insts.at(i))?;
+        if f.alternate() {
+            for i in 0..self.insts.len() {
+                write!(f, "{:#}\\l", self.insts.at(i))?;
+            }
+        } else {
+            for i in 0..self.insts.len() {
+                write!(f, "    {}\n", self.insts.at(i))?;
+            }
         }
         Ok(())
     }
@@ -341,7 +364,13 @@ impl<W: Write> DotContext<W> {
         write_basic_block_id(id, &mut name);
         self.writer.write(&name).unwrap();
         self.writer
-            .write(b" [shape=record, style=filled, fillcolor=\"#b70d2870\"];\n")
+            .write(
+                format!(
+                    " [shape=record, style=filled, label=\"{}:\\l{:#}\"];\n",
+                    id, basic_block
+                )
+                .as_bytes(),
+            )
             .unwrap();
         match basic_block.successors() {
             IRBasicBlockSuccessors::Returns => {}
