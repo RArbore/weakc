@@ -146,12 +146,21 @@ fn main() {
                 let typed_program = semant::typecheck_program(ast, &bump)
                     .expect("PANIC: Something went wrong during typechecking.");
                 let ir_program = ir::irgen(typed_program, &bump);
-                let mut file = File::create(output).expect("PANIC: Unable to open output file.");
+                let mut file =
+                    File::create(output.clone()).expect("PANIC: Unable to open output file.");
+                file.write_all(ir_program.to_string().as_bytes())
+                    .expect("PANIC: Unable to write output file.");
                 if isdot {
-                    ir::write_dot_graph(&ir_program, file);
-                } else {
-                    file.write_all(ir_program.to_string().as_bytes())
-                        .expect("PANIC: Unable to write output file.");
+                    for i in 0..ir_program.funcs.len() {
+                        let file = File::create(
+                            output.clone()
+                                + "."
+                                + core::str::from_utf8(ir_program.funcs.at(i).name).unwrap()
+                                + ".dot",
+                        )
+                        .expect("PANIC: Unable to open output dot file.");
+                        ir::write_dot_graph(&ir_program, file, i as ir::IRFunctionID);
+                    }
                 }
             }
             Command::Run(input) => {

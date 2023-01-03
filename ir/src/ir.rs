@@ -322,12 +322,6 @@ impl<W: Write> DotContext<W> {
         DotContext { writer: w }
     }
 
-    fn write_dot_program<'a>(&mut self, module: &'a IRModule<'a>) {
-        for i in 0..module.funcs.len() {
-            self.write_dot_function(module.funcs.at(i));
-        }
-    }
-
     fn write_dot_function<'a>(&mut self, function: &'a IRFunction<'a>) {
         self.writer.write(b"digraph \"CFG for \'").unwrap();
         self.writer.write(function.name).unwrap();
@@ -339,7 +333,7 @@ impl<W: Write> DotContext<W> {
         for i in 0..function.blocks.len() {
             self.write_dot_basic_block(function.blocks.at(i), i as IRBasicBlockID);
         }
-        self.writer.write(b"}").unwrap();
+        self.writer.write(b"}\n\n").unwrap();
     }
 
     fn write_dot_basic_block<'a>(&mut self, basic_block: &'a IRBasicBlock<'a>, id: IRBasicBlockID) {
@@ -356,7 +350,7 @@ impl<W: Write> DotContext<W> {
                 self.writer.write(b" -> ").unwrap();
                 write_basic_block_id(id, &mut name);
                 self.writer.write(&name).unwrap();
-                self.writer.write(b"\n;").unwrap();
+                self.writer.write(b";\n").unwrap();
             }
             IRBasicBlockSuccessors::Branches(id1, id2) => {
                 let mut dest = [0; 14];
@@ -364,12 +358,12 @@ impl<W: Write> DotContext<W> {
                 self.writer.write(&name).unwrap();
                 self.writer.write(b" -> ").unwrap();
                 self.writer.write(&dest).unwrap();
-                self.writer.write(b"\n;").unwrap();
+                self.writer.write(b";\n").unwrap();
                 write_basic_block_id(id2, &mut dest);
                 self.writer.write(&name).unwrap();
                 self.writer.write(b" -> ").unwrap();
                 self.writer.write(&dest).unwrap();
-                self.writer.write(b"\n;").unwrap();
+                self.writer.write(b";\n").unwrap();
             }
         }
     }
@@ -400,9 +394,9 @@ fn write_basic_block_id(id: IRBasicBlockID, buf: &mut [u8]) {
     buf[13] = conv((id & 15) as u8);
 }
 
-pub fn write_dot_graph<'a, W: Write>(ir: &'a IRModule<'a>, w: W) {
+pub fn write_dot_graph<'a, W: Write>(ir: &'a IRModule<'a>, w: W, func: IRFunctionID) {
     let mut context = DotContext::new(w);
-    context.write_dot_program(ir);
+    context.write_dot_function(ir.funcs.at(func as usize));
 }
 
 #[cfg(test)]
