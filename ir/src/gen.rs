@@ -62,6 +62,7 @@ struct IRGenContext<'a> {
     >,
     op_defs: HashMap<&'a [u8], (&'a [u8], &'a [u8], Type, Type, &'a TypedASTStmt<'a>, Type)>,
     called_funcs: HashMap<&'a [u8], IRFunctionID>,
+    found_return: bool,
     bump: &'a bump::BumpAllocator,
 }
 
@@ -92,6 +93,7 @@ impl<'a> IRGenContext<'a> {
             func_defs: HashMap::new(),
             op_defs: HashMap::new(),
             called_funcs: HashMap::new(),
+            found_return: false,
             bump,
         };
         context
@@ -230,6 +232,11 @@ impl<'a> IRGenContext<'a> {
         for i in 0..program.0.len() {
             self.irgen_stmt(program.0.at(i));
         }
+        if !self.found_return {
+            let reg = self.fresh_reg(IRType::Nil);
+            self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
+            self.add_inst(IRInstruction::Return(reg));
+        }
     }
 
     fn irgen_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {
@@ -304,6 +311,7 @@ impl<'a> IRGenContext<'a> {
             }
             TypedASTStmt::Return(expr) => {
                 let reg = self.irgen_expr(expr);
+                self.found_return = true;
                 self.add_inst(IRInstruction::Return(reg));
             }
             TypedASTStmt::Verify(expr) => {
@@ -378,6 +386,7 @@ impl<'a> IRGenContext<'a> {
                         semant::cleanup_types(new_ast_types);
 
                         let mut old_curr_vars = HashMap::new();
+                        let old_found_return = self.found_return;
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         let old_num_regs = self.curr_num_regs;
                         self.curr_num_regs = arg_regs.len() as IRRegisterID;
@@ -396,6 +405,12 @@ impl<'a> IRGenContext<'a> {
                         let old_block_id = self.curr_block;
                         let func_id = self.fresh_func(func_name, params, result_reg.1);
                         self.irgen_stmt(body);
+                        if !self.found_return {
+                            let reg = self.fresh_reg(IRType::Nil);
+                            self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
+                            self.add_inst(IRInstruction::Return(reg));
+                        }
+                        self.found_return = old_found_return;
                         self.curr_num_regs = old_num_regs;
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         self.curr_func = old_func_id;
@@ -540,6 +555,7 @@ impl<'a> IRGenContext<'a> {
                         semant::cleanup_types(new_ast_types);
 
                         let mut old_curr_vars = HashMap::new();
+                        let old_found_return = self.found_return;
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         let old_num_regs = self.curr_num_regs;
                         self.curr_num_regs = arg_regs.len() as IRRegisterID;
@@ -558,6 +574,12 @@ impl<'a> IRGenContext<'a> {
                         let old_block_id = self.curr_block;
                         let func_id = self.fresh_func(func_name, params, result_reg.1);
                         self.irgen_stmt(body);
+                        if !self.found_return {
+                            let reg = self.fresh_reg(IRType::Nil);
+                            self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
+                            self.add_inst(IRInstruction::Return(reg));
+                        }
+                        self.found_return = old_found_return;
                         self.curr_num_regs = old_num_regs;
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         self.curr_func = old_func_id;
