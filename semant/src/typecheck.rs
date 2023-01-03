@@ -110,6 +110,8 @@ struct TypeContext<'a> {
     ops: HashMap<&'a [u8], (Type, Type, Type)>,
     vars: HashMap<&'a [u8], Type>,
     ret_ty: Type,
+    found_return: bool,
+    last_stmt_return: bool,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -124,6 +126,7 @@ pub fn typecheck_program<'a>(
     let num_pure_generics = context.num_generics;
     context.generate_constraints_tree(unconstrained)?;
     let types = context.constrain_types(num_pure_generics, bump)?;
+    context.check_returns_tree(unconstrained)?;
     Ok(TypedProgram(unconstrained, types))
 }
 
@@ -196,6 +199,8 @@ impl<'a> TypeContext<'a> {
             ops: HashMap::new(),
             vars: HashMap::new(),
             ret_ty: Type::Nil,
+            found_return: false,
+            last_stmt_return: false,
         }
     }
 
@@ -418,9 +423,16 @@ impl<'a> TypeContext<'a> {
                 for i in 0..params.len() {
                     self.vars.insert(params.at(i), *params_ty.at(i));
                 }
+                let old_found_return = self.found_return;
+                self.found_return = false;
                 self.generate_constraints_stmt(body)?;
+                if !self.found_return {
+                    self.constraints
+                        .push(Constraint::Symmetric(Type::Nil, *ret_ty));
+                }
                 swap(&mut self.vars, &mut old_vars);
                 self.ret_ty = old_ret_ty;
+                self.found_return = old_found_return;
                 Ok(())
             }
             TypedASTStmt::Operator(op, left, right, left_ty, right_ty, body, ret_ty) => {
@@ -467,6 +479,7 @@ impl<'a> TypeContext<'a> {
                 self.generate_constraints_expr(expr)?;
                 self.constraints
                     .push(Constraint::Symmetric(expr.get_type(), self.ret_ty));
+                self.found_return = true;
                 Ok(())
             }
             TypedASTStmt::Verify(expr) => {
@@ -758,6 +771,61 @@ impl<'a> TypeContext<'a> {
         cleanup_types(types);
 
         Ok(types)
+    }
+
+    fn check_returns_tree(
+        &mut self,
+        program: &'a bump::List<'a, TypedASTStmt<'a>>,
+    ) -> TypeResult<()> {
+        for i in 0..program.len() {
+            self.check_returns_stmt(program.at(i))?;
+        }
+        if self.found_return != self.last_stmt_return {
+            Err("ERROR: If there is a return statement in a function, the function must be terminated by a return statement.")?;
+        }
+        Ok(())
+    }
+
+    fn check_returns_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) -> TypeResult<()> {
+        match stmt {
+            TypedASTStmt::Block(stmts) => {
+                for i in 0..stmts.len() {
+                    self.check_returns_stmt(stmts.at(i))?;
+                }
+            }
+            TypedASTStmt::Function(_, _, _, body, _)
+            | TypedASTStmt::Operator(_, _, _, _, _, body, _) => {
+                let (old_found_return, old_last_stmt_return) =
+                    (self.found_return, self.last_stmt_return);
+
+                self.found_return = false;
+                self.last_stmt_return = false;
+                self.check_returns_stmt(body)?;
+
+                if self.found_return != self.last_stmt_return {
+                    Err("ERROR: If there is a return statement in a function, the function must be terminated by a return statement.")?;
+                }
+
+                self.found_return = old_found_return;
+                self.last_stmt_return = old_last_stmt_return;
+            }
+            TypedASTStmt::If(_, body) | TypedASTStmt::While(_, body) => {
+                self.check_returns_stmt(body)?;
+                self.last_stmt_return = false;
+            }
+            TypedASTStmt::Print(_)
+            | TypedASTStmt::Line(_)
+            | TypedASTStmt::Verify(_)
+            | TypedASTStmt::Variable(_, _)
+            | TypedASTStmt::Expression(_) => {
+                self.last_stmt_return = false;
+            }
+            TypedASTStmt::Return(_) => {
+                self.found_return = true;
+                self.last_stmt_return = true;
+            }
+        }
+        Ok(())
     }
 }
 
