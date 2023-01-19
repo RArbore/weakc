@@ -147,6 +147,7 @@ pub struct HIRFunction<'a> {
     pub params: &'a mut bump::List<'a, HIRRegister>,
     pub ret_type: HIRType,
     pub blocks: &'a mut bump::List<'a, HIRBasicBlock<'a>>,
+    pub num_regs_used: HIRRegisterID,
 }
 
 #[derive(Debug, PartialEq)]

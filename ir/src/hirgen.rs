@@ -82,6 +82,7 @@ impl<'a> HIRGenContext<'a> {
                                 insts: bump.create_list(),
                             }
                         ),
+                        num_regs_used: 0,
                     }
                 ),
             },
@@ -130,6 +131,7 @@ impl<'a> HIRGenContext<'a> {
     fn fresh_reg(&mut self, ty: HIRType) -> HIRRegister {
         let id = self.curr_num_regs;
         self.curr_num_regs += 1;
+        self.get_curr_func_mut().num_regs_used += 1;
         (id, ty)
     }
 
@@ -150,6 +152,7 @@ impl<'a> HIRGenContext<'a> {
         ret_type: HIRType,
     ) -> HIRFunctionID {
         let func_id = self.module.funcs.len() as HIRFunctionID;
+        let num_regs_used = params.len() as u32;
         self.module.funcs.push(HIRFunction {
             name,
             params,
@@ -160,6 +163,7 @@ impl<'a> HIRGenContext<'a> {
                     insts: self.bump.create_list()
                 }
             ),
+            num_regs_used,
         });
         self.curr_func = func_id;
         self.curr_block = 0;
@@ -616,61 +620,70 @@ mod tests {
         let pahirs = &mut [
             (
                 b"a x = 0; p x;" as &[_],
-                bump_list!(
-                    bump,
-                    HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(0.0)),
-                    HIRInstruction::Copy((1, HIRType::Number), (0, HIRType::Number)),
-                    HIRInstruction::Print((1, HIRType::Number)),
-                    HIRInstruction::Immediate((2, HIRType::Nil), HIRConstant::Nil),
-                    HIRInstruction::Return((2, HIRType::Nil))
+                (
+                    bump_list!(
+                        bump,
+                        HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(0.0)),
+                        HIRInstruction::Copy((1, HIRType::Number), (0, HIRType::Number)),
+                        HIRInstruction::Print((1, HIRType::Number)),
+                        HIRInstruction::Immediate((2, HIRType::Nil), HIRConstant::Nil),
+                        HIRInstruction::Return((2, HIRType::Nil))
+                    ),
+                    3,
                 ),
             ),
             (
                 b"p 3 + 5;",
-                bump_list!(
-                    bump,
-                    HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(3.0)),
-                    HIRInstruction::Immediate((1, HIRType::Number), HIRConstant::Number(5.0)),
-                    HIRInstruction::Binary(
-                        (2, HIRType::Number),
-                        HIRBinaryOp::AddNumbers,
-                        (0, HIRType::Number),
-                        (1, HIRType::Number)
+                (
+                    bump_list!(
+                        bump,
+                        HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(3.0)),
+                        HIRInstruction::Immediate((1, HIRType::Number), HIRConstant::Number(5.0)),
+                        HIRInstruction::Binary(
+                            (2, HIRType::Number),
+                            HIRBinaryOp::AddNumbers,
+                            (0, HIRType::Number),
+                            (1, HIRType::Number)
+                        ),
+                        HIRInstruction::Print((2, HIRType::Number)),
+                        HIRInstruction::Immediate((3, HIRType::Nil), HIRConstant::Nil),
+                        HIRInstruction::Return((3, HIRType::Nil))
                     ),
-                    HIRInstruction::Print((2, HIRType::Number)),
-                    HIRInstruction::Immediate((3, HIRType::Nil), HIRConstant::Nil),
-                    HIRInstruction::Return((3, HIRType::Nil))
+                    4,
                 ),
             ),
             (
                 b"a x = 5; p 3 + x; a y = x ^ 2; a z = [y];",
-                bump_list!(
-                    bump,
-                    HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(5.0)),
-                    HIRInstruction::Copy((1, HIRType::Number), (0, HIRType::Number)),
-                    HIRInstruction::Immediate((2, HIRType::Number), HIRConstant::Number(3.0)),
-                    HIRInstruction::Binary(
-                        (3, HIRType::Number),
-                        HIRBinaryOp::AddNumbers,
-                        (2, HIRType::Number),
-                        (1, HIRType::Number)
+                (
+                    bump_list!(
+                        bump,
+                        HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(5.0)),
+                        HIRInstruction::Copy((1, HIRType::Number), (0, HIRType::Number)),
+                        HIRInstruction::Immediate((2, HIRType::Number), HIRConstant::Number(3.0)),
+                        HIRInstruction::Binary(
+                            (3, HIRType::Number),
+                            HIRBinaryOp::AddNumbers,
+                            (2, HIRType::Number),
+                            (1, HIRType::Number)
+                        ),
+                        HIRInstruction::Print((3, HIRType::Number)),
+                        HIRInstruction::Immediate((4, HIRType::Number), HIRConstant::Number(2.0)),
+                        HIRInstruction::Binary(
+                            (5, HIRType::Number),
+                            HIRBinaryOp::PowerNumbers,
+                            (1, HIRType::Number),
+                            (4, HIRType::Number)
+                        ),
+                        HIRInstruction::Copy((6, HIRType::Number), (5, HIRType::Number)),
+                        HIRInstruction::Array(
+                            (7, HIRType::Tensor),
+                            bump_list!(bump, (6, HIRType::Number))
+                        ),
+                        HIRInstruction::Copy((8, HIRType::Tensor), (7, HIRType::Tensor)),
+                        HIRInstruction::Immediate((9, HIRType::Nil), HIRConstant::Nil),
+                        HIRInstruction::Return((9, HIRType::Nil))
                     ),
-                    HIRInstruction::Print((3, HIRType::Number)),
-                    HIRInstruction::Immediate((4, HIRType::Number), HIRConstant::Number(2.0)),
-                    HIRInstruction::Binary(
-                        (5, HIRType::Number),
-                        HIRBinaryOp::PowerNumbers,
-                        (1, HIRType::Number),
-                        (4, HIRType::Number)
-                    ),
-                    HIRInstruction::Copy((6, HIRType::Number), (5, HIRType::Number)),
-                    HIRInstruction::Array(
-                        (7, HIRType::Tensor),
-                        bump_list!(bump, (6, HIRType::Number))
-                    ),
-                    HIRInstruction::Copy((8, HIRType::Tensor), (7, HIRType::Tensor)),
-                    HIRInstruction::Immediate((9, HIRType::Nil), HIRConstant::Nil),
-                    HIRInstruction::Return((9, HIRType::Nil))
+                    10,
                 ),
             ),
         ];
@@ -688,7 +701,8 @@ mod tests {
                             name: b"@main",
                             params: bump.create_list(),
                             ret_type: HIRType::Nil,
-                            blocks: bump_list!(bump, HIRBasicBlock { insts: *output })
+                            blocks: bump_list!(bump, HIRBasicBlock { insts: output.0 }),
+                            num_regs_used: output.1,
                         }
                     )
                 }
@@ -760,7 +774,8 @@ mod tests {
                                     HIRInstruction::Return((4, HIRType::Nil))
                                 )
                             }
-                        )
+                        ),
+                        num_regs_used: 5,
                     }
                 )
             }
@@ -798,7 +813,8 @@ mod tests {
                                     HIRInstruction::Return((1, HIRType::Nil))
                                 )
                             }
-                        )
+                        ),
+                        num_regs_used: 2,
                     },
                     HIRFunction {
                         name: b"@f_xyz",
@@ -818,7 +834,8 @@ mod tests {
                                     HIRInstruction::Return((1, HIRType::Number))
                                 )
                             }
-                        )
+                        ),
+                        num_regs_used: 2,
                     }
                 )
             }
@@ -916,7 +933,8 @@ mod tests {
                                     HIRInstruction::Return((11, HIRType::Nil))
                                 )
                             }
-                        )
+                        ),
+                        num_regs_used: 12,
                     },
                     HIRFunction {
                         name: b"@f_xyz33",
@@ -936,7 +954,8 @@ mod tests {
                                     HIRInstruction::Return((2, HIRType::Number))
                                 )
                             }
-                        )
+                        ),
+                        num_regs_used: 3,
                     },
                     HIRFunction {
                         name: b"@f_xyz44",
@@ -956,7 +975,8 @@ mod tests {
                                     HIRInstruction::Return((2, HIRType::Tensor))
                                 )
                             }
-                        )
+                        ),
+                        num_regs_used: 3,
                     }
                 )
             }

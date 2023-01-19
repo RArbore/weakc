@@ -115,6 +115,7 @@ impl<'a> MIRGenContext<'a> {
             params: self.bump.create_list(),
             ret_type: convert_type(func.ret_type),
             blocks: self.bump.create_list(),
+            num_regs_used: func.num_regs_used,
         };
 
         for i in 0..func.params.len() {
@@ -185,6 +186,69 @@ impl<'a> MIRGenContext<'a> {
                         convert_2_registers((*left_reg, *right_reg))
                     {
                         self.add_inst(MIRInstruction::Unary(left_mir_reg, op, right_mir_reg));
+                    }
+                }
+                HIRInstruction::Binary(result_reg, op, left_reg, right_reg) => {
+                    if let HIRBinaryOp::NotEqualsNils = op {
+                        self.add_inst(MIRInstruction::Immediate(
+                            convert_register(*result_reg).unwrap(),
+                            MIRConstant::Boolean(false),
+                        ));
+                    } else if let HIRBinaryOp::EqualsEqualsNils = op {
+                        self.add_inst(MIRInstruction::Immediate(
+                            convert_register(*result_reg).unwrap(),
+                            MIRConstant::Boolean(true),
+                        ));
+                    } else if let Some((result_mir_reg, left_mir_reg, right_mir_reg)) =
+                        convert_3_registers((*result_reg, *left_reg, *right_reg))
+                    {
+                        match op {
+                            HIRBinaryOp::ShapedAs => {}
+                            HIRBinaryOp::MatrixMultiply => {}
+                            HIRBinaryOp::AddTensors => {}
+                            HIRBinaryOp::SubtractTensors => {}
+                            HIRBinaryOp::MultiplyTensors => {}
+                            HIRBinaryOp::DivideTensors => {}
+                            HIRBinaryOp::PowerTensors => {}
+                            HIRBinaryOp::NotEqualsTensors => {}
+                            HIRBinaryOp::EqualsEqualsTensors => {}
+                            _ => {
+                                let mir_op = match op {
+                                    HIRBinaryOp::AddNumbers => MIRBinaryOp::AddReals,
+                                    HIRBinaryOp::SubtractNumbers => MIRBinaryOp::SubtractReals,
+                                    HIRBinaryOp::MultiplyNumbers => MIRBinaryOp::MultiplyReals,
+                                    HIRBinaryOp::DivideNumbers => MIRBinaryOp::DivideReals,
+                                    HIRBinaryOp::PowerNumbers => MIRBinaryOp::PowerReals,
+                                    HIRBinaryOp::Greater => MIRBinaryOp::GreaterReals,
+                                    HIRBinaryOp::Lesser => MIRBinaryOp::LesserReals,
+                                    HIRBinaryOp::NotEqualsBooleans => {
+                                        MIRBinaryOp::NotEqualsBooleans
+                                    }
+                                    HIRBinaryOp::EqualsEqualsBooleans => {
+                                        MIRBinaryOp::EqualsEqualsBooleans
+                                    }
+                                    HIRBinaryOp::NotEqualsStrings => MIRBinaryOp::NotEqualsStrings,
+                                    HIRBinaryOp::EqualsEqualsStrings => {
+                                        MIRBinaryOp::EqualsEqualsStrings
+                                    }
+                                    HIRBinaryOp::NotEqualsNumbers => MIRBinaryOp::NotEqualsReals,
+                                    HIRBinaryOp::EqualsEqualsNumbers => {
+                                        MIRBinaryOp::EqualsEqualsReals
+                                    }
+                                    HIRBinaryOp::GreaterEquals => MIRBinaryOp::GreaterEqualsReals,
+                                    HIRBinaryOp::LesserEquals => MIRBinaryOp::LesserEqualsReals,
+                                    HIRBinaryOp::And => MIRBinaryOp::And,
+                                    HIRBinaryOp::Or => MIRBinaryOp::Or,
+                                    _ => panic!("PANIC: Unimplemented simple HIR->MIR binary op."),
+                                };
+                                self.add_inst(MIRInstruction::Binary(
+                                    result_mir_reg,
+                                    mir_op,
+                                    left_mir_reg,
+                                    right_mir_reg,
+                                ));
+                            }
+                        }
                     }
                 }
                 _ => todo!(),
