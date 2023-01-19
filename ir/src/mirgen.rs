@@ -26,19 +26,19 @@ struct MIRGenContext<'a> {
     bump: &'a bump::BumpAllocator,
 }
 
-pub fn mirgen<'a>(program: IRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRModule<'a> {
+pub fn mirgen<'a>(program: HIRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRModule<'a> {
     let mut context = MIRGenContext::new(bump);
     context.mirgen_program(program);
     context.module
 }
 
-fn convert_type(ty: IRType) -> Option<MIRType> {
+fn convert_type(ty: HIRType) -> Option<MIRType> {
     match ty {
-        IRType::Nil => None,
-        IRType::Boolean => Some(MIRType::Boolean),
-        IRType::String => Some(MIRType::String),
-        IRType::Number => Some(MIRType::Real),
-        IRType::Tensor => Some(MIRType::Pointer),
+        HIRType::Nil => None,
+        HIRType::Boolean => Some(MIRType::Boolean),
+        HIRType::String => Some(MIRType::String),
+        HIRType::Number => Some(MIRType::Real),
+        HIRType::Tensor => Some(MIRType::Pointer),
     }
 }
 
@@ -56,13 +56,13 @@ impl<'a> MIRGenContext<'a> {
         context
     }
 
-    fn mirgen_program(&mut self, program: IRModule<'a>) {
+    fn mirgen_program(&mut self, program: HIRModule<'a>) {
         for i in 0..program.funcs.len() {
             self.mirgen_func(program.funcs.at(i));
         }
     }
 
-    fn mirgen_func(&mut self, func: &'a IRFunction<'a>) {
+    fn mirgen_func(&mut self, func: &'a HIRFunction<'a>) {
         let mir_func = MIRFunction {
             name: func.name,
             params: self.bump.create_list(),
@@ -86,5 +86,5 @@ impl<'a> MIRGenContext<'a> {
         }
     }
 
-    fn mirgen_block(&mut self, block: &'a IRBasicBlock<'a>) {}
+    fn mirgen_block(&mut self, block: &'a HIRBasicBlock<'a>) {}
 }

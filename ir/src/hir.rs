@@ -21,7 +21,7 @@ use core::str;
 use std::io::Write;
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum IRConstant<'a> {
+pub enum HIRConstant<'a> {
     Nil,
     Boolean(bool),
     Number(f64),
@@ -30,7 +30,7 @@ pub enum IRConstant<'a> {
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum IRType {
+pub enum HIRType {
     Nil,
     Boolean,
     String,
@@ -38,20 +38,20 @@ pub enum IRType {
     Tensor,
 }
 
-pub type IRRegisterID = u32;
-pub type IRFunctionID = u32;
-pub type IRBasicBlockID = u32;
-pub type IRRegister = (IRRegisterID, IRType);
+pub type HIRRegisterID = u32;
+pub type HIRFunctionID = u32;
+pub type HIRBasicBlockID = u32;
+pub type HIRRegister = (HIRRegisterID, HIRType);
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum IRUnaryOp {
+pub enum HIRUnaryOp {
     Not,
     Negate,
     Shape,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum IRBinaryOp {
+pub enum HIRBinaryOp {
     ShapedAs,
     AddNumbers,
     SubtractNumbers,
@@ -83,46 +83,46 @@ pub enum IRBinaryOp {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub enum IRInstruction<'a> {
-    Immediate(IRRegister, IRConstant<'a>),
-    Copy(IRRegister, IRRegister),
-    Unary(IRRegister, IRUnaryOp, IRRegister),
-    Binary(IRRegister, IRBinaryOp, IRRegister, IRRegister),
-    Index(IRRegister, IRRegister, &'a bump::List<'a, IRRegister>),
-    Array(IRRegister, &'a bump::List<'a, IRRegister>),
-    BranchUncond(IRBasicBlockID),
-    BranchCond(IRRegister, IRBasicBlockID, IRBasicBlockID),
+pub enum HIRInstruction<'a> {
+    Immediate(HIRRegister, HIRConstant<'a>),
+    Copy(HIRRegister, HIRRegister),
+    Unary(HIRRegister, HIRUnaryOp, HIRRegister),
+    Binary(HIRRegister, HIRBinaryOp, HIRRegister, HIRRegister),
+    Index(HIRRegister, HIRRegister, &'a bump::List<'a, HIRRegister>),
+    Array(HIRRegister, &'a bump::List<'a, HIRRegister>),
+    BranchUncond(HIRBasicBlockID),
+    BranchCond(HIRRegister, HIRBasicBlockID, HIRBasicBlockID),
     Call(
-        IRRegister,
-        (IRFunctionID, &'a [u8]),
-        &'a bump::List<'a, IRRegister>,
+        HIRRegister,
+        (HIRFunctionID, &'a [u8]),
+        &'a bump::List<'a, HIRRegister>,
     ),
-    Print(IRRegister),
-    Line(IRRegister),
-    Verify(IRRegister),
-    Return(IRRegister),
+    Print(HIRRegister),
+    Line(HIRRegister),
+    Verify(HIRRegister),
+    Return(HIRRegister),
 }
 
 #[derive(Debug, PartialEq)]
-pub struct IRBasicBlock<'a> {
-    pub insts: &'a mut bump::List<'a, IRInstruction<'a>>,
+pub struct HIRBasicBlock<'a> {
+    pub insts: &'a mut bump::List<'a, HIRInstruction<'a>>,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
-pub enum IRBasicBlockSuccessors {
+pub enum HIRBasicBlockSuccessors {
     Returns,
-    Jumps(IRBasicBlockID),
-    Branches(IRBasicBlockID, IRBasicBlockID),
+    Jumps(HIRBasicBlockID),
+    Branches(HIRBasicBlockID, HIRBasicBlockID),
 }
 
-impl<'a> IRBasicBlock<'a> {
-    pub fn successors(&self) -> IRBasicBlockSuccessors {
+impl<'a> HIRBasicBlock<'a> {
+    pub fn successors(&self) -> HIRBasicBlockSuccessors {
         assert!(self.insts.len() > 0, "PANIC: Empty basic block.");
         let last_inst = self.insts.at(self.insts.len() - 1);
         match last_inst {
-            IRInstruction::Return(_) => IRBasicBlockSuccessors::Returns,
-            IRInstruction::BranchUncond(b) => IRBasicBlockSuccessors::Jumps(*b),
-            IRInstruction::BranchCond(_, b1, b2) => IRBasicBlockSuccessors::Branches(*b1, *b2),
+            HIRInstruction::Return(_) => HIRBasicBlockSuccessors::Returns,
+            HIRInstruction::BranchUncond(b) => HIRBasicBlockSuccessors::Jumps(*b),
+            HIRInstruction::BranchCond(_, b1, b2) => HIRBasicBlockSuccessors::Branches(*b1, *b2),
             _ => panic!("PANIC: Found invalid terminating instruction of basic block."),
         }
     }
@@ -130,9 +130,9 @@ impl<'a> IRBasicBlock<'a> {
     pub fn is_terminated(&self) -> bool {
         if self.insts.len() > 0 {
             match self.insts.at(self.insts.len() - 1) {
-                IRInstruction::Return(_) => true,
-                IRInstruction::BranchUncond(_) => true,
-                IRInstruction::BranchCond(_, _, _) => true,
+                HIRInstruction::Return(_) => true,
+                HIRInstruction::BranchUncond(_) => true,
+                HIRInstruction::BranchCond(_, _, _) => true,
                 _ => false,
             }
         } else {
@@ -142,31 +142,31 @@ impl<'a> IRBasicBlock<'a> {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct IRFunction<'a> {
+pub struct HIRFunction<'a> {
     pub name: &'a [u8],
-    pub params: &'a mut bump::List<'a, IRRegister>,
-    pub ret_type: IRType,
-    pub blocks: &'a mut bump::List<'a, IRBasicBlock<'a>>,
+    pub params: &'a mut bump::List<'a, HIRRegister>,
+    pub ret_type: HIRType,
+    pub blocks: &'a mut bump::List<'a, HIRBasicBlock<'a>>,
 }
 
 #[derive(Debug, PartialEq)]
-pub struct IRModule<'a> {
-    pub funcs: &'a mut bump::List<'a, IRFunction<'a>>,
+pub struct HIRModule<'a> {
+    pub funcs: &'a mut bump::List<'a, HIRFunction<'a>>,
 }
 
-impl<'a> fmt::Display for IRConstant<'a> {
+impl<'a> fmt::Display for HIRConstant<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IRConstant::Nil => {
+            HIRConstant::Nil => {
                 write!(f, "Nil")?;
             }
-            IRConstant::Boolean(v) => {
+            HIRConstant::Boolean(v) => {
                 write!(f, "{}", v)?;
             }
-            IRConstant::Number(v) => {
+            HIRConstant::Number(v) => {
                 write!(f, "{}", v)?;
             }
-            IRConstant::String(v) => {
+            HIRConstant::String(v) => {
                 if f.alternate() {
                     write!(
                         f,
@@ -181,7 +181,7 @@ impl<'a> fmt::Display for IRConstant<'a> {
                     )?;
                 }
             }
-            IRConstant::Tensor(s, v) => {
+            HIRConstant::Tensor(s, v) => {
                 write!(f, "{:?} sa {:?}", v, s)?;
             }
         }
@@ -189,39 +189,39 @@ impl<'a> fmt::Display for IRConstant<'a> {
     }
 }
 
-impl<'a> fmt::Display for IRInstruction<'a> {
+impl<'a> fmt::Display for HIRInstruction<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            IRInstruction::Immediate(reg, cons) => {
+            HIRInstruction::Immediate(reg, cons) => {
                 if f.alternate() {
                     write!(f, "im %{}, {:#}", reg.0, cons)?;
                 } else {
                     write!(f, "im %{}, {}", reg.0, cons)?;
                 }
             }
-            IRInstruction::Copy(reg1, reg2) => {
+            HIRInstruction::Copy(reg1, reg2) => {
                 write!(f, "cp %{}, %{}", reg1.0, reg2.0)?;
             }
-            IRInstruction::Unary(reg1, op, reg2) => {
+            HIRInstruction::Unary(reg1, op, reg2) => {
                 write!(f, "un %{}, {:?}, %{}", reg1.0, op, reg2.0)?;
             }
-            IRInstruction::Binary(reg1, op, reg2, reg3) => {
+            HIRInstruction::Binary(reg1, op, reg2, reg3) => {
                 write!(f, "bi %{}, {:?}, %{}, %{}", reg1.0, op, reg2.0, reg3.0)?;
             }
-            IRInstruction::Index(reg1, reg2, indices) => {
+            HIRInstruction::Index(reg1, reg2, indices) => {
                 let op = if f.alternate() {
                     ("\\<=", "\\>=")
                 } else {
                     ("<=", ">=")
                 };
                 match (reg1.1, reg2.1) {
-                    (IRType::Number, IRType::Tensor) => {
+                    (HIRType::Number, HIRType::Tensor) => {
                         write!(f, "in %{} {} %{}, [", reg1.0, op.0, reg2.0)?;
                     }
-                    (IRType::Tensor, IRType::Number) => {
+                    (HIRType::Tensor, HIRType::Number) => {
                         write!(f, "in %{} {} %{}, [", reg1.0, op.1, reg2.0)?;
                     }
-                    _ => panic!("PANIC: Can't print invalid IR."),
+                    _ => panic!("PANIC: Can't print invalid HIR."),
                 };
                 for i in 0..indices.len() {
                     if i == 0 {
@@ -232,7 +232,7 @@ impl<'a> fmt::Display for IRInstruction<'a> {
                 }
                 write!(f, "]")?;
             }
-            IRInstruction::Array(reg, elems) => {
+            HIRInstruction::Array(reg, elems) => {
                 write!(f, "ar %{}, [", reg.0)?;
                 for i in 0..elems.len() {
                     if i == 0 {
@@ -243,13 +243,13 @@ impl<'a> fmt::Display for IRInstruction<'a> {
                 }
                 write!(f, "]")?;
             }
-            IRInstruction::BranchUncond(block) => {
+            HIRInstruction::BranchUncond(block) => {
                 write!(f, "ju {}", block)?;
             }
-            IRInstruction::BranchCond(reg, block1, block2) => {
+            HIRInstruction::BranchCond(reg, block1, block2) => {
                 write!(f, "br %{}, {}, {}", reg.0, block1, block2)?;
             }
-            IRInstruction::Call(reg, func, args) => {
+            HIRInstruction::Call(reg, func, args) => {
                 write!(
                     f,
                     "ca %{}, {}, (",
@@ -266,16 +266,16 @@ impl<'a> fmt::Display for IRInstruction<'a> {
                 }
                 write!(f, ")")?;
             }
-            IRInstruction::Print(reg) => {
+            HIRInstruction::Print(reg) => {
                 write!(f, "pr %{}", reg.0)?;
             }
-            IRInstruction::Line(reg) => {
+            HIRInstruction::Line(reg) => {
                 write!(f, "li %{}", reg.0)?;
             }
-            IRInstruction::Verify(reg) => {
+            HIRInstruction::Verify(reg) => {
                 write!(f, "ve %{}", reg.0)?;
             }
-            IRInstruction::Return(reg) => {
+            HIRInstruction::Return(reg) => {
                 write!(f, "re %{}", reg.0)?;
             }
         }
@@ -283,7 +283,7 @@ impl<'a> fmt::Display for IRInstruction<'a> {
     }
 }
 
-impl<'a> fmt::Display for IRBasicBlock<'a> {
+impl<'a> fmt::Display for HIRBasicBlock<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             for i in 0..self.insts.len() {
@@ -298,7 +298,7 @@ impl<'a> fmt::Display for IRBasicBlock<'a> {
     }
 }
 
-impl<'a> fmt::Display for IRFunction<'a> {
+impl<'a> fmt::Display for HIRFunction<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
@@ -323,7 +323,7 @@ impl<'a> fmt::Display for IRFunction<'a> {
     }
 }
 
-impl<'a> fmt::Display for IRModule<'a> {
+impl<'a> fmt::Display for HIRModule<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         for i in 0..self.funcs.len() {
             if i == 0 {
@@ -345,7 +345,7 @@ impl<W: Write> DotContext<W> {
         DotContext { writer: w }
     }
 
-    fn write_dot_function<'a>(&mut self, function: &'a IRFunction<'a>) {
+    fn write_dot_function<'a>(&mut self, function: &'a HIRFunction<'a>) {
         self.writer.write(b"digraph \"CFG for \'").unwrap();
         self.writer.write(function.name).unwrap();
         self.writer
@@ -354,12 +354,16 @@ impl<W: Write> DotContext<W> {
         self.writer.write(function.name).unwrap();
         self.writer.write(b"\' function\";\n").unwrap();
         for i in 0..function.blocks.len() {
-            self.write_dot_basic_block(function.blocks.at(i), i as IRBasicBlockID);
+            self.write_dot_basic_block(function.blocks.at(i), i as HIRBasicBlockID);
         }
         self.writer.write(b"}\n\n").unwrap();
     }
 
-    fn write_dot_basic_block<'a>(&mut self, basic_block: &'a IRBasicBlock<'a>, id: IRBasicBlockID) {
+    fn write_dot_basic_block<'a>(
+        &mut self,
+        basic_block: &'a HIRBasicBlock<'a>,
+        id: HIRBasicBlockID,
+    ) {
         let mut name = [0; 14];
         write_basic_block_id(id, &mut name);
         self.writer.write(&name).unwrap();
@@ -373,15 +377,15 @@ impl<W: Write> DotContext<W> {
             )
             .unwrap();
         match basic_block.successors() {
-            IRBasicBlockSuccessors::Returns => {}
-            IRBasicBlockSuccessors::Jumps(id) => {
+            HIRBasicBlockSuccessors::Returns => {}
+            HIRBasicBlockSuccessors::Jumps(id) => {
                 self.writer.write(&name).unwrap();
                 self.writer.write(b" -> ").unwrap();
                 write_basic_block_id(id, &mut name);
                 self.writer.write(&name).unwrap();
                 self.writer.write(b";\n").unwrap();
             }
-            IRBasicBlockSuccessors::Branches(id1, id2) => {
+            HIRBasicBlockSuccessors::Branches(id1, id2) => {
                 let mut dest = [0; 14];
                 write_basic_block_id(id1, &mut dest);
                 self.writer.write(&name).unwrap();
@@ -398,7 +402,7 @@ impl<W: Write> DotContext<W> {
     }
 }
 
-fn write_basic_block_id(id: IRBasicBlockID, buf: &mut [u8]) {
+fn write_basic_block_id(id: HIRBasicBlockID, buf: &mut [u8]) {
     let conv = |x| {
         if x < 10 {
             x + b'0'
@@ -423,9 +427,9 @@ fn write_basic_block_id(id: IRBasicBlockID, buf: &mut [u8]) {
     buf[13] = conv((id & 15) as u8);
 }
 
-pub fn write_dot_graph<'a, W: Write>(ir: &'a IRModule<'a>, w: W, func: IRFunctionID) {
+pub fn write_dot_graph<'a, W: Write>(hir: &'a HIRModule<'a>, w: W, func: HIRFunctionID) {
     let mut context = DotContext::new(w);
-    context.write_dot_function(ir.funcs.at(func as usize));
+    context.write_dot_function(hir.funcs.at(func as usize));
 }
 
 #[cfg(test)]

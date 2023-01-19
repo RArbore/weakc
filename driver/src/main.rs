@@ -30,7 +30,7 @@ Commands:
 Options:
     -h, --help            Display this message
     -o, --output <OUTPUT> Set the output file when building
-    -dot-cfg              Output a dot CFG instead of textual IR
+    -dot-cfg-hir              Output a dot CFG instead of textual HIR
 "#;
     println!("{}", text);
 }
@@ -42,7 +42,7 @@ enum Command {
 
 enum Option {
     Output(String),
-    DotCFG,
+    DotCFGHIR,
 }
 
 fn parse_options(args: &[String]) -> Result<(Vec<Option>, &[String]), String> {
@@ -58,8 +58,8 @@ fn parse_options(args: &[String]) -> Result<(Vec<Option>, &[String]), String> {
                 options.push(Option::Output(output));
                 cursor += 2;
             }
-            "-dot-cfg" => {
-                options.push(Option::DotCFG);
+            "-dot-cfg-hir" => {
+                options.push(Option::DotCFGHIR);
                 cursor += 1;
             }
             _ => {
@@ -88,7 +88,7 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                     Option::Output(out) => {
                         output = out;
                     }
-                    Option::DotCFG => {
+                    Option::DotCFGHIR => {
                         dot = true;
                     }
                 }
@@ -115,7 +115,7 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                     Option::Output(_) => {
                         Err("ERROR: Unsupported argument for command \"run\".")?;
                     }
-                    Option::DotCFG => {
+                    Option::DotCFGHIR => {
                         Err("ERROR: Unsupported argument for command \"run\".")?;
                     }
                 }
@@ -145,21 +145,21 @@ fn main() {
                     .expect("PANIC: Something went wrong during parsing.");
                 let typed_program = semant::typecheck_program(ast, &bump)
                     .expect("PANIC: Something went wrong during typechecking.");
-                let ir_program = ir::irgen(typed_program, &bump);
+                let hir_program = ir::hirgen(typed_program, &bump);
                 let mut file =
                     File::create(output.clone()).expect("PANIC: Unable to open output file.");
-                file.write_all(ir_program.to_string().as_bytes())
+                file.write_all(hir_program.to_string().as_bytes())
                     .expect("PANIC: Unable to write output file.");
                 if isdot {
-                    for i in 0..ir_program.funcs.len() {
+                    for i in 0..hir_program.funcs.len() {
                         let file = File::create(
                             output.clone()
                                 + "."
-                                + core::str::from_utf8(ir_program.funcs.at(i).name).unwrap()
+                                + core::str::from_utf8(hir_program.funcs.at(i).name).unwrap()
                                 + ".dot",
                         )
                         .expect("PANIC: Unable to open output dot file.");
-                        ir::write_dot_graph(&ir_program, file, i as ir::IRFunctionID);
+                        ir::write_dot_graph(&hir_program, file, i as ir::HIRFunctionID);
                     }
                 }
             }

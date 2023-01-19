@@ -27,30 +27,30 @@ use semant::TypedASTExpr;
 use semant::TypedASTStmt;
 use semant::TypedProgram;
 
-pub fn irgen<'a>(program: TypedProgram<'a>, bump: &'a bump::BumpAllocator) -> IRModule<'a> {
-    let mut context = IRGenContext::new(bump);
-    context.irgen_program(program);
+pub fn hirgen<'a>(program: TypedProgram<'a>, bump: &'a bump::BumpAllocator) -> HIRModule<'a> {
+    let mut context = HIRGenContext::new(bump);
+    context.hirgen_program(program);
     context.module
 }
 
-fn convert_type(ty: Type) -> IRType {
+fn convert_type(ty: Type) -> HIRType {
     match ty {
-        Type::Nil => IRType::Nil,
-        Type::Number => IRType::Number,
-        Type::Tensor => IRType::Tensor,
-        Type::Boolean => IRType::Boolean,
-        Type::String => IRType::String,
-        _ => panic!("PANIC: Can't convert type variable to concrete IR type."),
+        Type::Nil => HIRType::Nil,
+        Type::Number => HIRType::Number,
+        Type::Tensor => HIRType::Tensor,
+        Type::Boolean => HIRType::Boolean,
+        Type::String => HIRType::String,
+        _ => panic!("PANIC: Can't convert type variable to concrete HIR type."),
     }
 }
 
-struct IRGenContext<'a> {
-    module: IRModule<'a>,
+struct HIRGenContext<'a> {
+    module: HIRModule<'a>,
     ast_types: &'a [Type],
-    curr_func: IRFunctionID,
-    curr_block: IRBasicBlockID,
-    curr_vars: HashMap<&'a [u8], IRRegister>,
-    curr_num_regs: IRRegisterID,
+    curr_func: HIRFunctionID,
+    curr_block: HIRBasicBlockID,
+    curr_vars: HashMap<&'a [u8], HIRRegister>,
+    curr_num_regs: HIRRegisterID,
     func_defs: HashMap<
         &'a [u8],
         (
@@ -61,24 +61,24 @@ struct IRGenContext<'a> {
         ),
     >,
     op_defs: HashMap<&'a [u8], (&'a [u8], &'a [u8], Type, Type, &'a TypedASTStmt<'a>, Type)>,
-    called_funcs: HashMap<&'a [u8], IRFunctionID>,
+    called_funcs: HashMap<&'a [u8], HIRFunctionID>,
     found_return: bool,
     bump: &'a bump::BumpAllocator,
 }
 
-impl<'a> IRGenContext<'a> {
+impl<'a> HIRGenContext<'a> {
     fn new(bump: &'a bump::BumpAllocator) -> Self {
-        let context = IRGenContext {
-            module: IRModule {
+        let context = HIRGenContext {
+            module: HIRModule {
                 funcs: bump_list!(
                     bump,
-                    IRFunction {
+                    HIRFunction {
                         name: b"@main",
                         params: bump.create_list(),
-                        ret_type: IRType::Nil,
+                        ret_type: HIRType::Nil,
                         blocks: bump_list!(
                             bump,
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump.create_list(),
                             }
                         ),
@@ -100,16 +100,16 @@ impl<'a> IRGenContext<'a> {
     }
 
     #[allow(dead_code)]
-    fn get_curr_func(&self) -> &IRFunction<'a> {
+    fn get_curr_func(&self) -> &HIRFunction<'a> {
         return self.module.funcs.at(self.curr_func as usize);
     }
 
-    fn get_curr_func_mut(&mut self) -> &mut IRFunction<'a> {
+    fn get_curr_func_mut(&mut self) -> &mut HIRFunction<'a> {
         return self.module.funcs.at_mut(self.curr_func as usize);
     }
 
     #[allow(dead_code)]
-    fn get_curr_block(&self) -> &IRBasicBlock<'a> {
+    fn get_curr_block(&self) -> &HIRBasicBlock<'a> {
         return self
             .module
             .funcs
@@ -118,7 +118,7 @@ impl<'a> IRGenContext<'a> {
             .at(self.curr_block as usize);
     }
 
-    fn get_curr_block_mut(&mut self) -> &mut IRBasicBlock<'a> {
+    fn get_curr_block_mut(&mut self) -> &mut HIRBasicBlock<'a> {
         return self
             .module
             .funcs
@@ -127,18 +127,18 @@ impl<'a> IRGenContext<'a> {
             .at_mut(self.curr_block as usize);
     }
 
-    fn fresh_reg(&mut self, ty: IRType) -> IRRegister {
+    fn fresh_reg(&mut self, ty: HIRType) -> HIRRegister {
         let id = self.curr_num_regs;
         self.curr_num_regs += 1;
         (id, ty)
     }
 
-    fn fresh_block(&mut self) -> IRBasicBlockID {
-        let block = IRBasicBlock {
+    fn fresh_block(&mut self) -> HIRBasicBlockID {
+        let block = HIRBasicBlock {
             insts: self.bump.create_list(),
         };
         let func = self.get_curr_func_mut();
-        let id = func.blocks.len() as IRBasicBlockID;
+        let id = func.blocks.len() as HIRBasicBlockID;
         func.blocks.push(block);
         id
     }
@@ -146,17 +146,17 @@ impl<'a> IRGenContext<'a> {
     fn fresh_func(
         &mut self,
         name: &'a [u8],
-        params: &'a mut bump::List<'a, IRRegister>,
-        ret_type: IRType,
-    ) -> IRFunctionID {
-        let func_id = self.module.funcs.len() as IRFunctionID;
-        self.module.funcs.push(IRFunction {
+        params: &'a mut bump::List<'a, HIRRegister>,
+        ret_type: HIRType,
+    ) -> HIRFunctionID {
+        let func_id = self.module.funcs.len() as HIRFunctionID;
+        self.module.funcs.push(HIRFunction {
             name,
             params,
             ret_type,
             blocks: bump_list!(
                 self.bump,
-                IRBasicBlock {
+                HIRBasicBlock {
                     insts: self.bump.create_list()
                 }
             ),
@@ -166,7 +166,7 @@ impl<'a> IRGenContext<'a> {
         func_id
     }
 
-    fn add_inst(&mut self, inst: IRInstruction<'a>) {
+    fn add_inst(&mut self, inst: HIRInstruction<'a>) {
         self.get_curr_block_mut().insts.push(inst);
     }
 
@@ -180,7 +180,7 @@ impl<'a> IRGenContext<'a> {
         }
     }
 
-    fn get_irfunc_name(&self, func: &'a [u8], args: &'a bump::List<'a, IRRegister>) -> &'a [u8] {
+    fn get_hirfunc_name(&self, func: &'a [u8], args: &'a bump::List<'a, HIRRegister>) -> &'a [u8] {
         let size = 3 + func.len() + args.len();
         let name = unsafe { self.bump.alloc_slice_raw(size) };
         name[0] = b'@';
@@ -191,17 +191,17 @@ impl<'a> IRGenContext<'a> {
         }
         for i in 0..args.len() {
             name[i + func.len() + 3] = match args.at(i).1 {
-                IRType::Nil => b'0',
-                IRType::Boolean => b'1',
-                IRType::String => b'2',
-                IRType::Number => b'3',
-                IRType::Tensor => b'4',
+                HIRType::Nil => b'0',
+                HIRType::Boolean => b'1',
+                HIRType::String => b'2',
+                HIRType::Number => b'3',
+                HIRType::Tensor => b'4',
             };
         }
         name
     }
 
-    fn get_irop_name(&self, func: &'a [u8], left: IRRegister, right: IRRegister) -> &'a [u8] {
+    fn get_hirop_name(&self, func: &'a [u8], left: HIRRegister, right: HIRRegister) -> &'a [u8] {
         let size = 3 + func.len() + 2;
         let name = unsafe { self.bump.alloc_slice_raw(size) };
         name[0] = b'@';
@@ -211,39 +211,39 @@ impl<'a> IRGenContext<'a> {
             name[i + 3] = func[i];
         }
         name[func.len() + 3] = match left.1 {
-            IRType::Nil => b'0',
-            IRType::Boolean => b'1',
-            IRType::String => b'2',
-            IRType::Number => b'3',
-            IRType::Tensor => b'4',
+            HIRType::Nil => b'0',
+            HIRType::Boolean => b'1',
+            HIRType::String => b'2',
+            HIRType::Number => b'3',
+            HIRType::Tensor => b'4',
         };
         name[func.len() + 3] = match right.1 {
-            IRType::Nil => b'0',
-            IRType::Boolean => b'1',
-            IRType::String => b'2',
-            IRType::Number => b'3',
-            IRType::Tensor => b'4',
+            HIRType::Nil => b'0',
+            HIRType::Boolean => b'1',
+            HIRType::String => b'2',
+            HIRType::Number => b'3',
+            HIRType::Tensor => b'4',
         };
         name
     }
 
-    fn irgen_program(&mut self, program: TypedProgram<'a>) {
+    fn hirgen_program(&mut self, program: TypedProgram<'a>) {
         self.ast_types = program.1;
         for i in 0..program.0.len() {
-            self.irgen_stmt(program.0.at(i));
+            self.hirgen_stmt(program.0.at(i));
         }
         if !self.found_return {
-            let reg = self.fresh_reg(IRType::Nil);
-            self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
-            self.add_inst(IRInstruction::Return(reg));
+            let reg = self.fresh_reg(HIRType::Nil);
+            self.add_inst(HIRInstruction::Immediate(reg, HIRConstant::Nil));
+            self.add_inst(HIRInstruction::Return(reg));
         }
     }
 
-    fn irgen_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {
+    fn hirgen_stmt(&mut self, stmt: &'a TypedASTStmt<'a>) {
         match stmt {
             TypedASTStmt::Block(stmts) => {
                 for i in 0..stmts.len() {
-                    self.irgen_stmt(stmts.at(i));
+                    self.hirgen_stmt(stmts.at(i));
                 }
             }
             TypedASTStmt::Function(name, params, params_ty, body, ret_ty) => {
@@ -272,14 +272,14 @@ impl<'a> IRGenContext<'a> {
                 );
             }
             TypedASTStmt::If(cond, body) => {
-                let cond_reg = self.irgen_expr(cond);
+                let cond_reg = self.hirgen_expr(cond);
                 let body_block = self.fresh_block();
                 let post_block = self.fresh_block();
-                self.add_inst(IRInstruction::BranchCond(cond_reg, body_block, post_block));
+                self.add_inst(HIRInstruction::BranchCond(cond_reg, body_block, post_block));
                 self.curr_block = body_block;
-                self.irgen_stmt(body);
+                self.hirgen_stmt(body);
                 if !self.get_curr_block().is_terminated() {
-                    self.add_inst(IRInstruction::BranchUncond(post_block));
+                    self.add_inst(HIRInstruction::BranchUncond(post_block));
                 }
                 self.curr_block = post_block;
             }
@@ -287,69 +287,69 @@ impl<'a> IRGenContext<'a> {
                 let cond_block = self.fresh_block();
                 let body_block = self.fresh_block();
                 let post_block = self.fresh_block();
-                self.add_inst(IRInstruction::BranchUncond(cond_block));
+                self.add_inst(HIRInstruction::BranchUncond(cond_block));
                 self.curr_block = cond_block;
-                let cond_reg = self.irgen_expr(cond);
-                self.add_inst(IRInstruction::BranchCond(cond_reg, body_block, post_block));
+                let cond_reg = self.hirgen_expr(cond);
+                self.add_inst(HIRInstruction::BranchCond(cond_reg, body_block, post_block));
                 self.curr_block = body_block;
-                self.irgen_stmt(body);
+                self.hirgen_stmt(body);
                 if !self.get_curr_block().is_terminated() {
-                    self.add_inst(IRInstruction::BranchUncond(cond_block));
+                    self.add_inst(HIRInstruction::BranchUncond(cond_block));
                 }
                 self.curr_block = post_block;
             }
             TypedASTStmt::Print(expr) => {
-                let reg = self.irgen_expr(expr);
-                self.add_inst(IRInstruction::Print(reg));
+                let reg = self.hirgen_expr(expr);
+                self.add_inst(HIRInstruction::Print(reg));
             }
             TypedASTStmt::Line(name) => {
                 let reg = *self
                     .curr_vars
                     .get(name)
                     .expect("PANIC: Variable not in scope.");
-                self.add_inst(IRInstruction::Line(reg));
+                self.add_inst(HIRInstruction::Line(reg));
             }
             TypedASTStmt::Return(expr) => {
-                let reg = self.irgen_expr(expr);
+                let reg = self.hirgen_expr(expr);
                 self.found_return = true;
-                self.add_inst(IRInstruction::Return(reg));
+                self.add_inst(HIRInstruction::Return(reg));
             }
             TypedASTStmt::Verify(expr) => {
-                let reg = self.irgen_expr(expr);
-                self.add_inst(IRInstruction::Verify(reg));
+                let reg = self.hirgen_expr(expr);
+                self.add_inst(HIRInstruction::Verify(reg));
             }
             TypedASTStmt::Variable(name, expr) => {
-                let reg = self.irgen_expr(expr);
+                let reg = self.hirgen_expr(expr);
                 let var_reg = self.fresh_reg(convert_type(self.get_type(expr)));
                 self.curr_vars.insert(name, var_reg);
-                self.add_inst(IRInstruction::Copy(var_reg, reg));
+                self.add_inst(HIRInstruction::Copy(var_reg, reg));
             }
             TypedASTStmt::Expression(expr) => {
-                self.irgen_expr(expr);
+                self.hirgen_expr(expr);
             }
         }
     }
 
-    fn irgen_expr(&mut self, expr: &'a TypedASTExpr<'a>) -> IRRegister {
+    fn hirgen_expr(&mut self, expr: &'a TypedASTExpr<'a>) -> HIRRegister {
         match expr {
             TypedASTExpr::Nil => {
-                let reg = self.fresh_reg(IRType::Nil);
-                self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
+                let reg = self.fresh_reg(HIRType::Nil);
+                self.add_inst(HIRInstruction::Immediate(reg, HIRConstant::Nil));
                 reg
             }
             TypedASTExpr::Boolean(v) => {
-                let reg = self.fresh_reg(IRType::Boolean);
-                self.add_inst(IRInstruction::Immediate(reg, IRConstant::Boolean(*v)));
+                let reg = self.fresh_reg(HIRType::Boolean);
+                self.add_inst(HIRInstruction::Immediate(reg, HIRConstant::Boolean(*v)));
                 reg
             }
             TypedASTExpr::Number(v) => {
-                let reg = self.fresh_reg(IRType::Number);
-                self.add_inst(IRInstruction::Immediate(reg, IRConstant::Number(*v)));
+                let reg = self.fresh_reg(HIRType::Number);
+                self.add_inst(HIRInstruction::Immediate(reg, HIRConstant::Number(*v)));
                 reg
             }
             TypedASTExpr::String(v) => {
-                let reg = self.fresh_reg(IRType::String);
-                self.add_inst(IRInstruction::Immediate(reg, IRConstant::String(*v)));
+                let reg = self.fresh_reg(HIRType::String);
+                self.add_inst(HIRInstruction::Immediate(reg, HIRConstant::String(*v)));
                 reg
             }
             TypedASTExpr::Identifier(v, _) => *self
@@ -359,10 +359,10 @@ impl<'a> IRGenContext<'a> {
             TypedASTExpr::Call(func, args, _) => {
                 let arg_regs = self.bump.create_list();
                 for i in 0..args.len() {
-                    arg_regs.push(self.irgen_expr(args.at(i)));
+                    arg_regs.push(self.hirgen_expr(args.at(i)));
                 }
                 let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
-                let func_name = self.get_irfunc_name(func, arg_regs);
+                let func_name = self.get_hirfunc_name(func, arg_regs);
                 let func_id = self
                     .called_funcs
                     .get(func_name)
@@ -389,7 +389,7 @@ impl<'a> IRGenContext<'a> {
                         let old_found_return = self.found_return;
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         let old_num_regs = self.curr_num_regs;
-                        self.curr_num_regs = arg_regs.len() as IRRegisterID;
+                        self.curr_num_regs = arg_regs.len() as HIRRegisterID;
 
                         let params = self.bump.create_list();
                         for i in 0..arg_regs.len() {
@@ -404,11 +404,11 @@ impl<'a> IRGenContext<'a> {
                         let old_func_id = self.curr_func;
                         let old_block_id = self.curr_block;
                         let func_id = self.fresh_func(func_name, params, result_reg.1);
-                        self.irgen_stmt(body);
+                        self.hirgen_stmt(body);
                         if !self.found_return {
-                            let reg = self.fresh_reg(IRType::Nil);
-                            self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
-                            self.add_inst(IRInstruction::Return(reg));
+                            let reg = self.fresh_reg(HIRType::Nil);
+                            self.add_inst(HIRInstruction::Immediate(reg, HIRConstant::Nil));
+                            self.add_inst(HIRInstruction::Return(reg));
                         }
                         self.found_return = old_found_return;
                         self.curr_num_regs = old_num_regs;
@@ -420,7 +420,7 @@ impl<'a> IRGenContext<'a> {
                         self.called_funcs.insert(func_name, func_id);
                         func_id
                     });
-                self.add_inst(IRInstruction::Call(
+                self.add_inst(HIRInstruction::Call(
                     result_reg,
                     (func_id, func_name),
                     arg_regs,
@@ -428,104 +428,110 @@ impl<'a> IRGenContext<'a> {
                 result_reg
             }
             TypedASTExpr::Index(tensor, indices) => {
-                let tensor_reg = self.irgen_expr(tensor);
+                let tensor_reg = self.hirgen_expr(tensor);
                 let index_regs = self.bump.create_list();
                 for i in 0..indices.len() {
-                    index_regs.push(self.irgen_expr(indices.at(i)));
+                    index_regs.push(self.hirgen_expr(indices.at(i)));
                 }
-                let result_reg = self.fresh_reg(IRType::Number);
-                self.add_inst(IRInstruction::Index(result_reg, tensor_reg, index_regs));
+                let result_reg = self.fresh_reg(HIRType::Number);
+                self.add_inst(HIRInstruction::Index(result_reg, tensor_reg, index_regs));
                 result_reg
             }
             TypedASTExpr::ArrayLiteral(elements) => {
                 let contents = self.bump.create_list();
                 for i in 0..elements.len() {
-                    contents.push(self.irgen_expr(elements.at(i)));
+                    contents.push(self.hirgen_expr(elements.at(i)));
                 }
-                let result_reg = self.fresh_reg(IRType::Tensor);
-                self.add_inst(IRInstruction::Array(result_reg, contents));
+                let result_reg = self.fresh_reg(HIRType::Tensor);
+                self.add_inst(HIRInstruction::Array(result_reg, contents));
                 result_reg
             }
             TypedASTExpr::Assign(left, right, _) => {
-                let right_reg = self.irgen_expr(right);
+                let right_reg = self.hirgen_expr(right);
                 match left {
                     TypedASTExpr::Identifier(left_var, _) => {
                         let var_reg = *self.curr_vars.get(left_var).expect("PANIC: Variable not in scope.");
-                        self.add_inst(IRInstruction::Copy(var_reg, right_reg));
+                        self.add_inst(HIRInstruction::Copy(var_reg, right_reg));
                         right_reg
                     }
                     TypedASTExpr::Index(TypedASTExpr::Identifier(left_var, _), indices) => {
                         let var_reg = *self.curr_vars.get(left_var).expect("PANIC: Variable not in scope.");
                         let index_regs = self.bump.create_list();
                         for i in 0..indices.len() {
-                            index_regs.push(self.irgen_expr(indices.at(i)));
+                            index_regs.push(self.hirgen_expr(indices.at(i)));
                         }
-                        self.add_inst(IRInstruction::Index(var_reg, right_reg, index_regs));
+                        self.add_inst(HIRInstruction::Index(var_reg, right_reg, index_regs));
                         right_reg
                     }
                     _ => panic!("PANIC: Something other than identifier or indexing an identifier on left-hand side of assign expression.")
                 }
             }
             TypedASTExpr::Unary(op, expr, _) => {
-                let right_reg = self.irgen_expr(expr);
+                let right_reg = self.hirgen_expr(expr);
                 let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
-                self.add_inst(IRInstruction::Unary(
+                self.add_inst(HIRInstruction::Unary(
                     result_reg,
                     match op {
-                        ASTUnaryOp::Not => IRUnaryOp::Not,
-                        ASTUnaryOp::Negate => IRUnaryOp::Negate,
-                        ASTUnaryOp::Shape => IRUnaryOp::Shape,
+                        ASTUnaryOp::Not => HIRUnaryOp::Not,
+                        ASTUnaryOp::Negate => HIRUnaryOp::Negate,
+                        ASTUnaryOp::Shape => HIRUnaryOp::Shape,
                     },
                     right_reg,
                 ));
                 result_reg
             }
             TypedASTExpr::Binary(op, left, right, _) => {
-                let left_reg = self.irgen_expr(left);
-                let right_reg = self.irgen_expr(right);
+                let left_reg = self.hirgen_expr(left);
+                let right_reg = self.hirgen_expr(right);
                 let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
                 let op = match (op, left_reg.1) {
-                    (ASTBinaryOp::ShapedAs, _) => IRBinaryOp::ShapedAs,
-                    (ASTBinaryOp::Add, IRType::Number) => IRBinaryOp::AddNumbers,
-                    (ASTBinaryOp::Add, IRType::Tensor) => IRBinaryOp::AddTensors,
-                    (ASTBinaryOp::Subtract, IRType::Number) => IRBinaryOp::SubtractNumbers,
-                    (ASTBinaryOp::Subtract, IRType::Tensor) => IRBinaryOp::SubtractTensors,
-                    (ASTBinaryOp::Multiply, IRType::Number) => IRBinaryOp::MultiplyNumbers,
-                    (ASTBinaryOp::Multiply, IRType::Tensor) => IRBinaryOp::MultiplyTensors,
-                    (ASTBinaryOp::Divide, IRType::Number) => IRBinaryOp::DivideNumbers,
-                    (ASTBinaryOp::Divide, IRType::Tensor) => IRBinaryOp::DivideTensors,
-                    (ASTBinaryOp::Power, IRType::Number) => IRBinaryOp::PowerNumbers,
-                    (ASTBinaryOp::Power, IRType::Tensor) => IRBinaryOp::PowerTensors,
-                    (ASTBinaryOp::MatrixMultiply, _) => IRBinaryOp::MatrixMultiply,
-                    (ASTBinaryOp::Greater, _) => IRBinaryOp::Greater,
-                    (ASTBinaryOp::Lesser, _) => IRBinaryOp::Lesser,
-                    (ASTBinaryOp::NotEquals, IRType::Nil) => IRBinaryOp::NotEqualsNils,
-                    (ASTBinaryOp::NotEquals, IRType::Boolean) => IRBinaryOp::NotEqualsBooleans,
-                    (ASTBinaryOp::NotEquals, IRType::String) => IRBinaryOp::NotEqualsStrings,
-                    (ASTBinaryOp::NotEquals, IRType::Number) => IRBinaryOp::NotEqualsNumbers,
-                    (ASTBinaryOp::NotEquals, IRType::Tensor) => IRBinaryOp::NotEqualsTensors,
-                    (ASTBinaryOp::EqualsEquals, IRType::Nil) => IRBinaryOp::EqualsEqualsNils,
-                    (ASTBinaryOp::EqualsEquals, IRType::Boolean) => {
-                        IRBinaryOp::EqualsEqualsBooleans
+                    (ASTBinaryOp::ShapedAs, _) => HIRBinaryOp::ShapedAs,
+                    (ASTBinaryOp::Add, HIRType::Number) => HIRBinaryOp::AddNumbers,
+                    (ASTBinaryOp::Add, HIRType::Tensor) => HIRBinaryOp::AddTensors,
+                    (ASTBinaryOp::Subtract, HIRType::Number) => HIRBinaryOp::SubtractNumbers,
+                    (ASTBinaryOp::Subtract, HIRType::Tensor) => HIRBinaryOp::SubtractTensors,
+                    (ASTBinaryOp::Multiply, HIRType::Number) => HIRBinaryOp::MultiplyNumbers,
+                    (ASTBinaryOp::Multiply, HIRType::Tensor) => HIRBinaryOp::MultiplyTensors,
+                    (ASTBinaryOp::Divide, HIRType::Number) => HIRBinaryOp::DivideNumbers,
+                    (ASTBinaryOp::Divide, HIRType::Tensor) => HIRBinaryOp::DivideTensors,
+                    (ASTBinaryOp::Power, HIRType::Number) => HIRBinaryOp::PowerNumbers,
+                    (ASTBinaryOp::Power, HIRType::Tensor) => HIRBinaryOp::PowerTensors,
+                    (ASTBinaryOp::MatrixMultiply, _) => HIRBinaryOp::MatrixMultiply,
+                    (ASTBinaryOp::Greater, _) => HIRBinaryOp::Greater,
+                    (ASTBinaryOp::Lesser, _) => HIRBinaryOp::Lesser,
+                    (ASTBinaryOp::NotEquals, HIRType::Nil) => HIRBinaryOp::NotEqualsNils,
+                    (ASTBinaryOp::NotEquals, HIRType::Boolean) => HIRBinaryOp::NotEqualsBooleans,
+                    (ASTBinaryOp::NotEquals, HIRType::String) => HIRBinaryOp::NotEqualsStrings,
+                    (ASTBinaryOp::NotEquals, HIRType::Number) => HIRBinaryOp::NotEqualsNumbers,
+                    (ASTBinaryOp::NotEquals, HIRType::Tensor) => HIRBinaryOp::NotEqualsTensors,
+                    (ASTBinaryOp::EqualsEquals, HIRType::Nil) => HIRBinaryOp::EqualsEqualsNils,
+                    (ASTBinaryOp::EqualsEquals, HIRType::Boolean) => {
+                        HIRBinaryOp::EqualsEqualsBooleans
                     }
-                    (ASTBinaryOp::EqualsEquals, IRType::String) => IRBinaryOp::EqualsEqualsStrings,
-                    (ASTBinaryOp::EqualsEquals, IRType::Number) => IRBinaryOp::EqualsEqualsNumbers,
-                    (ASTBinaryOp::EqualsEquals, IRType::Tensor) => IRBinaryOp::EqualsEqualsTensors,
-                    (ASTBinaryOp::GreaterEquals, _) => IRBinaryOp::GreaterEquals,
-                    (ASTBinaryOp::LesserEquals, _) => IRBinaryOp::LesserEquals,
-                    (ASTBinaryOp::And, _) => IRBinaryOp::And,
-                    (ASTBinaryOp::Or, _) => IRBinaryOp::Or,
+                    (ASTBinaryOp::EqualsEquals, HIRType::String) => {
+                        HIRBinaryOp::EqualsEqualsStrings
+                    }
+                    (ASTBinaryOp::EqualsEquals, HIRType::Number) => {
+                        HIRBinaryOp::EqualsEqualsNumbers
+                    }
+                    (ASTBinaryOp::EqualsEquals, HIRType::Tensor) => {
+                        HIRBinaryOp::EqualsEqualsTensors
+                    }
+                    (ASTBinaryOp::GreaterEquals, _) => HIRBinaryOp::GreaterEquals,
+                    (ASTBinaryOp::LesserEquals, _) => HIRBinaryOp::LesserEquals,
+                    (ASTBinaryOp::And, _) => HIRBinaryOp::And,
+                    (ASTBinaryOp::Or, _) => HIRBinaryOp::Or,
                     _ => panic!("PANIC: Unsupported binary operation configuration."),
                 };
-                self.add_inst(IRInstruction::Binary(result_reg, op, left_reg, right_reg));
+                self.add_inst(HIRInstruction::Binary(result_reg, op, left_reg, right_reg));
                 result_reg
             }
             TypedASTExpr::CustomBinary(func, left, right, _) => {
-                let left_reg = self.irgen_expr(left);
-                let right_reg = self.irgen_expr(right);
+                let left_reg = self.hirgen_expr(left);
+                let right_reg = self.hirgen_expr(right);
                 let arg_regs = bump_list!(self.bump, left_reg, right_reg);
                 let result_reg = self.fresh_reg(convert_type(self.get_type(expr)));
-                let func_name = self.get_irop_name(func, left_reg, right_reg);
+                let func_name = self.get_hirop_name(func, left_reg, right_reg);
                 let func_id = self
                     .called_funcs
                     .get(func_name)
@@ -558,7 +564,7 @@ impl<'a> IRGenContext<'a> {
                         let old_found_return = self.found_return;
                         core::mem::swap(&mut self.curr_vars, &mut old_curr_vars);
                         let old_num_regs = self.curr_num_regs;
-                        self.curr_num_regs = arg_regs.len() as IRRegisterID;
+                        self.curr_num_regs = arg_regs.len() as HIRRegisterID;
 
                         let params = self.bump.create_list();
                         for i in 0..arg_regs.len() {
@@ -573,11 +579,11 @@ impl<'a> IRGenContext<'a> {
                         let old_func_id = self.curr_func;
                         let old_block_id = self.curr_block;
                         let func_id = self.fresh_func(func_name, params, result_reg.1);
-                        self.irgen_stmt(body);
+                        self.hirgen_stmt(body);
                         if !self.found_return {
-                            let reg = self.fresh_reg(IRType::Nil);
-                            self.add_inst(IRInstruction::Immediate(reg, IRConstant::Nil));
-                            self.add_inst(IRInstruction::Return(reg));
+                            let reg = self.fresh_reg(HIRType::Nil);
+                            self.add_inst(HIRInstruction::Immediate(reg, HIRConstant::Nil));
+                            self.add_inst(HIRInstruction::Return(reg));
                         }
                         self.found_return = old_found_return;
                         self.curr_num_regs = old_num_regs;
@@ -589,7 +595,7 @@ impl<'a> IRGenContext<'a> {
                         self.called_funcs.insert(func_name, func_id);
                         func_id
                     });
-                self.add_inst(IRInstruction::Call(
+                self.add_inst(HIRInstruction::Call(
                     result_reg,
                     (func_id, func_name),
                     arg_regs,
@@ -605,84 +611,84 @@ mod tests {
     use super::*;
 
     #[test]
-    fn irgen_simple() {
+    fn hirgen_simple() {
         let bump = bump::BumpAllocator::new();
-        let pairs = &mut [
+        let pahirs = &mut [
             (
                 b"a x = 0; p x;" as &[_],
                 bump_list!(
                     bump,
-                    IRInstruction::Immediate((0, IRType::Number), IRConstant::Number(0.0)),
-                    IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
-                    IRInstruction::Print((1, IRType::Number)),
-                    IRInstruction::Immediate((2, IRType::Nil), IRConstant::Nil),
-                    IRInstruction::Return((2, IRType::Nil))
+                    HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(0.0)),
+                    HIRInstruction::Copy((1, HIRType::Number), (0, HIRType::Number)),
+                    HIRInstruction::Print((1, HIRType::Number)),
+                    HIRInstruction::Immediate((2, HIRType::Nil), HIRConstant::Nil),
+                    HIRInstruction::Return((2, HIRType::Nil))
                 ),
             ),
             (
                 b"p 3 + 5;",
                 bump_list!(
                     bump,
-                    IRInstruction::Immediate((0, IRType::Number), IRConstant::Number(3.0)),
-                    IRInstruction::Immediate((1, IRType::Number), IRConstant::Number(5.0)),
-                    IRInstruction::Binary(
-                        (2, IRType::Number),
-                        IRBinaryOp::AddNumbers,
-                        (0, IRType::Number),
-                        (1, IRType::Number)
+                    HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(3.0)),
+                    HIRInstruction::Immediate((1, HIRType::Number), HIRConstant::Number(5.0)),
+                    HIRInstruction::Binary(
+                        (2, HIRType::Number),
+                        HIRBinaryOp::AddNumbers,
+                        (0, HIRType::Number),
+                        (1, HIRType::Number)
                     ),
-                    IRInstruction::Print((2, IRType::Number)),
-                    IRInstruction::Immediate((3, IRType::Nil), IRConstant::Nil),
-                    IRInstruction::Return((3, IRType::Nil))
+                    HIRInstruction::Print((2, HIRType::Number)),
+                    HIRInstruction::Immediate((3, HIRType::Nil), HIRConstant::Nil),
+                    HIRInstruction::Return((3, HIRType::Nil))
                 ),
             ),
             (
                 b"a x = 5; p 3 + x; a y = x ^ 2; a z = [y];",
                 bump_list!(
                     bump,
-                    IRInstruction::Immediate((0, IRType::Number), IRConstant::Number(5.0)),
-                    IRInstruction::Copy((1, IRType::Number), (0, IRType::Number)),
-                    IRInstruction::Immediate((2, IRType::Number), IRConstant::Number(3.0)),
-                    IRInstruction::Binary(
-                        (3, IRType::Number),
-                        IRBinaryOp::AddNumbers,
-                        (2, IRType::Number),
-                        (1, IRType::Number)
+                    HIRInstruction::Immediate((0, HIRType::Number), HIRConstant::Number(5.0)),
+                    HIRInstruction::Copy((1, HIRType::Number), (0, HIRType::Number)),
+                    HIRInstruction::Immediate((2, HIRType::Number), HIRConstant::Number(3.0)),
+                    HIRInstruction::Binary(
+                        (3, HIRType::Number),
+                        HIRBinaryOp::AddNumbers,
+                        (2, HIRType::Number),
+                        (1, HIRType::Number)
                     ),
-                    IRInstruction::Print((3, IRType::Number)),
-                    IRInstruction::Immediate((4, IRType::Number), IRConstant::Number(2.0)),
-                    IRInstruction::Binary(
-                        (5, IRType::Number),
-                        IRBinaryOp::PowerNumbers,
-                        (1, IRType::Number),
-                        (4, IRType::Number)
+                    HIRInstruction::Print((3, HIRType::Number)),
+                    HIRInstruction::Immediate((4, HIRType::Number), HIRConstant::Number(2.0)),
+                    HIRInstruction::Binary(
+                        (5, HIRType::Number),
+                        HIRBinaryOp::PowerNumbers,
+                        (1, HIRType::Number),
+                        (4, HIRType::Number)
                     ),
-                    IRInstruction::Copy((6, IRType::Number), (5, IRType::Number)),
-                    IRInstruction::Array(
-                        (7, IRType::Tensor),
-                        bump_list!(bump, (6, IRType::Number))
+                    HIRInstruction::Copy((6, HIRType::Number), (5, HIRType::Number)),
+                    HIRInstruction::Array(
+                        (7, HIRType::Tensor),
+                        bump_list!(bump, (6, HIRType::Number))
                     ),
-                    IRInstruction::Copy((8, IRType::Tensor), (7, IRType::Tensor)),
-                    IRInstruction::Immediate((9, IRType::Nil), IRConstant::Nil),
-                    IRInstruction::Return((9, IRType::Nil))
+                    HIRInstruction::Copy((8, HIRType::Tensor), (7, HIRType::Tensor)),
+                    HIRInstruction::Immediate((9, HIRType::Nil), HIRConstant::Nil),
+                    HIRInstruction::Return((9, HIRType::Nil))
                 ),
             ),
         ];
-        for (input, output) in pairs.iter_mut() {
+        for (input, output) in pahirs.iter_mut() {
             let tokens = parse::lex(input, &bump).unwrap();
             let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
             let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-            let ir_program = irgen(typed_program, &bump);
+            let hir_program = hirgen(typed_program, &bump);
             assert_eq!(
-                ir_program,
-                IRModule {
+                hir_program,
+                HIRModule {
                     funcs: bump_list!(
                         bump,
-                        IRFunction {
+                        HIRFunction {
                             name: b"@main",
                             params: bump.create_list(),
-                            ret_type: IRType::Nil,
-                            blocks: bump_list!(bump, IRBasicBlock { insts: *output })
+                            ret_type: HIRType::Nil,
+                            blocks: bump_list!(bump, HIRBasicBlock { insts: *output })
                         }
                     )
                 }
@@ -691,67 +697,67 @@ mod tests {
     }
 
     #[test]
-    fn irgen_complex1() {
+    fn hirgen_complex1() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"i (T) { p N; } w (T) { p N; }", &bump).unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let ir_program = irgen(typed_program, &bump);
+        let hir_program = hirgen(typed_program, &bump);
         assert_eq!(
-            ir_program,
-            IRModule {
+            hir_program,
+            HIRModule {
                 funcs: bump_list!(
                     bump,
-                    IRFunction {
+                    HIRFunction {
                         name: b"@main",
                         params: bump.create_list(),
-                        ret_type: IRType::Nil,
+                        ret_type: HIRType::Nil,
                         blocks: bump_list!(
                             bump,
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Immediate(
-                                        (0, IRType::Boolean),
-                                        IRConstant::Boolean(true)
+                                    HIRInstruction::Immediate(
+                                        (0, HIRType::Boolean),
+                                        HIRConstant::Boolean(true)
                                     ),
-                                    IRInstruction::BranchCond((0, IRType::Boolean), 1, 2)
+                                    HIRInstruction::BranchCond((0, HIRType::Boolean), 1, 2)
                                 )
                             },
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Immediate((1, IRType::Nil), IRConstant::Nil),
-                                    IRInstruction::Print((1, IRType::Nil)),
-                                    IRInstruction::BranchUncond(2)
+                                    HIRInstruction::Immediate((1, HIRType::Nil), HIRConstant::Nil),
+                                    HIRInstruction::Print((1, HIRType::Nil)),
+                                    HIRInstruction::BranchUncond(2)
                                 )
                             },
-                            IRBasicBlock {
-                                insts: bump_list!(bump, IRInstruction::BranchUncond(3))
+                            HIRBasicBlock {
+                                insts: bump_list!(bump, HIRInstruction::BranchUncond(3))
                             },
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Immediate(
-                                        (2, IRType::Boolean),
-                                        IRConstant::Boolean(true)
+                                    HIRInstruction::Immediate(
+                                        (2, HIRType::Boolean),
+                                        HIRConstant::Boolean(true)
                                     ),
-                                    IRInstruction::BranchCond((2, IRType::Boolean), 4, 5)
+                                    HIRInstruction::BranchCond((2, HIRType::Boolean), 4, 5)
                                 )
                             },
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Immediate((3, IRType::Nil), IRConstant::Nil),
-                                    IRInstruction::Print((3, IRType::Nil)),
-                                    IRInstruction::BranchUncond(3)
+                                    HIRInstruction::Immediate((3, HIRType::Nil), HIRConstant::Nil),
+                                    HIRInstruction::Print((3, HIRType::Nil)),
+                                    HIRInstruction::BranchUncond(3)
                                 )
                             },
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Immediate((4, IRType::Nil), IRConstant::Nil),
-                                    IRInstruction::Return((4, IRType::Nil))
+                                    HIRInstruction::Immediate((4, HIRType::Nil), HIRConstant::Nil),
+                                    HIRInstruction::Return((4, HIRType::Nil))
                                 )
                             }
                         )
@@ -762,54 +768,54 @@ mod tests {
     }
 
     #[test]
-    fn irgen_complex2() {
+    fn hirgen_complex2() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(b"f xyz() { p N; r 5; } p xyz();", &bump).unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let ir_program = irgen(typed_program, &bump);
+        let hir_program = hirgen(typed_program, &bump);
         assert_eq!(
-            ir_program,
-            IRModule {
+            hir_program,
+            HIRModule {
                 funcs: bump_list!(
                     bump,
-                    IRFunction {
+                    HIRFunction {
                         name: b"@main",
                         params: bump.create_list(),
-                        ret_type: IRType::Nil,
+                        ret_type: HIRType::Nil,
                         blocks: bump_list!(
                             bump,
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Call(
-                                        (0, IRType::Number),
+                                    HIRInstruction::Call(
+                                        (0, HIRType::Number),
                                         (1, b"@f_xyz"),
                                         bump_list!(bump,)
                                     ),
-                                    IRInstruction::Print((0, IRType::Number)),
-                                    IRInstruction::Immediate((1, IRType::Nil), IRConstant::Nil),
-                                    IRInstruction::Return((1, IRType::Nil))
+                                    HIRInstruction::Print((0, HIRType::Number)),
+                                    HIRInstruction::Immediate((1, HIRType::Nil), HIRConstant::Nil),
+                                    HIRInstruction::Return((1, HIRType::Nil))
                                 )
                             }
                         )
                     },
-                    IRFunction {
+                    HIRFunction {
                         name: b"@f_xyz",
                         params: bump.create_list(),
-                        ret_type: IRType::Number,
+                        ret_type: HIRType::Number,
                         blocks: bump_list!(
                             bump,
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Immediate((0, IRType::Nil), IRConstant::Nil),
-                                    IRInstruction::Print((0, IRType::Nil)),
-                                    IRInstruction::Immediate(
-                                        (1, IRType::Number),
-                                        IRConstant::Number(5.0)
+                                    HIRInstruction::Immediate((0, HIRType::Nil), HIRConstant::Nil),
+                                    HIRInstruction::Print((0, HIRType::Nil)),
+                                    HIRInstruction::Immediate(
+                                        (1, HIRType::Number),
+                                        HIRConstant::Number(5.0)
                                     ),
-                                    IRInstruction::Return((1, IRType::Number))
+                                    HIRInstruction::Return((1, HIRType::Number))
                                 )
                             }
                         )
@@ -820,7 +826,7 @@ mod tests {
     }
 
     #[test]
-    fn irgen_complex3() {
+    fn hirgen_complex3() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(
             b"f xyz(x, y) { r x + y; } p xyz(5, 4); p xyz(1, 2); p xyz([2], [7]);",
@@ -829,113 +835,125 @@ mod tests {
         .unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let ir_program = irgen(typed_program, &bump);
+        let hir_program = hirgen(typed_program, &bump);
         assert_eq!(
-            ir_program,
-            IRModule {
+            hir_program,
+            HIRModule {
                 funcs: bump_list!(
                     bump,
-                    IRFunction {
+                    HIRFunction {
                         name: b"@main",
                         params: bump.create_list(),
-                        ret_type: IRType::Nil,
+                        ret_type: HIRType::Nil,
                         blocks: bump_list!(
                             bump,
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Immediate(
-                                        (0, IRType::Number),
-                                        IRConstant::Number(5.0)
+                                    HIRInstruction::Immediate(
+                                        (0, HIRType::Number),
+                                        HIRConstant::Number(5.0)
                                     ),
-                                    IRInstruction::Immediate(
-                                        (1, IRType::Number),
-                                        IRConstant::Number(4.0)
+                                    HIRInstruction::Immediate(
+                                        (1, HIRType::Number),
+                                        HIRConstant::Number(4.0)
                                     ),
-                                    IRInstruction::Call(
-                                        (2, IRType::Number),
+                                    HIRInstruction::Call(
+                                        (2, HIRType::Number),
                                         (1, b"@f_xyz33"),
-                                        bump_list!(bump, (0, IRType::Number), (1, IRType::Number))
+                                        bump_list!(
+                                            bump,
+                                            (0, HIRType::Number),
+                                            (1, HIRType::Number)
+                                        )
                                     ),
-                                    IRInstruction::Print((2, IRType::Number)),
-                                    IRInstruction::Immediate(
-                                        (3, IRType::Number),
-                                        IRConstant::Number(1.0)
+                                    HIRInstruction::Print((2, HIRType::Number)),
+                                    HIRInstruction::Immediate(
+                                        (3, HIRType::Number),
+                                        HIRConstant::Number(1.0)
                                     ),
-                                    IRInstruction::Immediate(
-                                        (4, IRType::Number),
-                                        IRConstant::Number(2.0)
+                                    HIRInstruction::Immediate(
+                                        (4, HIRType::Number),
+                                        HIRConstant::Number(2.0)
                                     ),
-                                    IRInstruction::Call(
-                                        (5, IRType::Number),
+                                    HIRInstruction::Call(
+                                        (5, HIRType::Number),
                                         (1, b"@f_xyz33"),
-                                        bump_list!(bump, (3, IRType::Number), (4, IRType::Number))
+                                        bump_list!(
+                                            bump,
+                                            (3, HIRType::Number),
+                                            (4, HIRType::Number)
+                                        )
                                     ),
-                                    IRInstruction::Print((5, IRType::Number)),
-                                    IRInstruction::Immediate(
-                                        (6, IRType::Number),
-                                        IRConstant::Number(2.0)
+                                    HIRInstruction::Print((5, HIRType::Number)),
+                                    HIRInstruction::Immediate(
+                                        (6, HIRType::Number),
+                                        HIRConstant::Number(2.0)
                                     ),
-                                    IRInstruction::Array(
-                                        (7, IRType::Tensor),
-                                        bump_list!(bump, (6, IRType::Number))
+                                    HIRInstruction::Array(
+                                        (7, HIRType::Tensor),
+                                        bump_list!(bump, (6, HIRType::Number))
                                     ),
-                                    IRInstruction::Immediate(
-                                        (8, IRType::Number),
-                                        IRConstant::Number(7.0)
+                                    HIRInstruction::Immediate(
+                                        (8, HIRType::Number),
+                                        HIRConstant::Number(7.0)
                                     ),
-                                    IRInstruction::Array(
-                                        (9, IRType::Tensor),
-                                        bump_list!(bump, (8, IRType::Number))
+                                    HIRInstruction::Array(
+                                        (9, HIRType::Tensor),
+                                        bump_list!(bump, (8, HIRType::Number))
                                     ),
-                                    IRInstruction::Call(
-                                        (10, IRType::Tensor),
+                                    HIRInstruction::Call(
+                                        (10, HIRType::Tensor),
                                         (2, b"@f_xyz44"),
-                                        bump_list!(bump, (7, IRType::Tensor), (9, IRType::Tensor))
+                                        bump_list!(
+                                            bump,
+                                            (7, HIRType::Tensor),
+                                            (9, HIRType::Tensor)
+                                        )
                                     ),
-                                    IRInstruction::Print((10, IRType::Tensor)),
-                                    IRInstruction::Immediate((11, IRType::Nil), IRConstant::Nil),
-                                    IRInstruction::Return((11, IRType::Nil))
+                                    HIRInstruction::Print((10, HIRType::Tensor)),
+                                    HIRInstruction::Immediate((11, HIRType::Nil), HIRConstant::Nil),
+                                    HIRInstruction::Return((11, HIRType::Nil))
                                 )
                             }
                         )
                     },
-                    IRFunction {
+                    HIRFunction {
                         name: b"@f_xyz33",
-                        params: bump_list!(bump, (0, IRType::Number), (1, IRType::Number)),
-                        ret_type: IRType::Number,
+                        params: bump_list!(bump, (0, HIRType::Number), (1, HIRType::Number)),
+                        ret_type: HIRType::Number,
                         blocks: bump_list!(
                             bump,
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Binary(
-                                        (2, IRType::Number),
-                                        IRBinaryOp::AddNumbers,
-                                        (0, IRType::Number),
-                                        (1, IRType::Number)
+                                    HIRInstruction::Binary(
+                                        (2, HIRType::Number),
+                                        HIRBinaryOp::AddNumbers,
+                                        (0, HIRType::Number),
+                                        (1, HIRType::Number)
                                     ),
-                                    IRInstruction::Return((2, IRType::Number))
+                                    HIRInstruction::Return((2, HIRType::Number))
                                 )
                             }
                         )
                     },
-                    IRFunction {
+                    HIRFunction {
                         name: b"@f_xyz44",
-                        params: bump_list!(bump, (0, IRType::Tensor), (1, IRType::Tensor)),
-                        ret_type: IRType::Tensor,
+                        params: bump_list!(bump, (0, HIRType::Tensor), (1, HIRType::Tensor)),
+                        ret_type: HIRType::Tensor,
                         blocks: bump_list!(
                             bump,
-                            IRBasicBlock {
+                            HIRBasicBlock {
                                 insts: bump_list!(
                                     bump,
-                                    IRInstruction::Binary(
-                                        (2, IRType::Tensor),
-                                        IRBinaryOp::AddTensors,
-                                        (0, IRType::Tensor),
-                                        (1, IRType::Tensor)
+                                    HIRInstruction::Binary(
+                                        (2, HIRType::Tensor),
+                                        HIRBinaryOp::AddTensors,
+                                        (0, HIRType::Tensor),
+                                        (1, HIRType::Tensor)
                                     ),
-                                    IRInstruction::Return((2, IRType::Tensor))
+                                    HIRInstruction::Return((2, HIRType::Tensor))
                                 )
                             }
                         )
@@ -946,7 +964,7 @@ mod tests {
     }
 
     #[test]
-    fn irgen_complex4() {
+    fn hirgen_complex4() {
         let bump = bump::BumpAllocator::new();
         let tokens = parse::lex(
             b"f dim(mat) {    r (s (s mat))[0];}f len(list) {    v dim(list) == 1;    r (s list)[0];}f part_one(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 1;    a count = 0;    w (j < len) {        i (depths[j] > depths[j-1]) {            count = count + 1;        }        j = j + 1;    }    r count;}f part_two(depths) {    v dim(depths) == 1;    a len = len(depths);    v len >= 1;    a j = 0;    a new_depths = [0] sa [len];    a count = 0;    w (j < len - 2) {        new_depths[count] = depths[j] + depths[j+1] + depths[j+2];        count = count + 1;        j = j + 1;    }    r part_one(new_depths);}a d = [199, 200, 208, 210, 200, 207, 240, 269, 260, 263];p part_one(d); p part_two(d);",
@@ -955,8 +973,8 @@ mod tests {
         .unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let ir_program = irgen(typed_program, &bump);
+        let hir_program = hirgen(typed_program, &bump);
         let correct_program = "fn @main() -> Nil {\n0:\n    im %0, 199\n    im %1, 200\n    im %2, 208\n    im %3, 210\n    im %4, 200\n    im %5, 207\n    im %6, 240\n    im %7, 269\n    im %8, 260\n    im %9, 263\n    ar %10, [%0, %1, %2, %3, %4, %5, %6, %7, %8, %9]\n    cp %11, %10\n    ca %12, @f_part_one4, (%11)\n    pr %12\n    ca %13, @f_part_two4, (%11)\n    pr %13\n    im %14, Nil\n    re %14\n}\n\nfn @f_part_one4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    ca %4, @f_len4, (%0)\n    cp %5, %4\n    im %6, 1\n    bi %7, GreaterEquals, %5, %6\n    ve %7\n    im %8, 1\n    cp %9, %8\n    im %10, 0\n    cp %11, %10\n    ju 1\n1:\n    bi %12, Lesser, %9, %5\n    br %12, 2, 3\n2:\n    in %13 <= %0, [%9]\n    im %14, 1\n    bi %15, SubtractNumbers, %9, %14\n    in %16 <= %0, [%15]\n    bi %17, Greater, %13, %16\n    br %17, 4, 5\n3:\n    re %11\n4:\n    im %18, 1\n    bi %19, AddNumbers, %11, %18\n    cp %11, %19\n    ju 5\n5:\n    im %20, 1\n    bi %21, AddNumbers, %9, %20\n    cp %9, %21\n    ju 1\n}\n\nfn @f_dim4(%0: Tensor) -> Number {\n0:\n    un %1, Shape, %0\n    un %2, Shape, %1\n    im %3, 0\n    in %4 <= %2, [%3]\n    re %4\n}\n\nfn @f_len4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    un %4, Shape, %0\n    im %5, 0\n    in %6 <= %4, [%5]\n    re %6\n}\n\nfn @f_part_two4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    ca %4, @f_len4, (%0)\n    cp %5, %4\n    im %6, 1\n    bi %7, GreaterEquals, %5, %6\n    ve %7\n    im %8, 0\n    cp %9, %8\n    im %10, 0\n    ar %11, [%10]\n    ar %12, [%5]\n    bi %13, ShapedAs, %11, %12\n    cp %14, %13\n    im %15, 0\n    cp %16, %15\n    ju 1\n1:\n    im %17, 2\n    bi %18, SubtractNumbers, %5, %17\n    bi %19, Lesser, %9, %18\n    br %19, 2, 3\n2:\n    in %20 <= %0, [%9]\n    im %21, 1\n    bi %22, AddNumbers, %9, %21\n    in %23 <= %0, [%22]\n    bi %24, AddNumbers, %20, %23\n    im %25, 2\n    bi %26, AddNumbers, %9, %25\n    in %27 <= %0, [%26]\n    bi %28, AddNumbers, %24, %27\n    in %14 >= %28, [%16]\n    im %29, 1\n    bi %30, AddNumbers, %16, %29\n    cp %16, %30\n    im %31, 1\n    bi %32, AddNumbers, %9, %31\n    cp %9, %32\n    ju 1\n3:\n    ca %33, @f_part_one4, (%14)\n    re %33\n}";
-        assert_eq!(ir_program.to_string(), correct_program);
+        assert_eq!(hir_program.to_string(), correct_program);
     }
 }

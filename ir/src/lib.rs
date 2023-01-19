@@ -12,12 +12,12 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod ir;
-pub mod irgen;
+pub mod hir;
+pub mod hirgen;
 pub mod mir;
 pub mod mirgen;
 
-pub use crate::ir::*;
-pub use crate::irgen::*;
+pub use crate::hir::*;
+pub use crate::hirgen::*;
 pub use crate::mir::*;
 pub use crate::mirgen::*;
