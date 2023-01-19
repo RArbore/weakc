@@ -19,6 +19,34 @@ extern crate semant;
 use crate::*;
 use bump::bump_list;
 
-pub fn mirgen<'a>(program: MIRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRModule<'a> {
-    todo!()
+struct MIRGenContext<'a> {
+    module: MIRModule<'a>,
+    bump: &'a bump::BumpAllocator,
+}
+
+pub fn mirgen<'a>(program: IRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRModule<'a> {
+    let mut context = MIRGenContext::new(bump);
+    context.mirgen_program(program);
+    context.module
+}
+
+impl<'a> MIRGenContext<'a> {
+    fn new(bump: &'a bump::BumpAllocator) -> Self {
+        let context = MIRGenContext {
+            module: MIRModule {
+                funcs: bump.create_list(),
+                strings: bump.create_list(),
+            },
+            bump,
+        };
+        context
+    }
+
+    fn mirgen_program(&mut self, program: IRModule<'a>) {
+        for i in 0..program.funcs.len() {
+            self.mirgen_func(program.funcs.at(i));
+        }
+    }
+
+    fn mirgen_func(&mut self, func: &'a IRFunction<'a>) {}
 }

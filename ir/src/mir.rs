@@ -84,8 +84,8 @@ pub enum MIRInstruction<'a> {
     Unary(MIRRegister, MIRUnaryOp, MIRRegister),
     Binary(MIRRegister, MIRBinaryOp, MIRRegister, MIRRegister),
     Gep(MIRRegister, MIRRegister, MIRRegister, MIRType),
-    Load(MIRRegister, MIRRegister),
-    Store(MIRRegister, MIRRegister),
+    Load(MIRRegister, MIRRegister, MIRType),
+    Store(MIRRegister, MIRRegister, MIRType),
     BranchUncond(MIRBasicBlockID),
     BranchCond(MIRRegister, MIRBasicBlockID, MIRBasicBlockID),
     Call(
@@ -145,4 +145,5 @@ pub struct MIRFunction<'a> {
 #[derive(Debug, PartialEq)]
 pub struct MIRModule<'a> {
     pub funcs: &'a mut bump::List<'a, MIRFunction<'a>>,
+    pub strings: &'a mut bump::List<'a, &'a [u8]>,
 }
