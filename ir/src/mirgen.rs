@@ -12,12 +12,13 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod ir;
-pub mod irgen;
-pub mod mir;
-pub mod mirgen;
+extern crate bump;
+extern crate parse;
+extern crate semant;
 
-pub use crate::ir::*;
-pub use crate::irgen::*;
-pub use crate::mir::*;
-pub use crate::mirgen::*;
+use crate::*;
+use bump::bump_list;
+
+pub fn mirgen<'a>(program: MIRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRModule<'a> {
+    todo!()
+}
