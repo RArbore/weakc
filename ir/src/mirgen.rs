@@ -293,6 +293,41 @@ impl<'a> MIRGenContext<'a> {
     }
 
     fn mirgen_shaped_as(&mut self, result: MIRRegister, tensor: MIRRegister, shape: MIRRegister) {
+        let dimensionality_offset = self.fresh_reg(MIRType::Fixed);
+        let dimensions_offset = self.fresh_reg(MIRType::Fixed);
+        let elements_offset = self.fresh_reg(MIRType::Fixed);
+        let one_register = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Immediate(
+            dimensionality_offset,
+            MIRConstant::Fixed(MIR_TENSOR_DIMENSIONALITY_OFFSET),
+        ));
+        self.add_inst(MIRInstruction::Immediate(
+            dimensions_offset,
+            MIRConstant::Fixed(MIR_TENSOR_DIMENSIONS_OFFSET),
+        ));
+        self.add_inst(MIRInstruction::Immediate(
+            elements_offset,
+            MIRConstant::Fixed(MIR_TENSOR_ELEMENTS_OFFSET),
+        ));
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Fixed(1),
+        ));
+
         self.mirgen_allocate_empty_tensor(result);
+        let shape_num_dims_ptr = self.fresh_reg(MIRType::Pointer);
+        let shape_num_dims = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Gep(
+            shape_num_dims_ptr,
+            shape,
+            dimensionality_offset,
+        ));
+        self.add_inst(MIRInstruction::Load(shape_num_dims, shape_num_dims_ptr));
+        let assert_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Call(
+            None,
+            MIR_RT_FUNCTION_ASSERT.0,
+            bump_list!(self.bump, assert_reg),
+        ));
     }
 }

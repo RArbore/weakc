@@ -459,7 +459,7 @@ fn eval_expr<'a, W: Write>(
             context = new_context;
             match (op, lval, rval) {
                 (ASTBinaryOp::ShapedAs, Value::Tensor(ld, lv), Value::Tensor(rd, rv)) => {
-                    if ld.len() == 1 && ld[0] == 1 {
+                    if ld.len() == 1 && ld[0] == 1 && rd.len() == 1 {
                         let mut right_prod = 1;
                         let mut new_ld = vec![];
                         for i in 0..rv.len() {
