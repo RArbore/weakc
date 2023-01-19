@@ -26,7 +26,7 @@ pub enum HIRConstant<'a> {
     Boolean(bool),
     Number(f64),
     String(&'a [u8]),
-    Tensor(&'a bump::List<'a, usize>, &'a bump::List<'a, f64>),
+    Tensor(&'a bump::List<'a, u32>, &'a bump::List<'a, f64>),
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]

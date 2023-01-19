@@ -17,7 +17,6 @@ extern crate parse;
 extern crate semant;
 
 use crate::*;
-use bump::bump_list;
 
 struct MIRGenContext<'a> {
     module: MIRModule<'a>,
@@ -42,6 +41,42 @@ fn convert_type(ty: HIRType) -> Option<MIRType> {
     }
 }
 
+fn convert_register(reg: HIRRegister) -> Option<MIRRegister> {
+    let (id, ty) = reg;
+    if let Some(ty) = convert_type(ty) {
+        Some((id, ty))
+    } else {
+        None
+    }
+}
+
+fn convert_2_registers(regs: (HIRRegister, HIRRegister)) -> Option<(MIRRegister, MIRRegister)> {
+    let reg1 = convert_register(regs.0);
+    let reg2 = convert_register(regs.1);
+    if let (Some(reg1), Some(reg2)) = (reg1, reg2) {
+        Some((reg1, reg2))
+    } else if let (None, None) = (reg1, reg2) {
+        None
+    } else {
+        panic!("PANIC: One register in operation is Nil typed, and the other isn't.");
+    }
+}
+
+fn convert_3_registers(
+    regs: (HIRRegister, HIRRegister, HIRRegister),
+) -> Option<(MIRRegister, MIRRegister, MIRRegister)> {
+    let reg1 = convert_register(regs.0);
+    let reg2 = convert_register(regs.1);
+    let reg3 = convert_register(regs.2);
+    if let (Some(reg1), Some(reg2), Some(reg3)) = (reg1, reg2, reg3) {
+        Some((reg1, reg2, reg3))
+    } else if let (None, None, None) = (reg1, reg2, reg3) {
+        None
+    } else {
+        panic!("PANIC: Some register in operation is Nil typed, and some other isn't.");
+    }
+}
+
 impl<'a> MIRGenContext<'a> {
     fn new(bump: &'a bump::BumpAllocator) -> Self {
         let context = MIRGenContext {
@@ -54,6 +89,18 @@ impl<'a> MIRGenContext<'a> {
             bump,
         };
         context
+    }
+
+    fn convert_string(&mut self, string: &'a [u8]) -> u32 {
+        let mut i = 0;
+        while i < self.module.strings.len() as u32 {
+            if *self.module.strings.at(i as usize) == string {
+                return i;
+            }
+            i += 1;
+        }
+        self.module.strings.push(string);
+        return i;
     }
 
     fn mirgen_program(&mut self, program: HIRModule<'a>) {
@@ -71,9 +118,8 @@ impl<'a> MIRGenContext<'a> {
         };
 
         for i in 0..func.params.len() {
-            let (id, ty) = func.params.at(i);
-            if let Some(ty) = convert_type(*ty) {
-                mir_func.params.push((*id, ty));
+            if let Some(reg) = convert_register(*func.params.at(i)) {
+                mir_func.params.push(reg);
             }
         }
 
@@ -86,5 +132,63 @@ impl<'a> MIRGenContext<'a> {
         }
     }
 
-    fn mirgen_block(&mut self, block: &'a HIRBasicBlock<'a>) {}
+    fn add_inst(&mut self, inst: MIRInstruction<'a>) {
+        self.module
+            .funcs
+            .at_mut(self.curr_func as usize)
+            .blocks
+            .at_mut(self.curr_block as usize)
+            .insts
+            .push(inst);
+    }
+
+    fn mirgen_block(&mut self, block: &'a HIRBasicBlock<'a>) {
+        let mir_block = MIRBasicBlock {
+            insts: self.bump.create_list(),
+        };
+
+        self.curr_block =
+            self.module.funcs.at(self.curr_func as usize).blocks.len() as MIRBasicBlockID;
+        self.module
+            .funcs
+            .at_mut(self.curr_func as usize)
+            .blocks
+            .push(mir_block);
+
+        for i in 0..block.insts.len() {
+            match block.insts.at(i) {
+                HIRInstruction::Immediate(hir_reg, hir_const) => {
+                    if let Some(mir_reg) = convert_register(*hir_reg) {
+                        let mir_const = match hir_const {
+                            HIRConstant::Boolean(v) => MIRConstant::Boolean(*v),
+                            HIRConstant::Number(v) => MIRConstant::Real(*v),
+                            HIRConstant::String(v) => MIRConstant::String(self.convert_string(*v)),
+                            _ => panic!("PANIC: Unhandled HIR constant in immediate instruction."),
+                        };
+                        self.add_inst(MIRInstruction::Immediate(mir_reg, mir_const));
+                    }
+                }
+                HIRInstruction::Copy(left_reg, right_reg) => {
+                    if let Some((left_mir_reg, right_mir_reg)) =
+                        convert_2_registers((*left_reg, *right_reg))
+                    {
+                        self.add_inst(MIRInstruction::Copy(left_mir_reg, right_mir_reg));
+                    }
+                }
+                HIRInstruction::Unary(left_reg, op, right_reg) => {
+                    let op = match op {
+                        HIRUnaryOp::Not => MIRUnaryOp::Not,
+                        HIRUnaryOp::Negate => MIRUnaryOp::Negate,
+                        HIRUnaryOp::Shape => MIRUnaryOp::Shape,
+                    };
+                    if let Some((left_mir_reg, right_mir_reg)) =
+                        convert_2_registers((*left_reg, *right_reg))
+                    {
+                        self.add_inst(MIRInstruction::Unary(left_mir_reg, op, right_mir_reg));
+                    }
+                }
+                _ => todo!(),
+            }
+        }
+    }
 }

@@ -35,7 +35,7 @@ pub enum Value<'a> {
     Boolean(bool),
     Number(f64),
     String(&'a [u8]),
-    Tensor(Box<[usize]>, Box<[f64]>),
+    Tensor(Box<[u32]>, Box<[f64]>),
 }
 
 impl<'a> fmt::Display for Value<'a> {
@@ -198,7 +198,7 @@ fn eval_stmt<'a, W: Write>(
                         content_vals.push(*b as f64);
                     }
                     *var = Value::Tensor(
-                        Box::new([content_vals.len()]),
+                        Box::new([content_vals.len() as u32]),
                         content_vals.into_boxed_slice(),
                     );
                 }
@@ -310,7 +310,7 @@ fn eval_expr<'a, W: Write>(
                     if let Value::Number(index_num) = index {
                         let index_num = index_num as isize;
                         if index_num >= 0 {
-                            index_vals.push(index_num as usize);
+                            index_vals.push(index_num as u32);
                         } else {
                             Err(
                                 "ERROR: Attempted to use a negative number to index into a tensor.",
@@ -329,7 +329,7 @@ fn eval_expr<'a, W: Write>(
                             Err("ERROR: Index value doesn't fit in dimension of tensor.")?
                         }
                     }
-                    Value::Number(contents[flat_index])
+                    Value::Number(contents[flat_index as usize])
                 } else {
                     Err("ERROR: Attempted to index into tensor using incorrect number of indices.")?
                 }
@@ -349,7 +349,7 @@ fn eval_expr<'a, W: Write>(
                 }
             }
             Value::Tensor(
-                Box::new([content_vals.len()]),
+                Box::new([content_vals.len() as u32]),
                 content_vals.into_boxed_slice(),
             )
         }
@@ -395,7 +395,7 @@ fn eval_expr<'a, W: Write>(
                         if let Value::Number(index_num) = index {
                             let index_num = index_num as isize;
                             if index_num >= 0 {
-                                index_vals.push(index_num as usize);
+                                index_vals.push(index_num as u32);
                             } else {
                                 Err("ERROR: Attempted to use a negative number to index into a tensor.")?
                             }
@@ -419,7 +419,7 @@ fn eval_expr<'a, W: Write>(
                                     Err("ERROR: Index value doesn't fit in dimension of tensor.")?
                                 }
                             }
-                            contents[flat_index] = num;
+                            contents[flat_index as usize] = num;
                             Value::Number(num)
                         } else {
                             Err("ERROR: Attempted to index into tensor using incorrect number of indices.")?
@@ -448,7 +448,7 @@ fn eval_expr<'a, W: Write>(
                     for i in 0..d.len() {
                         v.push(d[i] as f64);
                     }
-                    Value::Tensor(Box::new([v.len()]), v.into_boxed_slice())
+                    Value::Tensor(Box::new([v.len() as u32]), v.into_boxed_slice())
                 }
                 _ => Err("ERROR: Incorrect usage of a predefined unary operation.")?,
             }
@@ -463,7 +463,7 @@ fn eval_expr<'a, W: Write>(
                         let mut right_prod = 1;
                         let mut new_ld = vec![];
                         for i in 0..rv.len() {
-                            let dim = rv[i] as usize;
+                            let dim = rv[i] as u32;
                             if dim <= 0 {
                                 Err("ERROR: Attempted to resize tensor using non-positive dimension.")?
                             }
@@ -472,20 +472,20 @@ fn eval_expr<'a, W: Write>(
                         }
                         Value::Tensor(
                             new_ld.into_boxed_slice(),
-                            vec![lv[0]; right_prod].into_boxed_slice(),
+                            vec![lv[0]; right_prod as usize].into_boxed_slice(),
                         )
                     } else if rd.len() == 1 {
                         let mut right_prod = 1;
                         let mut new_ld = vec![];
                         for i in 0..rv.len() {
-                            let dim = rv[i] as usize;
+                            let dim = rv[i] as u32;
                             if dim <= 0 {
                                 Err("ERROR: Attempted to resize tensor using non-positive dimension.")?
                             }
                             new_ld.push(dim);
                             right_prod *= dim;
                         }
-                        if lv.len() == right_prod {
+                        if lv.len() == right_prod as usize {
                             Value::Tensor(new_ld.into_boxed_slice(), lv)
                         } else {
                             Err("ERROR: Attempted to resize tensor, but new size has different number of elements than old size.")?
@@ -524,11 +524,12 @@ fn eval_expr<'a, W: Write>(
                 }
                 (ASTBinaryOp::MatrixMultiply, Value::Tensor(ld, lv), Value::Tensor(rd, rv)) => {
                     if ld.len() == 2 && rd.len() == 2 && ld[1] == rd[0] {
-                        let mut v = vec![0.0; ld[0] * rd[1]];
+                        let mut v = vec![0.0; (ld[0] * rd[1]) as usize];
                         for i in 0..ld[0] {
                             for k in 0..ld[1] {
                                 for j in 0..rd[1] {
-                                    v[i * rd[1] + j] += lv[i * ld[1] + k] * rv[k * rd[1] + j];
+                                    v[(i * rd[1] + j) as usize] +=
+                                        lv[(i * ld[1] + k) as usize] * rv[(k * rd[1] + j) as usize];
                                 }
                             }
                         }
