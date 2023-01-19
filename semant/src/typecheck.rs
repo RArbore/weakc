@@ -120,7 +120,7 @@ pub struct TypedProgram<'a>(pub &'a bump::List<'a, TypedASTStmt<'a>>, pub &'a [T
 pub fn typecheck_program<'a>(
     program: &'a bump::List<'a, ASTStmt<'a>>,
     bump: &'a bump::BumpAllocator,
-) -> TypeResult<TypedProgram> {
+) -> TypeResult<TypedProgram<'a>> {
     let mut context = TypeContext::new(&bump);
     let unconstrained = context.generate_unconstrained_tree(program, bump)?;
     let num_pure_generics = context.num_generics;

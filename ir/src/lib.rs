@@ -14,6 +14,8 @@
 
 pub mod gen;
 pub mod ir;
+pub mod mir;
 
 pub use crate::gen::*;
 pub use crate::ir::*;
+pub use crate::mir::*;
