@@ -50,6 +50,11 @@ pub const MIR_RT_FUNCTION_MALLOC: MIRExternalFunction = (
     (&[MIRType::Fixed], Some(MIRType::Pointer)),
 );
 
+pub const MIR_TENSOR_SIZE: usize = 24;
+pub const MIR_TENSOR_DIMENSIONALITY_OFFSET: usize = 0;
+pub const MIR_TENSOR_ELEMENTS_OFFSET: usize = 8;
+pub const MIR_TENSOR_DIMENSIONS_OFFSET: usize = 16;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MIRUnaryOp {
     Not,

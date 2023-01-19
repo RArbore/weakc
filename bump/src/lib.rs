@@ -223,6 +223,23 @@ impl<'a, T: Sized + PartialEq + fmt::Debug> List<'a, T> {
         }
     }
 
+    pub unsafe fn push_empty(&mut self) {
+        match &mut self.next {
+            None => {
+                if self.size < self.chunk.len() {
+                    self.size += 1;
+                } else {
+                    let next = self.bump.create_list_impl(self.size * 2);
+                    next.push_empty();
+                    self.next = Some(next);
+                }
+            }
+            Some(next) => {
+                next.push_empty();
+            }
+        }
+    }
+
     pub fn at(&self, idx: usize) -> &T {
         if idx < self.chunk.len() {
             &self.chunk[idx]

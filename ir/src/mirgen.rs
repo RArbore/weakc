@@ -104,6 +104,35 @@ impl<'a> MIRGenContext<'a> {
         return i;
     }
 
+    fn get_curr_func_mut(&mut self) -> &mut MIRFunction<'a> {
+        return self.module.funcs.at_mut(self.curr_func as usize);
+    }
+
+    fn get_curr_block_mut(&mut self) -> &mut MIRBasicBlock<'a> {
+        return self
+            .module
+            .funcs
+            .at_mut(self.curr_func as usize)
+            .blocks
+            .at_mut(self.curr_block as usize);
+    }
+
+    fn fresh_reg(&mut self, ty: MIRType) -> MIRRegister {
+        let id = self.get_curr_func_mut().num_regs_used;
+        self.get_curr_func_mut().num_regs_used += 1;
+        (id, ty)
+    }
+
+    fn fresh_block(&mut self) -> MIRBasicBlockID {
+        let block = MIRBasicBlock {
+            insts: self.bump.create_list(),
+        };
+        let func = self.get_curr_func_mut();
+        let id = func.blocks.len() as MIRBasicBlockID;
+        func.blocks.push(block);
+        id
+    }
+
     fn mirgen_program(&mut self, program: HIRModule<'a>) {
         for i in 0..program.funcs.len() {
             self.mirgen_func(program.funcs.at(i));
@@ -129,33 +158,24 @@ impl<'a> MIRGenContext<'a> {
         self.curr_block = 0;
         self.module.funcs.push(mir_func);
 
+        for _ in 0..func.blocks.len() {
+            let empty_mir_block = MIRBasicBlock {
+                insts: self.bump.create_list(),
+            };
+            self.get_curr_func_mut().blocks.push(empty_mir_block);
+        }
+
         for i in 0..func.blocks.len() {
-            self.mirgen_block(func.blocks.at(i));
+            self.mirgen_block(func.blocks.at(i), i as MIRBasicBlockID);
         }
     }
 
     fn add_inst(&mut self, inst: MIRInstruction<'a>) {
-        self.module
-            .funcs
-            .at_mut(self.curr_func as usize)
-            .blocks
-            .at_mut(self.curr_block as usize)
-            .insts
-            .push(inst);
+        self.get_curr_block_mut().insts.push(inst);
     }
 
-    fn mirgen_block(&mut self, block: &'a HIRBasicBlock<'a>) {
-        let mir_block = MIRBasicBlock {
-            insts: self.bump.create_list(),
-        };
-
-        self.curr_block =
-            self.module.funcs.at(self.curr_func as usize).blocks.len() as MIRBasicBlockID;
-        self.module
-            .funcs
-            .at_mut(self.curr_func as usize)
-            .blocks
-            .push(mir_block);
+    fn mirgen_block(&mut self, block: &'a HIRBasicBlock<'a>, id: MIRBasicBlockID) {
+        self.curr_block = id;
 
         for i in 0..block.insts.len() {
             match block.insts.at(i) {
@@ -259,5 +279,20 @@ impl<'a> MIRGenContext<'a> {
         }
     }
 
-    fn mirgen_shaped_as(&mut self, result: MIRRegister, tensor: MIRRegister, shape: MIRRegister) {}
+    fn mirgen_allocate_empty_tensor(&mut self, result: MIRRegister) {
+        let tensor_size_const = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Immediate(
+            tensor_size_const,
+            MIRConstant::Fixed(MIR_TENSOR_SIZE),
+        ));
+        self.add_inst(MIRInstruction::Call(
+            Some(result),
+            MIR_RT_FUNCTION_MALLOC.0,
+            bump_list!(self.bump, tensor_size_const),
+        ));
+    }
+
+    fn mirgen_shaped_as(&mut self, result: MIRRegister, tensor: MIRRegister, shape: MIRRegister) {
+        self.mirgen_allocate_empty_tensor(result);
+    }
 }

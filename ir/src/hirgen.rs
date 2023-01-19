@@ -100,16 +100,6 @@ impl<'a> HIRGenContext<'a> {
         context
     }
 
-    #[allow(dead_code)]
-    fn get_curr_func(&self) -> &HIRFunction<'a> {
-        return self.module.funcs.at(self.curr_func as usize);
-    }
-
-    fn get_curr_func_mut(&mut self) -> &mut HIRFunction<'a> {
-        return self.module.funcs.at_mut(self.curr_func as usize);
-    }
-
-    #[allow(dead_code)]
     fn get_curr_block(&self) -> &HIRBasicBlock<'a> {
         return self
             .module
@@ -117,6 +107,10 @@ impl<'a> HIRGenContext<'a> {
             .at(self.curr_func as usize)
             .blocks
             .at(self.curr_block as usize);
+    }
+
+    fn get_curr_func_mut(&mut self) -> &mut HIRFunction<'a> {
+        return self.module.funcs.at_mut(self.curr_func as usize);
     }
 
     fn get_curr_block_mut(&mut self) -> &mut HIRBasicBlock<'a> {
