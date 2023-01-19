@@ -17,6 +17,7 @@ extern crate parse;
 extern crate semant;
 
 use crate::*;
+use bump::bump_list;
 
 struct MIRGenContext<'a> {
     module: MIRModule<'a>,
@@ -203,7 +204,9 @@ impl<'a> MIRGenContext<'a> {
                         convert_3_registers((*result_reg, *left_reg, *right_reg))
                     {
                         match op {
-                            HIRBinaryOp::ShapedAs => {}
+                            HIRBinaryOp::ShapedAs => {
+                                self.mirgen_shaped_as(result_mir_reg, left_mir_reg, right_mir_reg);
+                            }
                             HIRBinaryOp::MatrixMultiply => {}
                             HIRBinaryOp::AddTensors => {}
                             HIRBinaryOp::SubtractTensors => {}
@@ -255,4 +258,6 @@ impl<'a> MIRGenContext<'a> {
             }
         }
     }
+
+    fn mirgen_shaped_as(&mut self, result: MIRRegister, tensor: MIRRegister, shape: MIRRegister) {}
 }

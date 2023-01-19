@@ -20,7 +20,7 @@ extern crate semant;
 pub enum MIRConstant {
     Boolean(bool),
     Real(f64),
-    Index(usize),
+    Fixed(usize),
     String(u32),
 }
 
@@ -29,7 +29,7 @@ pub enum MIRType {
     Boolean,
     String,
     Real,
-    Index,
+    Fixed,
     Pointer,
 }
 
@@ -38,11 +38,24 @@ pub type MIRFunctionID = u32;
 pub type MIRBasicBlockID = u32;
 pub type MIRRegister = (MIRRegisterID, MIRType);
 
+pub const MIR_EXTERNAL_FUNCTION_ID: MIRFunctionID = !0;
+
+pub type MIRExternalFunction = (
+    (MIRFunctionID, &'static [u8]),
+    (&'static [MIRType], Option<MIRType>),
+);
+
+pub const MIR_RT_FUNCTION_MALLOC: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"malloc"),
+    (&[MIRType::Fixed], Some(MIRType::Pointer)),
+);
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MIRUnaryOp {
     Not,
     Negate,
     Shape,
+    Round,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
