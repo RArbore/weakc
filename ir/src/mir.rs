@@ -86,6 +86,7 @@ pub enum MIRInstruction<'a> {
     Gep(MIRRegister, MIRRegister, MIRRegister, MIRType),
     Load(MIRRegister, MIRRegister, MIRType),
     Store(MIRRegister, MIRRegister, MIRType),
+    Alloca(MIRRegister, usize),
     BranchUncond(MIRBasicBlockID),
     BranchCond(MIRRegister, MIRBasicBlockID, MIRBasicBlockID),
     Call(
@@ -101,44 +102,11 @@ pub struct MIRBasicBlock<'a> {
     pub insts: &'a mut bump::List<'a, MIRInstruction<'a>>,
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
-pub enum MIRBasicBlockSuccessors {
-    Returns,
-    Jumps(MIRBasicBlockID),
-    Branches(MIRBasicBlockID, MIRBasicBlockID),
-}
-
-impl<'a> MIRBasicBlock<'a> {
-    pub fn successors(&self) -> MIRBasicBlockSuccessors {
-        assert!(self.insts.len() > 0, "PANIC: Empty basic block.");
-        let last_inst = self.insts.at(self.insts.len() - 1);
-        match last_inst {
-            MIRInstruction::Return(_) => MIRBasicBlockSuccessors::Returns,
-            MIRInstruction::BranchUncond(b) => MIRBasicBlockSuccessors::Jumps(*b),
-            MIRInstruction::BranchCond(_, b1, b2) => MIRBasicBlockSuccessors::Branches(*b1, *b2),
-            _ => panic!("PANIC: Found invalid terminating instruction of basic block."),
-        }
-    }
-
-    pub fn is_terminated(&self) -> bool {
-        if self.insts.len() > 0 {
-            match self.insts.at(self.insts.len() - 1) {
-                MIRInstruction::Return(_) => true,
-                MIRInstruction::BranchUncond(_) => true,
-                MIRInstruction::BranchCond(_, _, _) => true,
-                _ => false,
-            }
-        } else {
-            false
-        }
-    }
-}
-
 #[derive(Debug, PartialEq)]
 pub struct MIRFunction<'a> {
     pub name: &'a [u8],
     pub params: &'a mut bump::List<'a, MIRRegister>,
-    pub ret_type: MIRType,
+    pub ret_type: Option<MIRType>,
     pub blocks: &'a mut bump::List<'a, MIRBasicBlock<'a>>,
 }
 

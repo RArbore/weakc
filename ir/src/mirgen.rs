@@ -21,6 +21,8 @@ use bump::bump_list;
 
 struct MIRGenContext<'a> {
     module: MIRModule<'a>,
+    curr_func: MIRFunctionID,
+    curr_block: MIRBasicBlockID,
     bump: &'a bump::BumpAllocator,
 }
 
@@ -30,6 +32,16 @@ pub fn mirgen<'a>(program: IRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRMo
     context.module
 }
 
+fn convert_type(ty: IRType) -> Option<MIRType> {
+    match ty {
+        IRType::Nil => None,
+        IRType::Boolean => Some(MIRType::Boolean),
+        IRType::String => Some(MIRType::String),
+        IRType::Number => Some(MIRType::Real),
+        IRType::Tensor => Some(MIRType::Pointer),
+    }
+}
+
 impl<'a> MIRGenContext<'a> {
     fn new(bump: &'a bump::BumpAllocator) -> Self {
         let context = MIRGenContext {
@@ -37,6 +49,8 @@ impl<'a> MIRGenContext<'a> {
                 funcs: bump.create_list(),
                 strings: bump.create_list(),
             },
+            curr_func: 0,
+            curr_block: 0,
             bump,
         };
         context
@@ -48,5 +62,29 @@ impl<'a> MIRGenContext<'a> {
         }
     }
 
-    fn mirgen_func(&mut self, func: &'a IRFunction<'a>) {}
+    fn mirgen_func(&mut self, func: &'a IRFunction<'a>) {
+        let mir_func = MIRFunction {
+            name: func.name,
+            params: self.bump.create_list(),
+            ret_type: convert_type(func.ret_type),
+            blocks: self.bump.create_list(),
+        };
+
+        for i in 0..func.params.len() {
+            let (id, ty) = func.params.at(i);
+            if let Some(ty) = convert_type(*ty) {
+                mir_func.params.push((*id, ty));
+            }
+        }
+
+        self.curr_func = self.module.funcs.len() as MIRFunctionID;
+        self.curr_block = 0;
+        self.module.funcs.push(mir_func);
+
+        for i in 0..func.blocks.len() {
+            self.mirgen_block(func.blocks.at(i));
+        }
+    }
+
+    fn mirgen_block(&mut self, block: &'a IRBasicBlock<'a>) {}
 }
