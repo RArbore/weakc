@@ -21,6 +21,7 @@ pub enum MIRConstant {
     Boolean(bool),
     Real(f64),
     Fixed(u32),
+    Size(usize),
     String(u32),
 }
 
@@ -30,7 +31,18 @@ pub enum MIRType {
     String,
     Real,
     Fixed,
+    Size,
     Pointer,
+}
+
+impl MIRType {
+    pub fn get_size(&self) -> usize {
+        match self {
+            MIRType::Boolean => 1,
+            MIRType::Fixed => 4,
+            MIRType::Real | MIRType::Size | MIRType::String | MIRType::Pointer => 8,
+        }
+    }
 }
 
 pub type MIRRegisterID = u32;
@@ -66,6 +78,7 @@ pub enum MIRUnaryOp {
     Negate,
     Shape,
     Round,
+    Widen,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -75,27 +88,38 @@ pub enum MIRBinaryOp {
     MultiplyReals,
     DivideReals,
     PowerReals,
-    AddIndices,
-    SubtractIndices,
-    MultiplyIndices,
-    DivideIndices,
-    PowerIndices,
+    AddFixed,
+    SubtractFixed,
+    MultiplyFixed,
+    DivideFixed,
+    PowerFixed,
+    AddSizes,
+    SubtractSizes,
+    MultiplySizes,
+    DivideSizes,
+    PowerSizes,
     GreaterReals,
     LesserReals,
-    GreaterIndices,
-    LesserIndices,
+    GreaterFixed,
+    LesserFixed,
+    GreaterSizes,
+    LesserSizes,
     NotEqualsBooleans,
     EqualsEqualsBooleans,
     NotEqualsStrings,
     EqualsEqualsStrings,
     NotEqualsReals,
     EqualsEqualsReals,
-    NotEqualsIndices,
-    EqualsEqualsIndices,
+    NotEqualsFixed,
+    EqualsEqualsFixed,
+    NotEqualsSizes,
+    EqualsEqualsSizes,
     GreaterEqualsReals,
     LesserEqualsReals,
-    GreaterEqualsIndices,
-    LesserEqualsIndices,
+    GreaterEqualsFixed,
+    LesserEqualsFixed,
+    GreaterEqualsSizes,
+    LesserEqualsSizes,
     And,
     Or,
 }

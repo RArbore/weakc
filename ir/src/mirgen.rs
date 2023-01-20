@@ -329,5 +329,53 @@ impl<'a> MIRGenContext<'a> {
             MIR_RT_FUNCTION_ASSERT.0,
             bump_list!(self.bump, assert_reg),
         ));
+
+        let new_dimensionality_ptr = self.fresh_reg(MIRType::Pointer);
+        let new_dimensionality = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Gep(
+            new_dimensionality_ptr,
+            shape,
+            dimensions_offset,
+        ));
+        self.add_inst(MIRInstruction::Load(
+            new_dimensionality,
+            new_dimensionality_ptr,
+        ));
+
+        let new_dimensionality_size = self.fresh_reg(MIRType::Size);
+        let shape_elem_size = self.fresh_reg(MIRType::Size);
+        let new_shape_malloc_size = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Unary(
+            new_dimensionality_size,
+            MIRUnaryOp::Widen,
+            new_dimensionality,
+        ));
+        self.add_inst(MIRInstruction::Immediate(
+            shape_elem_size,
+            MIRConstant::Size(MIRType::Fixed.get_size()),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            new_shape_malloc_size,
+            MIRBinaryOp::AddSizes,
+            new_dimensionality_size,
+            shape_elem_size,
+        ));
+        let new_tensor_shape_malloc = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Call(
+            Some(new_tensor_shape_malloc),
+            MIR_RT_FUNCTION_MALLOC.0,
+            bump_list!(self.bump, new_shape_malloc_size),
+        ));
+
+        let new_tensor_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            new_tensor_shape_ptr,
+            tensor,
+            dimensions_offset,
+        ));
+        self.add_inst(MIRInstruction::Store(
+            new_tensor_shape_malloc,
+            new_tensor_shape_ptr,
+        ));
     }
 }
