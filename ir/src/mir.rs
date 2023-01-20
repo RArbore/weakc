@@ -57,12 +57,12 @@ pub type MIRExternalFunction = (
     (&'static [MIRType], Option<MIRType>),
 );
 
-pub const MIR_RT_FUNCTION_MALLOC: MIRExternalFunction = (
+pub const MIR_EXTERNAL_FUNCTION_MALLOC: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"malloc"),
     (&[MIRType::Fixed], Some(MIRType::Pointer)),
 );
 
-pub const MIR_RT_FUNCTION_ASSERT: MIRExternalFunction = (
+pub const MIR_EXTERNAL_FUNCTION_ASSERT: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"assert"),
     (&[MIRType::Boolean], None),
 );
