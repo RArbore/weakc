@@ -68,9 +68,6 @@ pub const MIR_RT_FUNCTION_ASSERT: MIRExternalFunction = (
 );
 
 pub const MIR_TENSOR_SIZE: u32 = 24;
-pub const MIR_TENSOR_DIMENSIONALITY_OFFSET: u32 = 0;
-pub const MIR_TENSOR_DIMENSIONS_OFFSET: u32 = 8;
-pub const MIR_TENSOR_ELEMENTS_OFFSET: u32 = 16;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MIRUnaryOp {
@@ -130,7 +127,7 @@ pub enum MIRInstruction<'a> {
     Copy(MIRRegister, MIRRegister),
     Unary(MIRRegister, MIRUnaryOp, MIRRegister),
     Binary(MIRRegister, MIRBinaryOp, MIRRegister, MIRRegister),
-    Gep(MIRRegister, MIRRegister, MIRRegister),
+    Gep(MIRRegister, MIRRegister, MIRRegister, MIRType),
     Load(MIRRegister, MIRRegister),
     Store(MIRRegister, MIRRegister),
     Alloca(MIRRegister, usize),

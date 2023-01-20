@@ -293,37 +293,21 @@ impl<'a> MIRGenContext<'a> {
     }
 
     fn mirgen_shaped_as(&mut self, result: MIRRegister, tensor: MIRRegister, shape: MIRRegister) {
-        let dimensionality_offset = self.fresh_reg(MIRType::Fixed);
-        let dimensions_offset = self.fresh_reg(MIRType::Fixed);
-        let elements_offset = self.fresh_reg(MIRType::Fixed);
+        self.mirgen_allocate_empty_tensor(result);
+        let shape_num_dims = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(shape_num_dims, shape));
         let one_register = self.fresh_reg(MIRType::Fixed);
-        self.add_inst(MIRInstruction::Immediate(
-            dimensionality_offset,
-            MIRConstant::Fixed(MIR_TENSOR_DIMENSIONALITY_OFFSET),
-        ));
-        self.add_inst(MIRInstruction::Immediate(
-            dimensions_offset,
-            MIRConstant::Fixed(MIR_TENSOR_DIMENSIONS_OFFSET),
-        ));
-        self.add_inst(MIRInstruction::Immediate(
-            elements_offset,
-            MIRConstant::Fixed(MIR_TENSOR_ELEMENTS_OFFSET),
-        ));
         self.add_inst(MIRInstruction::Immediate(
             one_register,
             MIRConstant::Fixed(1),
         ));
-
-        self.mirgen_allocate_empty_tensor(result);
-        let shape_num_dims_ptr = self.fresh_reg(MIRType::Pointer);
-        let shape_num_dims = self.fresh_reg(MIRType::Fixed);
-        self.add_inst(MIRInstruction::Gep(
-            shape_num_dims_ptr,
-            shape,
-            dimensionality_offset,
-        ));
-        self.add_inst(MIRInstruction::Load(shape_num_dims, shape_num_dims_ptr));
         let assert_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            assert_reg,
+            MIRBinaryOp::EqualsEqualsFixed,
+            shape_num_dims,
+            one_register,
+        ));
         self.add_inst(MIRInstruction::Call(
             None,
             MIR_RT_FUNCTION_ASSERT.0,
@@ -332,10 +316,16 @@ impl<'a> MIRGenContext<'a> {
 
         let new_dimensionality_ptr = self.fresh_reg(MIRType::Pointer);
         let new_dimensionality = self.fresh_reg(MIRType::Fixed);
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
         self.add_inst(MIRInstruction::Gep(
             new_dimensionality_ptr,
             shape,
-            dimensions_offset,
+            one_register,
+            MIRType::Pointer,
         ));
         self.add_inst(MIRInstruction::Load(
             new_dimensionality,
@@ -356,26 +346,111 @@ impl<'a> MIRGenContext<'a> {
         ));
         self.add_inst(MIRInstruction::Binary(
             new_shape_malloc_size,
-            MIRBinaryOp::AddSizes,
+            MIRBinaryOp::MultiplySizes,
             new_dimensionality_size,
             shape_elem_size,
         ));
-        let new_tensor_shape_malloc = self.fresh_reg(MIRType::Pointer);
+        let result_shape_ptr = self.fresh_reg(MIRType::Pointer);
         self.add_inst(MIRInstruction::Call(
-            Some(new_tensor_shape_malloc),
+            Some(result_shape_ptr),
             MIR_RT_FUNCTION_MALLOC.0,
             bump_list!(self.bump, new_shape_malloc_size),
         ));
 
-        let new_tensor_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        let result_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
         self.add_inst(MIRInstruction::Gep(
-            new_tensor_shape_ptr,
-            tensor,
-            dimensions_offset,
+            result_shape_ptr_ptr,
+            result,
+            one_register,
+            MIRType::Pointer,
         ));
         self.add_inst(MIRInstruction::Store(
-            new_tensor_shape_malloc,
-            new_tensor_shape_ptr,
+            result_shape_ptr,
+            result_shape_ptr_ptr,
         ));
+
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
+        let shape_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        let shape_elements_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            shape_elements_ptr_ptr,
+            shape,
+            two_register,
+            MIRType::Pointer,
+        ));
+        self.add_inst(MIRInstruction::Load(
+            shape_elements_ptr,
+            shape_elements_ptr_ptr,
+        ));
+
+        let copy_index = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(copy_index, MIRConstant::Size(0)));
+        let cond_block = self.fresh_block();
+        let body_block = self.fresh_block();
+        let post_block = self.fresh_block();
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = cond_block;
+        let cond_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            cond_reg,
+            MIRBinaryOp::LesserSizes,
+            copy_index,
+            new_dimensionality_size,
+        ));
+        self.add_inst(MIRInstruction::BranchCond(cond_reg, body_block, post_block));
+
+        self.curr_block = body_block;
+        let shape_element_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            shape_element_ptr,
+            shape_elements_ptr,
+            copy_index,
+            MIRType::Real,
+        ));
+        let shape_element = self.fresh_reg(MIRType::Real);
+        self.add_inst(MIRInstruction::Load(shape_element, shape_element_ptr));
+        let rounded_shape_element = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Unary(
+            rounded_shape_element,
+            MIRUnaryOp::Round,
+            shape_element,
+        ));
+
+        let result_shape_element_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            result_shape_element_ptr,
+            result_shape_ptr,
+            copy_index,
+            MIRType::Fixed,
+        ));
+        self.add_inst(MIRInstruction::Store(
+            rounded_shape_element,
+            result_shape_element_ptr,
+        ));
+
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            copy_index,
+            MIRBinaryOp::AddSizes,
+            copy_index,
+            one_register,
+        ));
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = post_block;
     }
 }
