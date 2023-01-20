@@ -62,6 +62,11 @@ pub const MIR_EXTERNAL_FUNCTION_MALLOC: MIRExternalFunction = (
     (&[MIRType::Fixed], Some(MIRType::Pointer)),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_MEMCPY: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"memcpy"),
+    (&[MIRType::Pointer, MIRType::Pointer, MIRType::Size], None),
+);
+
 pub const MIR_EXTERNAL_FUNCTION_ASSERT: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"assert"),
     (&[MIRType::Boolean], None),

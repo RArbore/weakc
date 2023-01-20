@@ -488,5 +488,57 @@ impl<'a> MIRGenContext<'a> {
             MIR_EXTERNAL_FUNCTION_MALLOC.0,
             bump_list!(self.bump, result_elements_malloc_size),
         ));
+
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
+        let result_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            result_elements_ptr_ptr,
+            result,
+            two_register,
+            MIRType::Pointer,
+        ));
+        self.add_inst(MIRInstruction::Store(
+            result_elements_ptr,
+            result_elements_ptr_ptr,
+        ));
+        let tensor_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            tensor_elements_ptr_ptr,
+            tensor,
+            two_register,
+            MIRType::Pointer,
+        ));
+        let tensor_elements_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Load(
+            tensor_elements_ptr,
+            tensor_elements_ptr_ptr,
+        ));
+
+        let result_elements_bytes_size = self.fresh_reg(MIRType::Size);
+        let real_size = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            real_size,
+            MIRConstant::Size(MIRType::Real.get_size()),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            result_elements_bytes_size,
+            MIRBinaryOp::MultiplySizes,
+            real_size,
+            result_num_elements,
+        ));
+        self.add_inst(MIRInstruction::Call(
+            None,
+            MIR_EXTERNAL_FUNCTION_MEMCPY.0,
+            bump_list!(
+                self.bump,
+                result_elements_ptr,
+                tensor_elements_ptr,
+                result_elements_bytes_size
+            ),
+        ));
     }
 }
