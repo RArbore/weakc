@@ -392,6 +392,89 @@ impl<'a> MIRGenContext<'a> {
             shape_elements_ptr_ptr,
         ));
 
+        let tensor_num_elements = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            tensor_num_elements,
+            MIRConstant::Size(1),
+        ));
+        let tensor_dimensionality = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(tensor_dimensionality, tensor));
+        let tensor_dimensionality_size = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Unary(
+            tensor_dimensionality_size,
+            MIRUnaryOp::Widen,
+            tensor_dimensionality,
+        ));
+        let tensor_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        let tensor_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Gep(
+            tensor_shape_ptr_ptr,
+            tensor,
+            one_register,
+            MIRType::Pointer,
+        ));
+        self.add_inst(MIRInstruction::Load(tensor_shape_ptr, tensor_shape_ptr_ptr));
+        let dim_index = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(dim_index, MIRConstant::Size(0)));
+        let cond_block = self.fresh_block();
+        let body_block = self.fresh_block();
+        let post_block = self.fresh_block();
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = body_block;
+        let cond_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            cond_reg,
+            MIRBinaryOp::LesserSizes,
+            dim_index,
+            tensor_dimensionality_size,
+        ));
+        self.add_inst(MIRInstruction::BranchCond(cond_reg, body_block, post_block));
+
+        self.curr_block = body_block;
+        let tensor_shape_element_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            tensor_shape_element_ptr,
+            tensor_shape_ptr,
+            dim_index,
+            MIRType::Fixed,
+        ));
+        let tensor_shape_element = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(
+            tensor_shape_element,
+            tensor_shape_element_ptr,
+        ));
+        let widened_shape_element = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Unary(
+            widened_shape_element,
+            MIRUnaryOp::Widen,
+            tensor_shape_element,
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            tensor_num_elements,
+            MIRBinaryOp::MultiplySizes,
+            tensor_num_elements,
+            widened_shape_element,
+        ));
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            dim_index,
+            MIRBinaryOp::AddSizes,
+            dim_index,
+            one_register,
+        ));
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = post_block;
         let copy_index = self.fresh_reg(MIRType::Size);
         self.add_inst(MIRInstruction::Immediate(copy_index, MIRConstant::Size(0)));
         let result_num_elements = self.fresh_reg(MIRType::Size);
@@ -469,7 +552,18 @@ impl<'a> MIRGenContext<'a> {
         self.add_inst(MIRInstruction::BranchUncond(cond_block));
 
         self.curr_block = post_block;
-
+        let assert_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            assert_reg,
+            MIRBinaryOp::EqualsEqualsSizes,
+            tensor_num_elements,
+            result_num_elements,
+        ));
+        self.add_inst(MIRInstruction::Call(
+            None,
+            MIR_EXTERNAL_FUNCTION_ASSERT.0,
+            bump_list!(self.bump, assert_reg),
+        ));
         let tensor_elem_size = self.fresh_reg(MIRType::Size);
         let result_elements_malloc_size = self.fresh_reg(MIRType::Size);
         self.add_inst(MIRInstruction::Immediate(
