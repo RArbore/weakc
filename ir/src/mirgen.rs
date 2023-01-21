@@ -293,6 +293,84 @@ impl<'a> MIRGenContext<'a> {
     }
 
     fn mirgen_shaped_as(&mut self, result: MIRRegister, tensor: MIRRegister, shape: MIRRegister) {
+        let tensor_num_dims = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(tensor_num_dims, tensor));
+        let one_register = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Fixed(1),
+        ));
+        let first_result_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            first_result_reg,
+            MIRBinaryOp::EqualsEqualsFixed,
+            tensor_num_dims,
+            one_register,
+        ));
+
+        let first_body_block = self.fresh_block();
+        let first_post_block = self.fresh_block();
+
+        self.add_inst(MIRInstruction::BranchCond(
+            first_result_reg,
+            first_body_block,
+            first_post_block,
+        ));
+
+        self.curr_block = first_body_block;
+        let tensor_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Gep(
+            tensor_shape_ptr_ptr,
+            tensor,
+            one_register,
+            MIRType::Pointer,
+        ));
+        let tensor_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Load(tensor_shape_ptr, tensor_shape_ptr_ptr));
+        let tensor_shape_element = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(tensor_shape_element, tensor_shape_ptr));
+        let one_register = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Fixed(1),
+        ));
+        let second_result_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            first_result_reg,
+            MIRBinaryOp::EqualsEqualsFixed,
+            tensor_shape_element,
+            one_register,
+        ));
+        let second_body_block = self.fresh_block();
+        let second_post_block = self.fresh_block();
+        self.add_inst(MIRInstruction::BranchCond(
+            second_result_reg,
+            second_body_block,
+            first_post_block,
+        ));
+
+        self.curr_block = second_body_block;
+        self.mirgen_shaped_as_expand(result, tensor, shape);
+        self.add_inst(MIRInstruction::BranchUncond(second_post_block));
+
+        self.curr_block = first_post_block;
+        self.mirgen_shaped_as_normal(result, tensor, shape);
+        self.add_inst(MIRInstruction::BranchUncond(second_post_block));
+
+        self.curr_block = second_post_block;
+    }
+
+    fn mirgen_shaped_as_normal(
+        &mut self,
+        result: MIRRegister,
+        tensor: MIRRegister,
+        shape: MIRRegister,
+    ) {
         self.mirgen_allocate_empty_tensor(result);
         let shape_num_dims = self.fresh_reg(MIRType::Fixed);
         self.add_inst(MIRInstruction::Load(shape_num_dims, shape));
@@ -634,5 +712,13 @@ impl<'a> MIRGenContext<'a> {
                 result_elements_bytes_size
             ),
         ));
+    }
+
+    fn mirgen_shaped_as_expand(
+        &mut self,
+        result: MIRRegister,
+        tensor: MIRRegister,
+        shape: MIRRegister,
+    ) {
     }
 }
