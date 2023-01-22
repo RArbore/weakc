@@ -289,16 +289,21 @@ impl<'a> MIRGenContext<'a> {
                         _ => panic!("PANIC: Types for index op."),
                     };
                 }
+                HIRInstruction::Array(result_reg, contents) => {
+                    let result_reg = convert_register(*result_reg).unwrap();
+                    self.mirgen_allocate_empty_tensor(result_reg);
+                    self.mirgen_fill_empty_tensor(result_reg, contents);
+                }
                 _ => todo!(),
             }
         }
     }
 
     fn mirgen_allocate_empty_tensor(&mut self, result: MIRRegister) {
-        let tensor_size_const = self.fresh_reg(MIRType::Fixed);
+        let tensor_size_const = self.fresh_reg(MIRType::Size);
         self.add_inst(MIRInstruction::Immediate(
             tensor_size_const,
-            MIRConstant::Fixed(MIR_TENSOR_SIZE),
+            MIRConstant::Size(MIR_TENSOR_SIZE as usize),
         ));
         self.add_inst(MIRInstruction::Call(
             Some(result),
@@ -978,5 +983,106 @@ impl<'a> MIRGenContext<'a> {
         ));
 
         tensor_element_ptr
+    }
+
+    fn mirgen_fill_empty_tensor(
+        &mut self,
+        result: MIRRegister,
+        contents: &'a bump::List<'a, HIRRegister>,
+    ) {
+        let one_register = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Fixed(1),
+        ));
+        self.add_inst(MIRInstruction::Store(one_register, result));
+        let result_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Gep(
+            result_shape_ptr_ptr,
+            result,
+            one_register,
+            MIRType::Pointer,
+        ));
+        let result_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        let one_fixed_size_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_fixed_size_register,
+            MIRConstant::Size(MIRType::Fixed.get_size()),
+        ));
+        self.add_inst(MIRInstruction::Call(
+            Some(result_shape_ptr),
+            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            bump_list!(self.bump, one_fixed_size_register),
+        ));
+        self.add_inst(MIRInstruction::Store(
+            result_shape_ptr,
+            result_shape_ptr_ptr,
+        ));
+        let num_elements_register = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Immediate(
+            num_elements_register,
+            MIRConstant::Fixed(contents.len() as u32),
+        ));
+        self.add_inst(MIRInstruction::Store(
+            num_elements_register,
+            result_shape_ptr,
+        ));
+        let one_real_size_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_real_size_register,
+            MIRConstant::Size(MIRType::Real.get_size()),
+        ));
+        let num_elements_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            num_elements_register,
+            MIRConstant::Size(contents.len()),
+        ));
+        let elements_malloc_size = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Binary(
+            elements_malloc_size,
+            MIRBinaryOp::MultiplySizes,
+            one_real_size_register,
+            num_elements_register,
+        ));
+        let result_elements_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Call(
+            Some(result_elements_ptr),
+            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            bump_list!(self.bump, elements_malloc_size),
+        ));
+        let result_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
+        self.add_inst(MIRInstruction::Gep(
+            result_elements_ptr_ptr,
+            result,
+            two_register,
+            MIRType::Pointer,
+        ));
+        self.add_inst(MIRInstruction::Store(
+            result_elements_ptr,
+            result_elements_ptr_ptr,
+        ));
+        for i in 0..contents.len() {
+            let element = convert_register(*contents.at(i)).unwrap();
+            let index_reg = self.fresh_reg(MIRType::Size);
+            self.add_inst(MIRInstruction::Immediate(index_reg, MIRConstant::Size(i)));
+            let result_element_ptr = self.fresh_reg(MIRType::Pointer);
+            self.add_inst(MIRInstruction::Gep(
+                result_element_ptr,
+                result_elements_ptr,
+                index_reg,
+                MIRType::Real,
+            ));
+            self.add_inst(MIRInstruction::Store(element, result_element_ptr));
+        }
     }
 }

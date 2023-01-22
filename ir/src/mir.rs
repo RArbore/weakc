@@ -59,7 +59,7 @@ pub type MIRExternalFunction = (
 
 pub const MIR_EXTERNAL_FUNCTION_MALLOC: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"malloc"),
-    (&[MIRType::Fixed], Some(MIRType::Pointer)),
+    (&[MIRType::Size], Some(MIRType::Pointer)),
 );
 
 pub const MIR_EXTERNAL_FUNCTION_MEMCPY: MIRExternalFunction = (
