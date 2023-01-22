@@ -274,6 +274,21 @@ impl<'a> MIRGenContext<'a> {
                         }
                     }
                 }
+                HIRInstruction::Index(dst_reg, src_reg, indices) => {
+                    let (dst_mir_reg, src_mir_reg) =
+                        convert_2_registers((*dst_reg, *src_reg)).unwrap();
+                    match (dst_reg.1, src_reg.1) {
+                        (HIRType::Number, HIRType::Tensor) => {
+                            let ptr = self.mirgen_index_tensor(src_mir_reg, indices);
+                            self.add_inst(MIRInstruction::Load(dst_mir_reg, ptr));
+                        }
+                        (HIRType::Tensor, HIRType::Number) => {
+                            let ptr = self.mirgen_index_tensor(dst_mir_reg, indices);
+                            self.add_inst(MIRInstruction::Store(src_mir_reg, ptr));
+                        }
+                        _ => panic!("PANIC: Types for index op."),
+                    };
+                }
                 _ => todo!(),
             }
         }
@@ -355,11 +370,11 @@ impl<'a> MIRGenContext<'a> {
         ));
 
         self.curr_block = second_body_block;
-        self.mirgen_shaped_as_expand(result, tensor, shape);
+        self.mirgen_shaped_as_impl_expand(result, tensor, shape);
         self.add_inst(MIRInstruction::BranchUncond(second_post_block));
 
         self.curr_block = first_post_block;
-        self.mirgen_shaped_as_normal(result, tensor, shape);
+        self.mirgen_shaped_as_impl_normal(result, tensor, shape);
         self.add_inst(MIRInstruction::BranchUncond(second_post_block));
 
         self.curr_block = second_post_block;
@@ -549,7 +564,7 @@ impl<'a> MIRGenContext<'a> {
         result_num_elements
     }
 
-    fn mirgen_shaped_as_normal(
+    fn mirgen_shaped_as_impl_normal(
         &mut self,
         result: MIRRegister,
         tensor: MIRRegister,
@@ -729,7 +744,7 @@ impl<'a> MIRGenContext<'a> {
         ));
     }
 
-    fn mirgen_shaped_as_expand(
+    fn mirgen_shaped_as_impl_expand(
         &mut self,
         result: MIRRegister,
         tensor: MIRRegister,
@@ -832,5 +847,13 @@ impl<'a> MIRGenContext<'a> {
         self.add_inst(MIRInstruction::BranchUncond(cond_block));
 
         self.curr_block = post_block;
+    }
+
+    fn mirgen_index_tensor(
+        &mut self,
+        tensor: MIRRegister,
+        indices: &'a bump::List<'a, HIRRegister>,
+    ) -> MIRRegister {
+        todo!()
     }
 }
