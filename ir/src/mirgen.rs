@@ -854,6 +854,26 @@ impl<'a> MIRGenContext<'a> {
         tensor: MIRRegister,
         indices: &'a bump::List<'a, HIRRegister>,
     ) -> MIRRegister {
+        let tensor_dimensionality = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(tensor_dimensionality, tensor));
+        let static_indices_len = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Immediate(
+            static_indices_len,
+            MIRConstant::Fixed(indices.len() as u32),
+        ));
+        let assert_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            assert_reg,
+            MIRBinaryOp::EqualsEqualsFixed,
+            static_indices_len,
+            tensor_dimensionality,
+        ));
+        self.add_inst(MIRInstruction::Call(
+            None,
+            MIR_EXTERNAL_FUNCTION_ASSERT.0,
+            bump_list!(self.bump, assert_reg),
+        ));
+
         todo!()
     }
 }
