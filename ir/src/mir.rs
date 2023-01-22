@@ -135,7 +135,6 @@ pub enum MIRInstruction<'a> {
     Gep(MIRRegister, MIRRegister, MIRRegister, MIRType),
     Load(MIRRegister, MIRRegister),
     Store(MIRRegister, MIRRegister),
-    Alloca(MIRRegister, usize),
     BranchUncond(MIRBasicBlockID),
     BranchCond(MIRRegister, MIRBasicBlockID, MIRBasicBlockID),
     Call(

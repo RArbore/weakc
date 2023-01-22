@@ -874,6 +874,109 @@ impl<'a> MIRGenContext<'a> {
             bump_list!(self.bump, assert_reg),
         ));
 
-        todo!()
+        let tensor_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Gep(
+            tensor_shape_ptr_ptr,
+            tensor,
+            one_register,
+            MIRType::Pointer,
+        ));
+        let tensor_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Load(tensor_shape_ptr, tensor_shape_ptr_ptr));
+        let first_index_hir_reg = *indices.at(0);
+        let first_index_reg = convert_register(first_index_hir_reg).unwrap();
+        let first_index_fixed_reg = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Unary(
+            first_index_fixed_reg,
+            MIRUnaryOp::Round,
+            first_index_reg,
+        ));
+        let flat_index = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Unary(
+            flat_index,
+            MIRUnaryOp::Widen,
+            first_index_fixed_reg,
+        ));
+        for i in 1..indices.len() {
+            let index_reg = self.fresh_reg(MIRType::Size);
+            self.add_inst(MIRInstruction::Immediate(index_reg, MIRConstant::Size(i)));
+            let tensor_shape_element_ptr = self.fresh_reg(MIRType::Pointer);
+            self.add_inst(MIRInstruction::Gep(
+                tensor_shape_element_ptr,
+                tensor_shape_ptr,
+                index_reg,
+                MIRType::Fixed,
+            ));
+            let tensor_shape_element = self.fresh_reg(MIRType::Fixed);
+            self.add_inst(MIRInstruction::Load(
+                tensor_shape_element,
+                tensor_shape_element_ptr,
+            ));
+            let wide_tensor_shape_element = self.fresh_reg(MIRType::Size);
+            self.add_inst(MIRInstruction::Unary(
+                wide_tensor_shape_element,
+                MIRUnaryOp::Widen,
+                tensor_shape_element,
+            ));
+            self.add_inst(MIRInstruction::Binary(
+                flat_index,
+                MIRBinaryOp::MultiplySizes,
+                flat_index,
+                wide_tensor_shape_element,
+            ));
+
+            let index_hir_reg = *indices.at(i);
+            let index_reg = convert_register(index_hir_reg).unwrap();
+            let index_fixed_reg = self.fresh_reg(MIRType::Fixed);
+            self.add_inst(MIRInstruction::Unary(
+                index_fixed_reg,
+                MIRUnaryOp::Round,
+                index_reg,
+            ));
+            let index_wide_reg = self.fresh_reg(MIRType::Size);
+            self.add_inst(MIRInstruction::Unary(
+                index_wide_reg,
+                MIRUnaryOp::Widen,
+                index_fixed_reg,
+            ));
+            self.add_inst(MIRInstruction::Binary(
+                flat_index,
+                MIRBinaryOp::AddSizes,
+                flat_index,
+                index_wide_reg,
+            ));
+        }
+
+        let tensor_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
+        self.add_inst(MIRInstruction::Gep(
+            tensor_elements_ptr_ptr,
+            tensor,
+            two_register,
+            MIRType::Pointer,
+        ));
+        let tensor_elements_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Load(
+            tensor_elements_ptr,
+            tensor_elements_ptr_ptr,
+        ));
+        let tensor_element_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            tensor_element_ptr,
+            tensor_elements_ptr,
+            flat_index,
+            MIRType::Real,
+        ));
+
+        tensor_element_ptr
     }
 }
