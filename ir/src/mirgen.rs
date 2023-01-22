@@ -686,6 +686,12 @@ impl<'a> MIRGenContext<'a> {
             result_elements_ptr,
             result_elements_ptr_ptr,
         ));
+
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
         let tensor_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
         self.add_inst(MIRInstruction::Gep(
             tensor_elements_ptr_ptr,
@@ -729,5 +735,102 @@ impl<'a> MIRGenContext<'a> {
         tensor: MIRRegister,
         shape: MIRRegister,
     ) {
+        let result_num_elements = self.mirgen_shaped_as_impl_get_shape(result, shape);
+        let tensor_elem_size = self.fresh_reg(MIRType::Size);
+        let result_elements_malloc_size = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            tensor_elem_size,
+            MIRConstant::Size(MIRType::Real.get_size()),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            result_elements_malloc_size,
+            MIRBinaryOp::MultiplySizes,
+            result_num_elements,
+            tensor_elem_size,
+        ));
+        let result_elements_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Call(
+            Some(result_elements_ptr),
+            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            bump_list!(self.bump, result_elements_malloc_size),
+        ));
+
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
+        let result_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            result_elements_ptr_ptr,
+            result,
+            two_register,
+            MIRType::Pointer,
+        ));
+        self.add_inst(MIRInstruction::Store(
+            result_elements_ptr,
+            result_elements_ptr_ptr,
+        ));
+
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
+        let tensor_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            tensor_elements_ptr_ptr,
+            tensor,
+            two_register,
+            MIRType::Pointer,
+        ));
+        let tensor_elements_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Load(
+            tensor_elements_ptr,
+            tensor_elements_ptr_ptr,
+        ));
+        let tensor_element = self.fresh_reg(MIRType::Real);
+        self.add_inst(MIRInstruction::Load(tensor_element, tensor_elements_ptr));
+
+        let copy_index = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(copy_index, MIRConstant::Size(0)));
+        let cond_block = self.fresh_block();
+        let body_block = self.fresh_block();
+        let post_block = self.fresh_block();
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = cond_block;
+        let cond_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            cond_reg,
+            MIRBinaryOp::LesserSizes,
+            copy_index,
+            result_num_elements,
+        ));
+        self.add_inst(MIRInstruction::BranchCond(cond_reg, body_block, post_block));
+
+        self.curr_block = body_block;
+        let result_element_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            result_element_ptr,
+            result_elements_ptr,
+            copy_index,
+            MIRType::Real,
+        ));
+        self.add_inst(MIRInstruction::Store(tensor_element, result_element_ptr));
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            copy_index,
+            MIRBinaryOp::AddSizes,
+            copy_index,
+            one_register,
+        ));
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = post_block;
     }
 }
