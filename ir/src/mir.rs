@@ -95,6 +95,11 @@ pub const MIR_EXTERNAL_FUNCTION_RT_PRINT_TENSOR: MIRExternalFunction = (
     (&[MIRType::Pointer], None),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_LINE: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_line"),
+    (&[], Some(MIRType::Pointer)),
+);
+
 pub const MIR_TENSOR_SIZE: u32 = 24;
 
 #[derive(Debug, PartialEq, Clone, Copy)]

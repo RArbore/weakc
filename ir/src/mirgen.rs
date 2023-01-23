@@ -372,7 +372,23 @@ impl<'a> MIRGenContext<'a> {
                         ));
                     }
                 },
-                _ => todo!(),
+                HIRInstruction::Line(line_reg) => {
+                    self.add_inst(MIRInstruction::Call(
+                        Some(convert_register(*line_reg).unwrap()),
+                        MIR_EXTERNAL_FUNCTION_RT_LINE.0,
+                        self.bump.create_list(),
+                    ));
+                }
+                HIRInstruction::Verify(verify_reg) => {
+                    self.add_inst(MIRInstruction::Call(
+                        None,
+                        MIR_EXTERNAL_FUNCTION_ASSERT.0,
+                        bump_list!(self.bump, convert_register(*verify_reg).unwrap()),
+                    ));
+                }
+                HIRInstruction::Return(return_reg) => {
+                    self.add_inst(MIRInstruction::Return(convert_register(*return_reg)));
+                }
             }
         }
     }
