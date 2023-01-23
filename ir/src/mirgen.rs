@@ -228,7 +228,11 @@ impl<'a> MIRGenContext<'a> {
                                 self.mirgen_shaped_as(result_mir_reg, left_mir_reg, right_mir_reg);
                             }
                             HIRBinaryOp::MatrixMultiply => {
-                                todo!()
+                                self.mirgen_matrix_multiply(
+                                    result_mir_reg,
+                                    left_mir_reg,
+                                    right_mir_reg,
+                                );
                             }
                             HIRBinaryOp::AddTensors => {
                                 todo!()
@@ -946,6 +950,35 @@ impl<'a> MIRGenContext<'a> {
         self.add_inst(MIRInstruction::BranchUncond(cond_block));
 
         self.curr_block = post_block;
+    }
+
+    fn mirgen_matrix_multiply(
+        &mut self,
+        result: MIRRegister,
+        tensor_a: MIRRegister,
+        tensor_b: MIRRegister,
+    ) {
+        for tensor in &[tensor_a, tensor_b] {
+            let tensor_dimensionality = self.fresh_reg(MIRType::Fixed);
+            self.add_inst(MIRInstruction::Load(tensor_dimensionality, *tensor));
+            let two_register = self.fresh_reg(MIRType::Fixed);
+            self.add_inst(MIRInstruction::Immediate(
+                two_register,
+                MIRConstant::Fixed(2),
+            ));
+            let assert_reg = self.fresh_reg(MIRType::Boolean);
+            self.add_inst(MIRInstruction::Binary(
+                assert_reg,
+                MIRBinaryOp::EqualsEqualsFixed,
+                tensor_dimensionality,
+                two_register,
+            ));
+            self.add_inst(MIRInstruction::Call(
+                None,
+                MIR_EXTERNAL_FUNCTION_ASSERT.0,
+                bump_list!(self.bump, assert_reg),
+            ));
+        }
     }
 
     fn mirgen_index_tensor(
