@@ -227,14 +227,30 @@ impl<'a> MIRGenContext<'a> {
                             HIRBinaryOp::ShapedAs => {
                                 self.mirgen_shaped_as(result_mir_reg, left_mir_reg, right_mir_reg);
                             }
-                            HIRBinaryOp::MatrixMultiply => {}
-                            HIRBinaryOp::AddTensors => {}
-                            HIRBinaryOp::SubtractTensors => {}
-                            HIRBinaryOp::MultiplyTensors => {}
-                            HIRBinaryOp::DivideTensors => {}
-                            HIRBinaryOp::PowerTensors => {}
-                            HIRBinaryOp::NotEqualsTensors => {}
-                            HIRBinaryOp::EqualsEqualsTensors => {}
+                            HIRBinaryOp::MatrixMultiply => {
+                                todo!()
+                            }
+                            HIRBinaryOp::AddTensors => {
+                                todo!()
+                            }
+                            HIRBinaryOp::SubtractTensors => {
+                                todo!()
+                            }
+                            HIRBinaryOp::MultiplyTensors => {
+                                todo!()
+                            }
+                            HIRBinaryOp::DivideTensors => {
+                                todo!()
+                            }
+                            HIRBinaryOp::PowerTensors => {
+                                todo!()
+                            }
+                            HIRBinaryOp::NotEqualsTensors => {
+                                todo!()
+                            }
+                            HIRBinaryOp::EqualsEqualsTensors => {
+                                todo!()
+                            }
                             _ => {
                                 let mir_op = match op {
                                     HIRBinaryOp::AddNumbers => MIRBinaryOp::AddReals,
@@ -294,6 +310,68 @@ impl<'a> MIRGenContext<'a> {
                     self.mirgen_allocate_empty_tensor(result_reg);
                     self.mirgen_fill_empty_tensor(result_reg, contents);
                 }
+                HIRInstruction::BranchUncond(bb_id) => {
+                    self.add_inst(MIRInstruction::BranchUncond(*bb_id));
+                }
+                HIRInstruction::BranchCond(cond, true_bb_id, false_bb_id) => {
+                    let mir_cond = convert_register(*cond).unwrap();
+                    self.add_inst(MIRInstruction::BranchCond(
+                        mir_cond,
+                        *true_bb_id,
+                        *false_bb_id,
+                    ));
+                }
+                HIRInstruction::Call(result_reg, function, arguments) => {
+                    let maybe_mir_result_reg = convert_register(*result_reg);
+                    let arguments_mir = self.bump.create_list();
+                    for i in 0..arguments.len() {
+                        if let Some(mir_reg) = convert_register(*arguments.at(i)) {
+                            arguments_mir.push(mir_reg);
+                        }
+                    }
+                    self.add_inst(MIRInstruction::Call(
+                        maybe_mir_result_reg,
+                        *function,
+                        arguments_mir,
+                    ));
+                }
+                HIRInstruction::Print(print_reg) => match print_reg.1 {
+                    HIRType::Nil => {
+                        self.add_inst(MIRInstruction::Call(
+                            None,
+                            MIR_EXTERNAL_FUNCTION_RT_PRINT_NIL.0,
+                            self.bump.create_list(),
+                        ));
+                    }
+                    HIRType::Boolean => {
+                        self.add_inst(MIRInstruction::Call(
+                            None,
+                            MIR_EXTERNAL_FUNCTION_RT_PRINT_BOOLEAN.0,
+                            bump_list!(self.bump, convert_register(*print_reg).unwrap()),
+                        ));
+                    }
+                    HIRType::String => {
+                        self.add_inst(MIRInstruction::Call(
+                            None,
+                            MIR_EXTERNAL_FUNCTION_RT_PRINT_STRING.0,
+                            bump_list!(self.bump, convert_register(*print_reg).unwrap()),
+                        ));
+                    }
+                    HIRType::Number => {
+                        self.add_inst(MIRInstruction::Call(
+                            None,
+                            MIR_EXTERNAL_FUNCTION_RT_PRINT_NUMBER.0,
+                            bump_list!(self.bump, convert_register(*print_reg).unwrap()),
+                        ));
+                    }
+                    HIRType::Tensor => {
+                        self.add_inst(MIRInstruction::Call(
+                            None,
+                            MIR_EXTERNAL_FUNCTION_RT_PRINT_TENSOR.0,
+                            bump_list!(self.bump, convert_register(*print_reg).unwrap()),
+                        ));
+                    }
+                },
                 _ => todo!(),
             }
         }

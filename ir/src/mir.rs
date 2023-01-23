@@ -72,6 +72,29 @@ pub const MIR_EXTERNAL_FUNCTION_ASSERT: MIRExternalFunction = (
     (&[MIRType::Boolean], None),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_PRINT_NIL: MIRExternalFunction =
+    ((MIR_EXTERNAL_FUNCTION_ID, b"rt_print_nil"), (&[], None));
+
+pub const MIR_EXTERNAL_FUNCTION_RT_PRINT_BOOLEAN: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_print_boolean"),
+    (&[MIRType::Boolean], None),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_PRINT_STRING: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_print_string"),
+    (&[MIRType::String], None),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_PRINT_NUMBER: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_print_number"),
+    (&[MIRType::Real], None),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_PRINT_TENSOR: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_print_tensor"),
+    (&[MIRType::Pointer], None),
+);
+
 pub const MIR_TENSOR_SIZE: u32 = 24;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
