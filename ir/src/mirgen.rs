@@ -958,7 +958,16 @@ impl<'a> MIRGenContext<'a> {
         tensor_a: MIRRegister,
         tensor_b: MIRRegister,
     ) {
-        for tensor in &[tensor_a, tensor_b] {
+        let (a_dim_r, a_dim_c, b_dim_r, b_dim_c) = (
+            self.fresh_reg(MIRType::Fixed),
+            self.fresh_reg(MIRType::Fixed),
+            self.fresh_reg(MIRType::Fixed),
+            self.fresh_reg(MIRType::Fixed),
+        );
+        for (tensor, dims) in &[
+            (tensor_a, (a_dim_r, a_dim_c)),
+            (tensor_b, (b_dim_r, b_dim_c)),
+        ] {
             let tensor_dimensionality = self.fresh_reg(MIRType::Fixed);
             self.add_inst(MIRInstruction::Load(tensor_dimensionality, *tensor));
             let two_register = self.fresh_reg(MIRType::Fixed);
@@ -978,7 +987,46 @@ impl<'a> MIRGenContext<'a> {
                 MIR_EXTERNAL_FUNCTION_ASSERT.0,
                 bump_list!(self.bump, assert_reg),
             ));
+            let tensor_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+            let one_register = self.fresh_reg(MIRType::Size);
+            self.add_inst(MIRInstruction::Immediate(
+                one_register,
+                MIRConstant::Size(1),
+            ));
+            self.add_inst(MIRInstruction::Gep(
+                tensor_shape_ptr_ptr,
+                *tensor,
+                one_register,
+                MIRType::Pointer,
+            ));
+            let tensor_shape_ptr = self.fresh_reg(MIRType::Pointer);
+            self.add_inst(MIRInstruction::Load(tensor_shape_ptr, tensor_shape_ptr_ptr));
+            self.add_inst(MIRInstruction::Load(dims.0, tensor_shape_ptr));
+            let one_register = self.fresh_reg(MIRType::Size);
+            self.add_inst(MIRInstruction::Immediate(
+                one_register,
+                MIRConstant::Size(1),
+            ));
+            self.add_inst(MIRInstruction::Gep(
+                tensor_shape_ptr,
+                tensor_shape_ptr,
+                one_register,
+                MIRType::Pointer,
+            ));
+            self.add_inst(MIRInstruction::Load(dims.1, tensor_shape_ptr));
         }
+        let assert_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            assert_reg,
+            MIRBinaryOp::EqualsEqualsFixed,
+            a_dim_c,
+            b_dim_r,
+        ));
+        self.add_inst(MIRInstruction::Call(
+            None,
+            MIR_EXTERNAL_FUNCTION_ASSERT.0,
+            bump_list!(self.bump, assert_reg),
+        ));
     }
 
     fn mirgen_index_tensor(
