@@ -228,11 +228,11 @@ impl<'a> MIRGenContext<'a> {
                                 self.mirgen_shaped_as(result_mir_reg, left_mir_reg, right_mir_reg);
                             }
                             HIRBinaryOp::MatrixMultiply => {
-                                self.mirgen_matrix_multiply(
-                                    result_mir_reg,
-                                    left_mir_reg,
-                                    right_mir_reg,
-                                );
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_MATMUL.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             HIRBinaryOp::AddTensors => {
                                 todo!()
@@ -950,83 +950,6 @@ impl<'a> MIRGenContext<'a> {
         self.add_inst(MIRInstruction::BranchUncond(cond_block));
 
         self.curr_block = post_block;
-    }
-
-    fn mirgen_matrix_multiply(
-        &mut self,
-        result: MIRRegister,
-        tensor_a: MIRRegister,
-        tensor_b: MIRRegister,
-    ) {
-        let (a_dim_r, a_dim_c, b_dim_r, b_dim_c) = (
-            self.fresh_reg(MIRType::Fixed),
-            self.fresh_reg(MIRType::Fixed),
-            self.fresh_reg(MIRType::Fixed),
-            self.fresh_reg(MIRType::Fixed),
-        );
-        for (tensor, dims) in &[
-            (tensor_a, (a_dim_r, a_dim_c)),
-            (tensor_b, (b_dim_r, b_dim_c)),
-        ] {
-            let tensor_dimensionality = self.fresh_reg(MIRType::Fixed);
-            self.add_inst(MIRInstruction::Load(tensor_dimensionality, *tensor));
-            let two_register = self.fresh_reg(MIRType::Fixed);
-            self.add_inst(MIRInstruction::Immediate(
-                two_register,
-                MIRConstant::Fixed(2),
-            ));
-            let assert_reg = self.fresh_reg(MIRType::Boolean);
-            self.add_inst(MIRInstruction::Binary(
-                assert_reg,
-                MIRBinaryOp::EqualsEqualsFixed,
-                tensor_dimensionality,
-                two_register,
-            ));
-            self.add_inst(MIRInstruction::Call(
-                None,
-                MIR_EXTERNAL_FUNCTION_ASSERT.0,
-                bump_list!(self.bump, assert_reg),
-            ));
-            let tensor_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
-            let one_register = self.fresh_reg(MIRType::Size);
-            self.add_inst(MIRInstruction::Immediate(
-                one_register,
-                MIRConstant::Size(1),
-            ));
-            self.add_inst(MIRInstruction::Gep(
-                tensor_shape_ptr_ptr,
-                *tensor,
-                one_register,
-                MIRType::Pointer,
-            ));
-            let tensor_shape_ptr = self.fresh_reg(MIRType::Pointer);
-            self.add_inst(MIRInstruction::Load(tensor_shape_ptr, tensor_shape_ptr_ptr));
-            self.add_inst(MIRInstruction::Load(dims.0, tensor_shape_ptr));
-            let one_register = self.fresh_reg(MIRType::Size);
-            self.add_inst(MIRInstruction::Immediate(
-                one_register,
-                MIRConstant::Size(1),
-            ));
-            self.add_inst(MIRInstruction::Gep(
-                tensor_shape_ptr,
-                tensor_shape_ptr,
-                one_register,
-                MIRType::Pointer,
-            ));
-            self.add_inst(MIRInstruction::Load(dims.1, tensor_shape_ptr));
-        }
-        let assert_reg = self.fresh_reg(MIRType::Boolean);
-        self.add_inst(MIRInstruction::Binary(
-            assert_reg,
-            MIRBinaryOp::EqualsEqualsFixed,
-            a_dim_c,
-            b_dim_r,
-        ));
-        self.add_inst(MIRInstruction::Call(
-            None,
-            MIR_EXTERNAL_FUNCTION_ASSERT.0,
-            bump_list!(self.bump, assert_reg),
-        ));
     }
 
     fn mirgen_index_tensor(

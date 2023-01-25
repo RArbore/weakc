@@ -100,6 +100,14 @@ pub const MIR_EXTERNAL_FUNCTION_RT_LINE: MIRExternalFunction = (
     (&[], Some(MIRType::Pointer)),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_MATMUL: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_matmul"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Pointer),
+    ),
+);
+
 pub const MIR_TENSOR_SIZE: u32 = 24;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
