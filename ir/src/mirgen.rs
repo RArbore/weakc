@@ -235,25 +235,53 @@ impl<'a> MIRGenContext<'a> {
                                 ));
                             }
                             HIRBinaryOp::AddTensors => {
-                                todo!()
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_ADD_TENSORS.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             HIRBinaryOp::SubtractTensors => {
-                                todo!()
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_SUBTRACT_TENSORS.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             HIRBinaryOp::MultiplyTensors => {
-                                todo!()
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_MULTIPLY_TENSORS.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             HIRBinaryOp::DivideTensors => {
-                                todo!()
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_DIVIDE_TENSORS.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             HIRBinaryOp::PowerTensors => {
-                                todo!()
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_POWER_TENSORS.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             HIRBinaryOp::NotEqualsTensors => {
-                                todo!()
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_NOT_EQUALS_TENSORS.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             HIRBinaryOp::EqualsEqualsTensors => {
-                                todo!()
+                                self.add_inst(MIRInstruction::Call(
+                                    Some(result_mir_reg),
+                                    MIR_EXTERNAL_FUNCTION_RT_EQUALS_EQUALS_TENSORS.0,
+                                    bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                ));
                             }
                             _ => {
                                 let mir_op = match op {

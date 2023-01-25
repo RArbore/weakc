@@ -108,6 +108,62 @@ pub const MIR_EXTERNAL_FUNCTION_RT_MATMUL: MIRExternalFunction = (
     ),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_ADD_TENSORS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_add_tensors"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Pointer),
+    ),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_SUBTRACT_TENSORS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_subtract_tensors"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Pointer),
+    ),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_MULTIPLY_TENSORS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_multiply_tensors"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Pointer),
+    ),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_DIVIDE_TENSORS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_divide_tensors"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Pointer),
+    ),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_POWER_TENSORS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_power_tensors"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Pointer),
+    ),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_NOT_EQUALS_TENSORS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_not_equals_tensors"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Boolean),
+    ),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_EQUALS_EQUALS_TENSORS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_equals_equals_tensors"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Boolean),
+    ),
+);
+
 pub const MIR_TENSOR_SIZE: u32 = 24;
 
 #[derive(Debug, PartialEq, Clone, Copy)]
