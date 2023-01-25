@@ -159,7 +159,7 @@ fn main() {
                                 + ".dot",
                         )
                         .expect("PANIC: Unable to open output dot file.");
-                        ir::write_dot_graph(&hir_program, file, i as ir::HIRFunctionID);
+                        ir::write_hir_dot_graph(&hir_program, file, i as ir::HIRFunctionID);
                     }
                 }
             }

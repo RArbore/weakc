@@ -255,7 +255,7 @@ impl<'a> fmt::Display for HIRInstruction<'a> {
                     f,
                     "ca %{}, {}, (",
                     reg.0,
-                    std::str::from_utf8(func.1)
+                    str::from_utf8(func.1)
                         .expect("PANIC: Function name not convertable to Rust str.")
                 )?;
                 for i in 0..args.len() {
@@ -304,8 +304,7 @@ impl<'a> fmt::Display for HIRFunction<'a> {
         write!(
             f,
             "fn {}(",
-            std::str::from_utf8(self.name)
-                .expect("PANIC: Function name not convertable to Rust str.")
+            str::from_utf8(self.name).expect("PANIC: Function name not convertable to Rust str.")
         )?;
         for i in 0..self.params.len() {
             let param = self.params.at(i);
@@ -337,13 +336,13 @@ impl<'a> fmt::Display for HIRModule<'a> {
     }
 }
 
-struct DotContext<W: Write> {
+struct HIRDotContext<W: Write> {
     writer: W,
 }
 
-impl<W: Write> DotContext<W> {
+impl<W: Write> HIRDotContext<W> {
     fn new(w: W) -> Self {
-        DotContext { writer: w }
+        HIRDotContext { writer: w }
     }
 
     fn write_dot_function<'a>(&mut self, function: &'a HIRFunction<'a>) {
@@ -428,8 +427,8 @@ fn write_basic_block_id(id: HIRBasicBlockID, buf: &mut [u8]) {
     buf[13] = conv((id & 15) as u8);
 }
 
-pub fn write_dot_graph<'a, W: Write>(hir: &'a HIRModule<'a>, w: W, func: HIRFunctionID) {
-    let mut context = DotContext::new(w);
+pub fn write_hir_dot_graph<'a, W: Write>(hir: &'a HIRModule<'a>, w: W, func: HIRFunctionID) {
+    let mut context = HIRDotContext::new(w);
     context.write_dot_function(hir.funcs.at(func as usize));
 }
 
