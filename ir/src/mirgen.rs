@@ -26,7 +26,7 @@ struct MIRGenContext<'a> {
     bump: &'a bump::BumpAllocator,
 }
 
-pub fn mirgen<'a>(program: HIRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRModule<'a> {
+pub fn mirgen<'a>(program: &'a HIRModule<'a>, bump: &'a bump::BumpAllocator) -> MIRModule<'a> {
     let mut context = MIRGenContext::new(bump);
     context.mirgen_program(program);
     context.module
@@ -133,7 +133,7 @@ impl<'a> MIRGenContext<'a> {
         id
     }
 
-    fn mirgen_program(&mut self, program: HIRModule<'a>) {
+    fn mirgen_program(&mut self, program: &'a HIRModule<'a>) {
         for i in 0..program.funcs.len() {
             self.mirgen_func(program.funcs.at(i));
         }
