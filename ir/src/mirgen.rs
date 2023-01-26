@@ -194,7 +194,11 @@ impl<'a> MIRGenContext<'a> {
                     if let Some((left_mir_reg, right_mir_reg)) =
                         convert_2_registers((*left_reg, *right_reg))
                     {
-                        self.add_inst(MIRInstruction::Copy(left_mir_reg, right_mir_reg));
+                        if let HIRType::Tensor = left_reg.1 {
+                            self.mirgen_copy_tensor(left_mir_reg, right_mir_reg);
+                        } else {
+                            self.add_inst(MIRInstruction::Copy(left_mir_reg, right_mir_reg));
+                        }
                     }
                 }
                 HIRInstruction::Unary(left_reg, op, right_reg) => {
@@ -433,8 +437,164 @@ impl<'a> MIRGenContext<'a> {
         ));
         self.add_inst(MIRInstruction::Call(
             Some(result),
-            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
             bump_list!(self.bump, tensor_size_const),
+        ));
+    }
+
+    fn mirgen_copy_tensor(&mut self, dst: MIRRegister, src: MIRRegister) {
+        self.mirgen_allocate_empty_tensor(dst);
+        let tensor_num_dims = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(tensor_num_dims, src));
+        self.add_inst(MIRInstruction::Store(tensor_num_dims, dst));
+
+        let tensor_num_dims_size = self.fresh_reg(MIRType::Size);
+        let shape_elem_size = self.fresh_reg(MIRType::Size);
+        let new_shape_malloc_size = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Unary(
+            tensor_num_dims_size,
+            MIRUnaryOp::Widen,
+            tensor_num_dims,
+        ));
+        self.add_inst(MIRInstruction::Immediate(
+            shape_elem_size,
+            MIRConstant::Size(MIRType::Fixed.get_size()),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            new_shape_malloc_size,
+            MIRBinaryOp::MultiplySizes,
+            tensor_num_dims_size,
+            shape_elem_size,
+        ));
+        let result_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Call(
+            Some(result_shape_ptr),
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
+            bump_list!(self.bump, new_shape_malloc_size),
+        ));
+
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        let result_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            result_shape_ptr_ptr,
+            dst,
+            one_register,
+            MIRType::Pointer,
+        ));
+        self.add_inst(MIRInstruction::Store(
+            result_shape_ptr,
+            result_shape_ptr_ptr,
+        ));
+
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        let src_shape_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            src_shape_ptr_ptr,
+            src,
+            one_register,
+            MIRType::Pointer,
+        ));
+        let src_shape_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Load(src_shape_ptr, src_shape_ptr_ptr));
+        self.add_inst(MIRInstruction::Call(
+            None,
+            MIR_EXTERNAL_FUNCTION_MEMCPY.0,
+            bump_list!(
+                self.bump,
+                result_shape_ptr,
+                src_shape_ptr,
+                new_shape_malloc_size
+            ),
+        ));
+
+        let shape_index = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(shape_index, MIRConstant::Size(0)));
+        let flat_size = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            flat_size,
+            MIRConstant::Size(MIRType::Real.get_size()),
+        ));
+        let cond_block = self.fresh_block();
+        let body_block = self.fresh_block();
+        let post_block = self.fresh_block();
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = cond_block;
+        let cond_reg = self.fresh_reg(MIRType::Boolean);
+        self.add_inst(MIRInstruction::Binary(
+            cond_reg,
+            MIRBinaryOp::LesserSizes,
+            shape_index,
+            tensor_num_dims_size,
+        ));
+        self.add_inst(MIRInstruction::BranchCond(cond_reg, body_block, post_block));
+
+        self.curr_block = body_block;
+        let src_shape_elem_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            src_shape_elem_ptr,
+            src_shape_ptr,
+            shape_index,
+            MIRType::Fixed,
+        ));
+        let src_shape_elem = self.fresh_reg(MIRType::Fixed);
+        self.add_inst(MIRInstruction::Load(src_shape_elem, src_shape_elem_ptr));
+        let wide_src_shape_elem = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Unary(
+            wide_src_shape_elem,
+            MIRUnaryOp::Widen,
+            src_shape_elem,
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            flat_size,
+            MIRBinaryOp::MultiplySizes,
+            flat_size,
+            wide_src_shape_elem,
+        ));
+        let one_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            one_register,
+            MIRConstant::Size(1),
+        ));
+        self.add_inst(MIRInstruction::Binary(
+            shape_index,
+            MIRBinaryOp::AddSizes,
+            shape_index,
+            one_register,
+        ));
+        self.add_inst(MIRInstruction::BranchUncond(cond_block));
+
+        self.curr_block = post_block;
+        let result_elems_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Call(
+            Some(result_elems_ptr),
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
+            bump_list!(self.bump, flat_size),
+        ));
+
+        let two_register = self.fresh_reg(MIRType::Size);
+        self.add_inst(MIRInstruction::Immediate(
+            two_register,
+            MIRConstant::Size(2),
+        ));
+        let result_elems_ptr_ptr = self.fresh_reg(MIRType::Pointer);
+        self.add_inst(MIRInstruction::Gep(
+            result_elems_ptr_ptr,
+            dst,
+            two_register,
+            MIRType::Pointer,
+        ));
+        self.add_inst(MIRInstruction::Store(
+            result_elems_ptr,
+            result_elems_ptr_ptr,
         ));
     }
 
@@ -576,7 +736,7 @@ impl<'a> MIRGenContext<'a> {
         let result_shape_ptr = self.fresh_reg(MIRType::Pointer);
         self.add_inst(MIRInstruction::Call(
             Some(result_shape_ptr),
-            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
             bump_list!(self.bump, new_shape_malloc_size),
         ));
 
@@ -812,7 +972,7 @@ impl<'a> MIRGenContext<'a> {
         let result_elements_ptr = self.fresh_reg(MIRType::Pointer);
         self.add_inst(MIRInstruction::Call(
             Some(result_elements_ptr),
-            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
             bump_list!(self.bump, result_elements_malloc_size),
         ));
 
@@ -897,7 +1057,7 @@ impl<'a> MIRGenContext<'a> {
         let result_elements_ptr = self.fresh_reg(MIRType::Pointer);
         self.add_inst(MIRInstruction::Call(
             Some(result_elements_ptr),
-            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
             bump_list!(self.bump, result_elements_malloc_size),
         ));
 
@@ -1142,7 +1302,7 @@ impl<'a> MIRGenContext<'a> {
         ));
         self.add_inst(MIRInstruction::Call(
             Some(result_shape_ptr),
-            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
             bump_list!(self.bump, one_fixed_size_register),
         ));
         self.add_inst(MIRInstruction::Store(
@@ -1178,7 +1338,7 @@ impl<'a> MIRGenContext<'a> {
         let result_elements_ptr = self.fresh_reg(MIRType::Pointer);
         self.add_inst(MIRInstruction::Call(
             Some(result_elements_ptr),
-            MIR_EXTERNAL_FUNCTION_MALLOC.0,
+            MIR_EXTERNAL_FUNCTION_RT_MALLOC.0,
             bump_list!(self.bump, elements_malloc_size),
         ));
         let result_elements_ptr_ptr = self.fresh_reg(MIRType::Pointer);

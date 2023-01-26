@@ -57,11 +57,6 @@ pub type MIRExternalFunction = (
     (&'static [MIRType], Option<MIRType>),
 );
 
-pub const MIR_EXTERNAL_FUNCTION_MALLOC: MIRExternalFunction = (
-    (MIR_EXTERNAL_FUNCTION_ID, b"malloc"),
-    (&[MIRType::Size], Some(MIRType::Pointer)),
-);
-
 pub const MIR_EXTERNAL_FUNCTION_MEMCPY: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"memcpy"),
     (&[MIRType::Pointer, MIRType::Pointer, MIRType::Size], None),
@@ -70,6 +65,11 @@ pub const MIR_EXTERNAL_FUNCTION_MEMCPY: MIRExternalFunction = (
 pub const MIR_EXTERNAL_FUNCTION_ASSERT: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"assert"),
     (&[MIRType::Boolean], None),
+);
+
+pub const MIR_EXTERNAL_FUNCTION_RT_MALLOC: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_malloc"),
+    (&[MIRType::Size], Some(MIRType::Pointer)),
 );
 
 pub const MIR_EXTERNAL_FUNCTION_RT_PRINT_NIL: MIRExternalFunction =
