@@ -30,19 +30,21 @@ Commands:
 Options:
     -h, --help            Display this message
     -o, --output <OUTPUT> Set the output file when building
-    -dot-cfg-hir              Output a dot CFG instead of textual HIR
+    -dot-cfg-hir              Output a HIR dot CFG
+    -dot-cfg-mir              Output a MIR dot CFG
 "#;
     println!("{}", text);
 }
 
 enum Command {
-    Build(String, String, bool),
+    Build(String, String, bool, bool),
     Run(String),
 }
 
 enum Option {
     Output(String),
     DotCFGHIR,
+    DotCFGMIR,
 }
 
 fn parse_options(args: &[String]) -> Result<(Vec<Option>, &[String]), String> {
@@ -60,6 +62,10 @@ fn parse_options(args: &[String]) -> Result<(Vec<Option>, &[String]), String> {
             }
             "-dot-cfg-hir" => {
                 options.push(Option::DotCFGHIR);
+                cursor += 1;
+            }
+            "-dot-cfg-mir" => {
+                options.push(Option::DotCFGMIR);
                 cursor += 1;
             }
             _ => {
@@ -82,14 +88,18 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                 Err("ERROR: Provided too many arguments.")?;
             }
             let mut output = String::new();
-            let mut dot = false;
+            let mut dot_hir = false;
+            let mut dot_mir = false;
             for option in options {
                 match option {
                     Option::Output(out) => {
                         output = out;
                     }
                     Option::DotCFGHIR => {
-                        dot = true;
+                        dot_hir = true;
+                    }
+                    Option::DotCFGMIR => {
+                        dot_mir = true;
                     }
                 }
             }
@@ -101,7 +111,7 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                     input.clone() + suffix
                 };
             }
-            let command = Command::Build(input, output, dot);
+            let command = Command::Build(input, output, dot_hir, dot_mir);
             Ok((command, &args[1..]))
         }
         "run" => {
@@ -112,10 +122,7 @@ fn parse_command(args: &[String]) -> Result<(Command, &[String]), String> {
                 .clone();
             for option in options {
                 match option {
-                    Option::Output(_) => {
-                        Err("ERROR: Unsupported argument for command \"run\".")?;
-                    }
-                    Option::DotCFGHIR => {
+                    _ => {
                         Err("ERROR: Unsupported argument for command \"run\".")?;
                     }
                 }
@@ -133,7 +140,7 @@ fn main() {
     let command = parse_command(&args[1..]);
     match command {
         Ok((command, _)) => match command {
-            Command::Build(input, output, isdot) => {
+            Command::Build(input, output, dot_hir, dot_mir) => {
                 let mut file = File::open(input).expect("PANIC: Unable to open input file.");
                 let mut program = vec![];
                 file.read_to_end(&mut program)
@@ -145,23 +152,36 @@ fn main() {
                     .expect("PANIC: Something went wrong during parsing.");
                 let typed_program = semant::typecheck_program(ast, &bump)
                     .expect("PANIC: Something went wrong during typechecking.");
-                let hir_program = ir::hirgen(typed_program, &bump);
-                let mut file =
-                    File::create(output.clone()).expect("PANIC: Unable to open output file.");
-                file.write_all(hir_program.to_string().as_bytes())
-                    .expect("PANIC: Unable to write output file.");
-                if isdot {
+                let hir_program = ir::hirgen(&typed_program, &bump);
+                if dot_hir {
                     for i in 0..hir_program.funcs.len() {
                         let file = File::create(
                             output.clone()
                                 + "."
                                 + core::str::from_utf8(hir_program.funcs.at(i).name).unwrap()
-                                + ".dot",
+                                + ".hir.dot",
                         )
                         .expect("PANIC: Unable to open output dot file.");
-                        ir::write_dot_graph(&hir_program, file, i as ir::HIRFunctionID);
+                        ir::write_hir_dot_graph(&hir_program, file, i as ir::HIRFunctionID);
                     }
                 }
+                let mir_program = ir::mirgen(&hir_program, &bump);
+                if dot_mir {
+                    for i in 0..mir_program.funcs.len() {
+                        let file = File::create(
+                            output.clone()
+                                + "."
+                                + core::str::from_utf8(mir_program.funcs.at(i).name).unwrap()
+                                + ".mir.dot",
+                        )
+                        .expect("PANIC: Unable to open output dot file.");
+                        ir::write_mir_dot_graph(&mir_program, file, i as ir::HIRFunctionID);
+                    }
+                }
+                let mut file =
+                    File::create(output.clone()).expect("PANIC: Unable to open output file.");
+                file.write_all(mir_program.to_string().as_bytes())
+                    .expect("PANIC: Unable to write output file.");
             }
             Command::Run(input) => {
                 let mut file = File::open(input).expect("PANIC: Unable to open input file.");

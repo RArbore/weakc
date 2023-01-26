@@ -27,7 +27,7 @@ use semant::TypedASTExpr;
 use semant::TypedASTStmt;
 use semant::TypedProgram;
 
-pub fn hirgen<'a>(program: TypedProgram<'a>, bump: &'a bump::BumpAllocator) -> HIRModule<'a> {
+pub fn hirgen<'a>(program: &'a TypedProgram<'a>, bump: &'a bump::BumpAllocator) -> HIRModule<'a> {
     let mut context = HIRGenContext::new(bump);
     context.hirgen_program(program);
     context.module
@@ -225,7 +225,7 @@ impl<'a> HIRGenContext<'a> {
         name
     }
 
-    fn hirgen_program(&mut self, program: TypedProgram<'a>) {
+    fn hirgen_program(&mut self, program: &'a TypedProgram<'a>) {
         self.ast_types = program.1;
         for i in 0..program.0.len() {
             self.hirgen_stmt(program.0.at(i));
@@ -685,7 +685,7 @@ mod tests {
             let tokens = parse::lex(input, &bump).unwrap();
             let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
             let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-            let hir_program = hirgen(typed_program, &bump);
+            let hir_program = hirgen(unsafe { &*((&typed_program) as *const _) }, &bump);
             assert_eq!(
                 hir_program,
                 HIRModule {
@@ -710,7 +710,7 @@ mod tests {
         let tokens = parse::lex(b"i (T) { p N; } w (T) { p N; }", &bump).unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let hir_program = hirgen(typed_program, &bump);
+        let hir_program = hirgen(&typed_program, &bump);
         assert_eq!(
             hir_program,
             HIRModule {
@@ -782,7 +782,7 @@ mod tests {
         let tokens = parse::lex(b"f xyz() { p N; r 5; } p xyz();", &bump).unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let hir_program = hirgen(typed_program, &bump);
+        let hir_program = hirgen(&typed_program, &bump);
         assert_eq!(
             hir_program,
             HIRModule {
@@ -846,7 +846,7 @@ mod tests {
         .unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let hir_program = hirgen(typed_program, &bump);
+        let hir_program = hirgen(&typed_program, &bump);
         assert_eq!(
             hir_program,
             HIRModule {
@@ -987,7 +987,7 @@ mod tests {
         .unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
-        let hir_program = hirgen(typed_program, &bump);
+        let hir_program = hirgen(&typed_program, &bump);
         let correct_program = "fn @main() -> Nil {\n0:\n    im %0, 199\n    im %1, 200\n    im %2, 208\n    im %3, 210\n    im %4, 200\n    im %5, 207\n    im %6, 240\n    im %7, 269\n    im %8, 260\n    im %9, 263\n    ar %10, [%0, %1, %2, %3, %4, %5, %6, %7, %8, %9]\n    cp %11, %10\n    ca %12, @f_part_one4, (%11)\n    pr %12\n    ca %13, @f_part_two4, (%11)\n    pr %13\n    im %14, Nil\n    re %14\n}\n\nfn @f_part_one4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    ca %4, @f_len4, (%0)\n    cp %5, %4\n    im %6, 1\n    bi %7, GreaterEquals, %5, %6\n    ve %7\n    im %8, 1\n    cp %9, %8\n    im %10, 0\n    cp %11, %10\n    ju 1\n1:\n    bi %12, Lesser, %9, %5\n    br %12, 2, 3\n2:\n    in %13 <= %0, [%9]\n    im %14, 1\n    bi %15, SubtractNumbers, %9, %14\n    in %16 <= %0, [%15]\n    bi %17, Greater, %13, %16\n    br %17, 4, 5\n3:\n    re %11\n4:\n    im %18, 1\n    bi %19, AddNumbers, %11, %18\n    cp %11, %19\n    ju 5\n5:\n    im %20, 1\n    bi %21, AddNumbers, %9, %20\n    cp %9, %21\n    ju 1\n}\n\nfn @f_dim4(%0: Tensor) -> Number {\n0:\n    un %1, Shape, %0\n    un %2, Shape, %1\n    im %3, 0\n    in %4 <= %2, [%3]\n    re %4\n}\n\nfn @f_len4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    un %4, Shape, %0\n    im %5, 0\n    in %6 <= %4, [%5]\n    re %6\n}\n\nfn @f_part_two4(%0: Tensor) -> Number {\n0:\n    ca %1, @f_dim4, (%0)\n    im %2, 1\n    bi %3, EqualsEqualsNumbers, %1, %2\n    ve %3\n    ca %4, @f_len4, (%0)\n    cp %5, %4\n    im %6, 1\n    bi %7, GreaterEquals, %5, %6\n    ve %7\n    im %8, 0\n    cp %9, %8\n    im %10, 0\n    ar %11, [%10]\n    ar %12, [%5]\n    bi %13, ShapedAs, %11, %12\n    cp %14, %13\n    im %15, 0\n    cp %16, %15\n    ju 1\n1:\n    im %17, 2\n    bi %18, SubtractNumbers, %5, %17\n    bi %19, Lesser, %9, %18\n    br %19, 2, 3\n2:\n    in %20 <= %0, [%9]\n    im %21, 1\n    bi %22, AddNumbers, %9, %21\n    in %23 <= %0, [%22]\n    bi %24, AddNumbers, %20, %23\n    im %25, 2\n    bi %26, AddNumbers, %9, %25\n    in %27 <= %0, [%26]\n    bi %28, AddNumbers, %24, %27\n    in %14 >= %28, [%16]\n    im %29, 1\n    bi %30, AddNumbers, %16, %29\n    cp %16, %30\n    im %31, 1\n    bi %32, AddNumbers, %9, %31\n    cp %9, %32\n    ju 1\n3:\n    ca %33, @f_part_one4, (%14)\n    re %33\n}";
         assert_eq!(hir_program.to_string(), correct_program);
     }
