@@ -312,8 +312,8 @@ impl<'a> MIRGenContext<'a> {
                                     }
                                     HIRBinaryOp::GreaterEquals => MIRBinaryOp::GreaterEqualsReals,
                                     HIRBinaryOp::LesserEquals => MIRBinaryOp::LesserEqualsReals,
-                                    HIRBinaryOp::And => MIRBinaryOp::And,
-                                    HIRBinaryOp::Or => MIRBinaryOp::Or,
+                                    HIRBinaryOp::And => MIRBinaryOp::AndBooleans,
+                                    HIRBinaryOp::Or => MIRBinaryOp::OrBooleans,
                                     _ => panic!("PANIC: Unimplemented simple HIR->MIR binary op."),
                                 };
                                 self.add_inst(MIRInstruction::Binary(

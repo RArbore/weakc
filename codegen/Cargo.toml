@@ -1,6 +1,6 @@
 [package]
-name = "weakc"
-description = "Driver program for weakc"
+name = "codegen"
+description = "Code generation for weakc"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,4 +9,3 @@ bump = { path = "../bump" }
 parse = { path = "../parse" }
 semant = { path = "../semant" }
 ir = { path = "../ir" }
-codegen = { path = "../codegen" }

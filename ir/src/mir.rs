@@ -218,8 +218,8 @@ pub enum MIRBinaryOp {
     LesserEqualsFixed,
     GreaterEqualsSizes,
     LesserEqualsSizes,
-    And,
-    Or,
+    AndBooleans,
+    OrBooleans,
 }
 
 #[derive(Debug, PartialEq, Clone)]
