@@ -20,7 +20,7 @@ use core::fmt;
 use core::str;
 use std::io::Write;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum MIRConstant {
     Boolean(bool),
     Real(f64),

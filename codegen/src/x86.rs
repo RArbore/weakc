@@ -11,3 +11,31 @@
  * You should have received a copy of the GNU General Public License
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
+
+extern crate bump;
+
+pub type X86VirtualRegisterID = u32;
+
+#[derive(Debug, PartialEq)]
+pub enum X86PhysicalRegisterID {}
+
+#[derive(Debug, PartialEq)]
+pub enum X86Register {
+    Virtual(X86VirtualRegisterID, u32),
+    Physical(X86PhysicalRegisterID),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum X86Instruction {}
+
+#[derive(Debug, PartialEq)]
+pub struct X86Block<'a> {
+    pub label: &'a [u8],
+    pub insts: &'a mut bump::List<'a, X86Instruction>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct X86Module<'a> {
+    pub funcs: &'a mut bump::List<'a, X86Block<'a>>,
+    pub strings: &'a mut bump::List<'a, &'a [u8]>,
+}
