@@ -14,17 +14,6 @@
 
 extern crate bump;
 
-pub type X86VirtualRegisterID = u32;
-
-#[derive(Debug, PartialEq)]
-pub enum X86PhysicalRegisterID {}
-
-#[derive(Debug, PartialEq)]
-pub enum X86Register {
-    Virtual(X86VirtualRegisterID, u32),
-    Physical(X86PhysicalRegisterID),
-}
-
 #[derive(Debug, PartialEq)]
 pub enum X86Instruction {}
 
