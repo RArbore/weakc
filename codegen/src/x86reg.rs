@@ -85,6 +85,21 @@ pub enum X86PhysicalRegisterID {
     R15B,
 }
 
+pub enum X86PhysicalRegisterUsageBit {
+    GeneralPurposeCallerSaved = 1,
+    GeneralPurposeCalleeSaved = 2,
+    FunctionParameter1 = 4,
+    FunctionParameter2 = 8,
+    FunctionParameter3 = 16,
+    FunctionParameter4 = 32,
+    FunctionParameter5 = 64,
+    FunctionParameter6 = 128,
+    FunctionReturnValue = 256,
+    StackPointer = 512,
+}
+
+type X86PhysicalRegisterUsage = u32;
+
 impl X86PhysicalRegisterID {
     fn get_pack_and_pos(&self) -> (u32, u32) {
         match self {
@@ -156,6 +171,47 @@ impl X86PhysicalRegisterID {
             X86PhysicalRegisterID::R14B => (14, 3),
             X86PhysicalRegisterID::R15B => (15, 3),
         }
+    }
+
+    pub fn get_usage(&self) -> X86PhysicalRegisterUsage {
+        let (pack, _) = self.get_pack_and_pos();
+        let bits = match pack {
+            0 => {
+                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FunctionReturnValue as u32
+            }
+            1 => X86PhysicalRegisterUsageBit::GeneralPurposeCalleeSaved as u32,
+            2 => {
+                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FunctionParameter4 as u32
+            }
+            3 => {
+                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FunctionParameter3 as u32
+            }
+            4 => {
+                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FunctionParameter2 as u32
+            }
+            5 => {
+                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FunctionParameter1 as u32
+            }
+            6 => X86PhysicalRegisterUsageBit::StackPointer as u32,
+            7 => X86PhysicalRegisterUsageBit::GeneralPurposeCalleeSaved as u32,
+            8 => {
+                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FunctionParameter5 as u32
+            }
+            9 => {
+                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FunctionParameter6 as u32
+            }
+            10 | 11 => X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32,
+            12 | 13 | 14 | 15 => X86PhysicalRegisterUsageBit::GeneralPurposeCalleeSaved as u32,
+            _ => panic!("PANIC: Invalid register pack."),
+        };
+        bits
     }
 }
 
