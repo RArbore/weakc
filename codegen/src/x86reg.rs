@@ -98,7 +98,7 @@ pub enum X86PhysicalRegisterUsageBit {
     StackPointer = 512,
 }
 
-type X86PhysicalRegisterUsage = u32;
+pub type X86PhysicalRegisterUsage = u32;
 
 impl X86PhysicalRegisterID {
     fn get_pack_and_pos(&self) -> (u32, u32) {

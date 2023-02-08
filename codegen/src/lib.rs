@@ -13,7 +13,9 @@
  */
 
 pub mod x86;
+pub mod x86gen;
 pub mod x86reg;
 
 pub use crate::x86::*;
+pub use crate::x86gen::*;
 pub use crate::x86reg::*;

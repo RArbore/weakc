@@ -418,7 +418,7 @@ impl<'a> MIRGenContext<'a> {
                 HIRInstruction::Verify(verify_reg) => {
                     self.add_inst(MIRInstruction::Call(
                         None,
-                        MIR_EXTERNAL_FUNCTION_ASSERT.0,
+                        MIR_EXTERNAL_FUNCTION_RT_ASSERT.0,
                         bump_list!(self.bump, convert_register(*verify_reg).unwrap()),
                     ));
                 }
@@ -506,7 +506,7 @@ impl<'a> MIRGenContext<'a> {
         self.add_inst(MIRInstruction::Load(src_shape_ptr, src_shape_ptr_ptr));
         self.add_inst(MIRInstruction::Call(
             None,
-            MIR_EXTERNAL_FUNCTION_MEMCPY.0,
+            MIR_EXTERNAL_FUNCTION_RT_MEMCPY.0,
             bump_list!(
                 self.bump,
                 result_shape_ptr,
@@ -693,7 +693,7 @@ impl<'a> MIRGenContext<'a> {
         ));
         self.add_inst(MIRInstruction::Call(
             None,
-            MIR_EXTERNAL_FUNCTION_ASSERT.0,
+            MIR_EXTERNAL_FUNCTION_RT_ASSERT.0,
             bump_list!(self.bump, assert_reg),
         ));
 
@@ -954,7 +954,7 @@ impl<'a> MIRGenContext<'a> {
         ));
         self.add_inst(MIRInstruction::Call(
             None,
-            MIR_EXTERNAL_FUNCTION_ASSERT.0,
+            MIR_EXTERNAL_FUNCTION_RT_ASSERT.0,
             bump_list!(self.bump, assert_reg),
         ));
         let tensor_elem_size = self.fresh_reg(MIRType::Size);
@@ -1025,7 +1025,7 @@ impl<'a> MIRGenContext<'a> {
         ));
         self.add_inst(MIRInstruction::Call(
             None,
-            MIR_EXTERNAL_FUNCTION_MEMCPY.0,
+            MIR_EXTERNAL_FUNCTION_RT_MEMCPY.0,
             bump_list!(
                 self.bump,
                 result_elements_ptr,
@@ -1161,7 +1161,7 @@ impl<'a> MIRGenContext<'a> {
         ));
         self.add_inst(MIRInstruction::Call(
             None,
-            MIR_EXTERNAL_FUNCTION_ASSERT.0,
+            MIR_EXTERNAL_FUNCTION_RT_ASSERT.0,
             bump_list!(self.bump, assert_reg),
         ));
 

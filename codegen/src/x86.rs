@@ -14,8 +14,28 @@
 
 extern crate bump;
 
+use crate::*;
+
 #[derive(Debug, PartialEq)]
-pub enum X86Instruction {}
+pub enum X86Operand {
+    Register(X86Register),
+    Memory(X86Register, usize),
+    Immediate(u64),
+}
+
+#[derive(Debug, PartialEq)]
+pub enum X86Instruction {
+    Inc(X86Operand),
+    Dec(X86Operand),
+    Neg(X86Operand),
+    Not(X86Operand),
+    Leaq(X86Operand, X86Operand),
+    Add(X86Operand, X86Operand),
+    Sub(X86Operand, X86Operand),
+    Imul(X86Operand, X86Operand),
+    Cmp(X86Operand, X86Operand),
+    Test(X86Operand, X86Operand),
+}
 
 #[derive(Debug, PartialEq)]
 pub struct X86Block<'a> {

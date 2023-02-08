@@ -61,13 +61,13 @@ pub type MIRExternalFunction = (
     (&'static [MIRType], Option<MIRType>),
 );
 
-pub const MIR_EXTERNAL_FUNCTION_MEMCPY: MIRExternalFunction = (
-    (MIR_EXTERNAL_FUNCTION_ID, b"memcpy"),
+pub const MIR_EXTERNAL_FUNCTION_RT_MEMCPY: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_memcpy"),
     (&[MIRType::Pointer, MIRType::Pointer, MIRType::Size], None),
 );
 
-pub const MIR_EXTERNAL_FUNCTION_ASSERT: MIRExternalFunction = (
-    (MIR_EXTERNAL_FUNCTION_ID, b"assert"),
+pub const MIR_EXTERNAL_FUNCTION_RT_ASSERT: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"rt_assert"),
     (&[MIRType::Boolean], None),
 );
 
