@@ -288,6 +288,12 @@ pub struct MIRFunction<'a> {
     pub num_regs_used: MIRRegisterID,
 }
 
+impl<'a> MIRFunction<'a> {
+    pub fn naive_stack_vars_size(&self) -> u32 {
+        self.num_regs_used * 8
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct MIRModule<'a> {
     pub funcs: &'a mut bump::List<'a, MIRFunction<'a>>,

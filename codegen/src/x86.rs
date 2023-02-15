@@ -16,15 +16,18 @@ extern crate bump;
 
 use crate::*;
 
+pub type X86BlockID = u32;
+
 #[derive(Debug, PartialEq)]
 pub enum X86Operand {
     Register(X86Register),
     Memory(X86Register, usize),
     Immediate(u64),
+    DataSegmentVariable(u32),
 }
 
 #[derive(Debug, PartialEq)]
-pub enum X86Instruction {
+pub enum X86Instruction<'a> {
     Inc(X86Operand),
     Dec(X86Operand),
     Neg(X86Operand),
@@ -35,16 +38,17 @@ pub enum X86Instruction {
     Imul(X86Operand, X86Operand),
     Cmp(X86Operand, X86Operand),
     Test(X86Operand, X86Operand),
+    Jmp(&'a [u8]),
 }
 
 #[derive(Debug, PartialEq)]
 pub struct X86Block<'a> {
     pub label: &'a [u8],
-    pub insts: &'a mut bump::List<'a, X86Instruction>,
+    pub insts: &'a mut bump::List<'a, X86Instruction<'a>>,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct X86Module<'a> {
-    pub funcs: &'a mut bump::List<'a, X86Block<'a>>,
+    pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
 }
