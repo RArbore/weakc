@@ -39,6 +39,7 @@ pub enum X86Instruction<'a> {
     Cmp(X86Operand, X86Operand),
     Test(X86Operand, X86Operand),
     Jmp(&'a [u8]),
+    Call(&'a [u8]),
     Ret,
 }
 
@@ -52,4 +53,25 @@ pub struct X86Block<'a> {
 pub struct X86Module<'a> {
     pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
+}
+
+pub fn write_block_id(id: X86BlockID, buf: &mut [u8], offset: usize) {
+    let conv = |x| {
+        if x < 10 {
+            x + b'0'
+        } else {
+            x - 10 + b'A'
+        }
+    };
+
+    buf[offset] = b'0';
+    buf[1 + offset] = b'x';
+    buf[2 + offset] = conv((id >> 28) as u8);
+    buf[3 + offset] = conv((id >> 24 & 15) as u8);
+    buf[4 + offset] = conv((id >> 20 & 15) as u8);
+    buf[5 + offset] = conv((id >> 16 & 15) as u8);
+    buf[6 + offset] = conv((id >> 12 & 15) as u8);
+    buf[7 + offset] = conv((id >> 8 & 15) as u8);
+    buf[8 + offset] = conv((id >> 4 & 15) as u8);
+    buf[9 + offset] = conv((id & 15) as u8);
 }

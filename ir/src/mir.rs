@@ -285,12 +285,12 @@ pub struct MIRFunction<'a> {
     pub params: &'a mut bump::List<'a, MIRRegister>,
     pub ret_type: Option<MIRType>,
     pub blocks: &'a mut bump::List<'a, MIRBasicBlock<'a>>,
-    pub num_regs_used: MIRRegisterID,
+    pub bloated_num_regs_used: MIRRegisterID,
 }
 
 impl<'a> MIRFunction<'a> {
     pub fn naive_stack_vars_size(&self) -> u32 {
-        self.num_regs_used * 8
+        self.bloated_num_regs_used * 8
     }
 }
 

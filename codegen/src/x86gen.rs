@@ -20,6 +20,7 @@ use crate::*;
 struct X86GenContext<'a> {
     module: X86Module<'a>,
     curr_block: X86BlockID,
+    curr_func: Option<&'a ir::MIRFunction<'a>>,
     bump: &'a bump::BumpAllocator,
 }
 
@@ -37,6 +38,7 @@ impl<'a> X86GenContext<'a> {
                 blocks: bump.create_list(),
             },
             curr_block: 0,
+            curr_func: None,
             bump: bump,
         };
         context
@@ -54,7 +56,29 @@ impl<'a> X86GenContext<'a> {
         self.get_curr_block_mut().insts.push(inst);
     }
 
-    fn x86gen_block(&mut self, block: &'a ir::MIRBasicBlock<'a>) {}
+    fn x86gen_block(
+        &mut self,
+        block: &'a ir::MIRBasicBlock<'a>,
+        block_id: X86BlockID,
+        label: &'a [u8],
+    ) {
+        self.curr_block = block_id;
+        self.module.blocks.push(X86Block {
+            label,
+            insts: self.bump.create_list(),
+        });
+        for i in 0..block.insts.len() {
+            let x86inst = match block.insts.at(i) {
+                ir::MIRInstruction::Return(None) => {
+                    self.x86gen_function_epilogue(self.curr_func.unwrap());
+                    X86Instruction::Ret
+                }
+                ir::MIRInstruction::Call(_, (_, label), _) => X86Instruction::Call(label),
+                _ => panic!(),
+            };
+            self.x86gen_inst(x86inst);
+        }
+    }
 
     fn x86gen_program(&mut self, program: &'a ir::MIRModule<'a>) {
         for i in 0..program.strings.len() {
@@ -66,16 +90,25 @@ impl<'a> X86GenContext<'a> {
     }
 
     fn x86gen_function(&mut self, func: &'a ir::MIRFunction<'a>) {
+        let func_block_id = self.module.blocks.len() as X86BlockID;
+        self.curr_block = func_block_id;
+        self.curr_func = Some(func);
         self.module.blocks.push(X86Block {
             label: func.name,
             insts: self.bump.create_list(),
         });
-        self.curr_block = self.module.blocks.len() as u32 - 1;
         self.x86gen_function_prologue(func);
         for i in 0..func.blocks.len() {
-            self.x86gen_block(func.blocks.at(i));
+            let label = unsafe { self.bump.alloc_slice_raw(func.name.len() + 11) };
+            for j in 0..func.name.len() {
+                label[j] = func.name[j];
+            }
+            label[func.name.len()] = b'.';
+            let block_id = (i + 1) as X86BlockID + func_block_id;
+            write_block_id(block_id, label, func.name.len() + 1);
+            self.x86gen_block(func.blocks.at(i), block_id, label);
         }
-        self.x86gen_function_epilogue(func);
+        self.curr_func = None;
     }
 
     fn x86gen_function_prologue(&mut self, func: &'a ir::MIRFunction<'a>) {
@@ -90,7 +123,6 @@ impl<'a> X86GenContext<'a> {
             Self::rsp_operand(),
             X86Operand::Immediate(func.naive_stack_vars_size() as u64),
         ));
-        self.x86gen_inst(X86Instruction::Ret);
     }
 }
 
@@ -121,7 +153,14 @@ mod tests {
                                     X86PhysicalRegisterID::RSP
                                 )),
                                 X86Operand::Immediate(16)
-                            ),
+                            )
+                        )
+                    },
+                    X86Block {
+                        label: b"@main.0x00000001",
+                        insts: bump::bump_list!(
+                            bump,
+                            X86Instruction::Call(b"@f_abc"),
                             X86Instruction::Add(
                                 X86Operand::Register(X86Register::Physical(
                                     X86PhysicalRegisterID::RSP
@@ -140,7 +179,13 @@ mod tests {
                                     X86PhysicalRegisterID::RSP
                                 )),
                                 X86Operand::Immediate(8)
-                            ),
+                            )
+                        )
+                    },
+                    X86Block {
+                        label: b"@f_abc.0x00000003",
+                        insts: bump::bump_list!(
+                            bump,
                             X86Instruction::Add(
                                 X86Operand::Register(X86Register::Physical(
                                     X86PhysicalRegisterID::RSP

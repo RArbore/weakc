@@ -118,8 +118,8 @@ impl<'a> MIRGenContext<'a> {
     }
 
     fn fresh_reg(&mut self, ty: MIRType) -> MIRRegister {
-        let id = self.get_curr_func_mut().num_regs_used;
-        self.get_curr_func_mut().num_regs_used += 1;
+        let id = self.get_curr_func_mut().bloated_num_regs_used;
+        self.get_curr_func_mut().bloated_num_regs_used += 1;
         (id, ty)
     }
 
@@ -145,7 +145,7 @@ impl<'a> MIRGenContext<'a> {
             params: self.bump.create_list(),
             ret_type: convert_type(func.ret_type),
             blocks: self.bump.create_list(),
-            num_regs_used: func.num_regs_used,
+            bloated_num_regs_used: func.num_regs_used,
         };
 
         for i in 0..func.params.len() {
@@ -1380,8 +1380,9 @@ mod tests {
     #[test]
     fn mirgen_simple() {
         let cases = &[
-            (b"a x = 1 + 2;", "fn @main() -> None {\n0:\n    im %0, 1\n    im %1, 2\n    bi %2, AddReals, %0, %1\n    cp %3, %2\n    re\n}"),
-            (b"p [2, 3, 5];", "fn @main() -> None {\n0:\n    im %0, 2\n    im %1, 3\n    im %2, 5\n    im %5, 24\n    ca %3, rt_malloc, (%5)\n    im %6, 1\n    st %6, %3\n    im %8, 1\n    gp %7, %3, %8, Pointer\n    im %10, 4\n    ca %9, rt_malloc, (%10)\n    st %9, %7\n    im %11, 3\n    st %11, %9\n    im %12, 8\n    im %13, 3\n    bi %14, MultiplySizes, %12, %13\n    ca %15, rt_malloc, (%14)\n    im %17, 2\n    gp %16, %3, %17, Pointer\n    st %15, %16\n    im %18, 0\n    gp %19, %15, %18, Real\n    st %0, %19\n    im %20, 1\n    gp %21, %15, %20, Real\n    st %1, %21\n    im %22, 2\n    gp %23, %15, %22, Real\n    st %2, %23\n    ca rt_print_tensor, (%3)\n    re\n}")
+            (b"a x = 1 + 2;" as &'static [u8], "fn @main() -> None {\n0:\n    im %0, 1\n    im %1, 2\n    bi %2, AddReals, %0, %1\n    cp %3, %2\n    re\n}"),
+            (b"p [2, 3, 5];", "fn @main() -> None {\n0:\n    im %0, 2\n    im %1, 3\n    im %2, 5\n    im %5, 24\n    ca %3, rt_malloc, (%5)\n    im %6, 1\n    st %6, %3\n    im %8, 1\n    gp %7, %3, %8, Pointer\n    im %10, 4\n    ca %9, rt_malloc, (%10)\n    st %9, %7\n    im %11, 3\n    st %11, %9\n    im %12, 8\n    im %13, 3\n    bi %14, MultiplySizes, %12, %13\n    ca %15, rt_malloc, (%14)\n    im %17, 2\n    gp %16, %3, %17, Pointer\n    st %15, %16\n    im %18, 0\n    gp %19, %15, %18, Real\n    st %0, %19\n    im %20, 1\n    gp %21, %15, %20, Real\n    st %1, %21\n    im %22, 2\n    gp %23, %15, %22, Real\n    st %2, %23\n    ca rt_print_tensor, (%3)\n    re\n}"),
+            (b"", "fn @main() -> None {\n0:\n    re\n}")
         ];
 
         for (input, output) in cases {
