@@ -16,6 +16,7 @@ extern crate bump;
 extern crate ir;
 
 use crate::*;
+use bump::bump_list;
 
 struct X86GenContext<'a> {
     module: X86Module<'a>,
@@ -91,5 +92,49 @@ impl<'a> X86GenContext<'a> {
             X86Operand::Immediate(func.naive_stack_vars_size() as u64),
         ));
         self.x86gen_inst(X86Instruction::Ret);
+    }
+}
+
+mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+
+    #[test]
+    fn x86gen_simple() {
+        let bump = bump::BumpAllocator::new();
+        let tokens = parse::lex(b"", &bump).unwrap();
+        let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
+        let typed_program = semant::typecheck_program(ast, &bump).unwrap();
+        let hir_program = ir::hirgen(&typed_program, &bump);
+        let mir_program = ir::mirgen(&hir_program, &bump);
+        let x86_program = x86gen(&mir_program, &bump);
+        assert_eq!(
+            x86_program,
+            X86Module {
+                blocks: bump_list!(
+                    bump,
+                    X86Block {
+                        label: b"@main",
+                        insts: bump_list!(
+                            bump,
+                            X86Instruction::Sub(
+                                X86Operand::Register(X86Register::Physical(
+                                    X86PhysicalRegisterID::RSP
+                                )),
+                                X86Operand::Immediate(8)
+                            ),
+                            X86Instruction::Add(
+                                X86Operand::Register(X86Register::Physical(
+                                    X86PhysicalRegisterID::RSP
+                                )),
+                                X86Operand::Immediate(8)
+                            ),
+                            X86Instruction::Ret
+                        )
+                    }
+                ),
+                strings: bump.create_list(),
+            },
+        );
     }
 }
