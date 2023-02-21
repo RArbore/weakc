@@ -16,7 +16,6 @@ extern crate bump;
 extern crate ir;
 
 use crate::*;
-use bump::bump_list;
 
 struct X86GenContext<'a> {
     module: X86Module<'a>,
@@ -102,7 +101,7 @@ mod tests {
     #[test]
     fn x86gen_simple() {
         let bump = bump::BumpAllocator::new();
-        let tokens = parse::lex(b"", &bump).unwrap();
+        let tokens = parse::lex(b"f abc() {} abc();", &bump).unwrap();
         let (ast, _) = parse::parse_program(&tokens, &bump).unwrap();
         let typed_program = semant::typecheck_program(ast, &bump).unwrap();
         let hir_program = ir::hirgen(&typed_program, &bump);
@@ -111,11 +110,30 @@ mod tests {
         assert_eq!(
             x86_program,
             X86Module {
-                blocks: bump_list!(
+                blocks: bump::bump_list!(
                     bump,
                     X86Block {
                         label: b"@main",
-                        insts: bump_list!(
+                        insts: bump::bump_list!(
+                            bump,
+                            X86Instruction::Sub(
+                                X86Operand::Register(X86Register::Physical(
+                                    X86PhysicalRegisterID::RSP
+                                )),
+                                X86Operand::Immediate(16)
+                            ),
+                            X86Instruction::Add(
+                                X86Operand::Register(X86Register::Physical(
+                                    X86PhysicalRegisterID::RSP
+                                )),
+                                X86Operand::Immediate(16)
+                            ),
+                            X86Instruction::Ret
+                        )
+                    },
+                    X86Block {
+                        label: b"@f_abc",
+                        insts: bump::bump_list!(
                             bump,
                             X86Instruction::Sub(
                                 X86Operand::Register(X86Register::Physical(
