@@ -39,6 +39,7 @@ pub enum X86Instruction<'a> {
     Cmp(X86Operand, X86Operand),
     Test(X86Operand, X86Operand),
     Jmp(&'a [u8]),
+    Ret,
 }
 
 #[derive(Debug, PartialEq)]

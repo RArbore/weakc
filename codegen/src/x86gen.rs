@@ -20,6 +20,7 @@ use crate::*;
 struct X86GenContext<'a> {
     module: X86Module<'a>,
     curr_block: X86BlockID,
+    bump: &'a bump::BumpAllocator,
 }
 
 pub fn x86gen<'a>(program: &'a ir::MIRModule<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
@@ -36,6 +37,7 @@ impl<'a> X86GenContext<'a> {
                 blocks: bump.create_list(),
             },
             curr_block: 0,
+            bump: bump,
         };
         context
     }
@@ -52,6 +54,8 @@ impl<'a> X86GenContext<'a> {
         self.get_curr_block_mut().insts.push(inst);
     }
 
+    fn x86gen_block(&mut self, block: &'a ir::MIRBasicBlock<'a>) {}
+
     fn x86gen_program(&mut self, program: &'a ir::MIRModule<'a>) {
         for i in 0..program.strings.len() {
             self.module.strings.push(program.strings.at(i));
@@ -62,8 +66,15 @@ impl<'a> X86GenContext<'a> {
     }
 
     fn x86gen_function(&mut self, func: &'a ir::MIRFunction<'a>) {
+        self.module.blocks.push(X86Block {
+            label: func.name,
+            insts: self.bump.create_list(),
+        });
+        self.curr_block = self.module.blocks.len() as u32 - 1;
         self.x86gen_function_prologue(func);
-
+        for i in 0..func.blocks.len() {
+            self.x86gen_block(func.blocks.at(i));
+        }
         self.x86gen_function_epilogue(func);
     }
 
@@ -79,5 +90,6 @@ impl<'a> X86GenContext<'a> {
             Self::rsp_operand(),
             X86Operand::Immediate(func.naive_stack_vars_size() as u64),
         ));
+        self.x86gen_inst(X86Instruction::Ret);
     }
 }
