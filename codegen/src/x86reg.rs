@@ -12,6 +12,8 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
+use core::fmt;
+
 pub type X86VirtualRegisterID = u32;
 
 #[derive(Debug, PartialEq)]
@@ -229,4 +231,89 @@ pub fn x86_physical_registers_overlap(
 pub enum X86Register {
     Virtual(X86VirtualRegisterID, u32),
     Physical(X86PhysicalRegisterID),
+}
+
+impl fmt::Display for X86Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            X86Register::Virtual(reg, _) => write!(f, "%{}", reg),
+            X86Register::Physical(reg) => write!(f, "{}", reg),
+        }?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for X86PhysicalRegisterID {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            X86PhysicalRegisterID::RAX => write!(f, "rax"),
+            X86PhysicalRegisterID::RBX => write!(f, "rbx"),
+            X86PhysicalRegisterID::RCX => write!(f, "rcx"),
+            X86PhysicalRegisterID::RDX => write!(f, "rdx"),
+            X86PhysicalRegisterID::RSI => write!(f, "rsi"),
+            X86PhysicalRegisterID::RDI => write!(f, "rdi"),
+            X86PhysicalRegisterID::RSP => write!(f, "rsp"),
+            X86PhysicalRegisterID::RBP => write!(f, "rbp"),
+            X86PhysicalRegisterID::R8 => write!(f, "r8"),
+            X86PhysicalRegisterID::R9 => write!(f, "r9"),
+            X86PhysicalRegisterID::R10 => write!(f, "r10"),
+            X86PhysicalRegisterID::R11 => write!(f, "r11"),
+            X86PhysicalRegisterID::R12 => write!(f, "r12"),
+            X86PhysicalRegisterID::R13 => write!(f, "r13"),
+            X86PhysicalRegisterID::R14 => write!(f, "r14"),
+            X86PhysicalRegisterID::R15 => write!(f, "r15"),
+
+            X86PhysicalRegisterID::EAX => write!(f, "eax"),
+            X86PhysicalRegisterID::EBX => write!(f, "ebx"),
+            X86PhysicalRegisterID::ECX => write!(f, "ecx"),
+            X86PhysicalRegisterID::EDX => write!(f, "edx"),
+            X86PhysicalRegisterID::ESI => write!(f, "esi"),
+            X86PhysicalRegisterID::EDI => write!(f, "edi"),
+            X86PhysicalRegisterID::ESP => write!(f, "esp"),
+            X86PhysicalRegisterID::EBP => write!(f, "ebp"),
+            X86PhysicalRegisterID::R8D => write!(f, "r8d"),
+            X86PhysicalRegisterID::R9D => write!(f, "r9d"),
+            X86PhysicalRegisterID::R10D => write!(f, "r10d"),
+            X86PhysicalRegisterID::R11D => write!(f, "r11d"),
+            X86PhysicalRegisterID::R12D => write!(f, "r12d"),
+            X86PhysicalRegisterID::R13D => write!(f, "r13d"),
+            X86PhysicalRegisterID::R14D => write!(f, "r14d"),
+            X86PhysicalRegisterID::R15D => write!(f, "r15d"),
+
+            X86PhysicalRegisterID::AX => write!(f, "ax"),
+            X86PhysicalRegisterID::BX => write!(f, "bx"),
+            X86PhysicalRegisterID::CX => write!(f, "cx"),
+            X86PhysicalRegisterID::DX => write!(f, "dx"),
+            X86PhysicalRegisterID::SI => write!(f, "si"),
+            X86PhysicalRegisterID::DI => write!(f, "di"),
+            X86PhysicalRegisterID::SP => write!(f, "sp"),
+            X86PhysicalRegisterID::BP => write!(f, "bp"),
+            X86PhysicalRegisterID::R8W => write!(f, "r8w"),
+            X86PhysicalRegisterID::R9W => write!(f, "r9w"),
+            X86PhysicalRegisterID::R10W => write!(f, "r10w"),
+            X86PhysicalRegisterID::R11W => write!(f, "r11w"),
+            X86PhysicalRegisterID::R12W => write!(f, "r12w"),
+            X86PhysicalRegisterID::R13W => write!(f, "r13w"),
+            X86PhysicalRegisterID::R14W => write!(f, "r14w"),
+            X86PhysicalRegisterID::R15W => write!(f, "r15w"),
+
+            X86PhysicalRegisterID::AL => write!(f, "al"),
+            X86PhysicalRegisterID::BL => write!(f, "bl"),
+            X86PhysicalRegisterID::CL => write!(f, "cl"),
+            X86PhysicalRegisterID::DL => write!(f, "dl"),
+            X86PhysicalRegisterID::SIL => write!(f, "sil"),
+            X86PhysicalRegisterID::DIL => write!(f, "dil"),
+            X86PhysicalRegisterID::SPL => write!(f, "spl"),
+            X86PhysicalRegisterID::BPL => write!(f, "bpl"),
+            X86PhysicalRegisterID::R8B => write!(f, "r8b"),
+            X86PhysicalRegisterID::R9B => write!(f, "r9b"),
+            X86PhysicalRegisterID::R10B => write!(f, "r10b"),
+            X86PhysicalRegisterID::R11B => write!(f, "r11b"),
+            X86PhysicalRegisterID::R12B => write!(f, "r12b"),
+            X86PhysicalRegisterID::R13B => write!(f, "r13b"),
+            X86PhysicalRegisterID::R14B => write!(f, "r14b"),
+            X86PhysicalRegisterID::R15B => write!(f, "r15b"),
+        }?;
+        Ok(())
+    }
 }

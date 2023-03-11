@@ -14,6 +14,9 @@
 
 extern crate bump;
 
+use core::fmt;
+use core::str;
+
 use crate::*;
 
 pub type X86BlockID = u32;
@@ -53,6 +56,47 @@ pub struct X86Block<'a> {
 pub struct X86Module<'a> {
     pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
+}
+
+impl fmt::Display for X86Operand {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            X86Operand::Register(reg) => write!(f, "{}", reg),
+            X86Operand::Memory(reg, size) => write!(f, "[{} + {}]", reg, size),
+            X86Operand::Immediate(con) => write!(f, "{}", con),
+            X86Operand::DataSegmentVariable(_) => todo!(),
+        }?;
+        Ok(())
+    }
+}
+
+impl<'a> fmt::Display for X86Instruction<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            X86Instruction::Inc(op) => write!(f, "inc {}", op),
+            X86Instruction::Dec(op) => write!(f, "dec {}", op),
+            X86Instruction::Neg(op) => write!(f, "neg {}", op),
+            X86Instruction::Not(op) => write!(f, "not {}", op),
+            X86Instruction::Leaq(op1, op2) => write!(f, "leaq {}, {}", op1, op2),
+            X86Instruction::Add(op1, op2) => write!(f, "add {}, {}", op1, op2),
+            X86Instruction::Sub(op1, op2) => write!(f, "sub {}, {}", op1, op2),
+            X86Instruction::Imul(op1, op2) => write!(f, "imul {}, {}", op1, op2),
+            X86Instruction::Cmp(op1, op2) => write!(f, "cmp {}, {}", op1, op2),
+            X86Instruction::Test(op1, op2) => write!(f, "test {}, {}", op1, op2),
+            X86Instruction::Jmp(label) => write!(
+                f,
+                "jmp {}",
+                str::from_utf8(label).expect("PANIC: Label name not convertable to Rust str.")
+            ),
+            X86Instruction::Call(label) => write!(
+                f,
+                "call {}",
+                str::from_utf8(label).expect("PANIC: Label name not convertable to Rust str.")
+            ),
+            X86Instruction::Ret => write!(f, "ret"),
+        }?;
+        Ok(())
+    }
 }
 
 pub fn write_block_id(id: X86BlockID, buf: &mut [u8], offset: usize) {
