@@ -44,8 +44,16 @@ impl<'a> X86GenContext<'a> {
         context
     }
 
+    fn rax_operand() -> X86Operand {
+        X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::RAX))
+    }
+
     fn rsp_operand() -> X86Operand {
         X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::RSP))
+    }
+
+    fn mir_to_x86_virt_reg(&self, mir_reg: ir::MIRRegister) -> X86Register {
+        X86Register::Virtual(mir_reg.0)
     }
 
     fn get_curr_block_mut(&mut self) -> &mut X86Block<'a> {
@@ -68,15 +76,49 @@ impl<'a> X86GenContext<'a> {
             insts: self.bump.create_list(),
         });
         for i in 0..block.insts.len() {
-            let x86inst = match block.insts.at(i) {
-                ir::MIRInstruction::Return(None) => {
+            match block.insts.at(i) {
+                ir::MIRInstruction::Immediate(reg, val) => match val {
+                    ir::MIRConstant::Boolean(val) => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*reg)),
+                            X86Operand::Immediate(if *val { 1 } else { 0 }),
+                        ));
+                    }
+                    ir::MIRConstant::Real(_) => panic!(),
+                    ir::MIRConstant::Fixed(val) => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*reg)),
+                            X86Operand::Immediate(*val as u64),
+                        ));
+                    }
+                    ir::MIRConstant::Size(val) => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*reg)),
+                            X86Operand::Immediate(*val as u64),
+                        ));
+                    }
+                    ir::MIRConstant::String(_) => panic!(),
+                },
+                ir::MIRInstruction::Return(ret_val) => {
+                    if let Some(ret_val) = ret_val {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            Self::rax_operand(),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*ret_val)),
+                        ));
+                    } else {
+                        self.x86gen_inst(X86Instruction::Xor(
+                            Self::rax_operand(),
+                            Self::rax_operand(),
+                        ));
+                    }
                     self.x86gen_function_epilogue(self.curr_func.unwrap());
-                    X86Instruction::Ret
+                    self.x86gen_inst(X86Instruction::Ret);
                 }
-                ir::MIRInstruction::Call(_, (_, label), _) => X86Instruction::Call(&label[1..]),
+                ir::MIRInstruction::Call(_, (_, label), _) => {
+                    self.x86gen_inst(X86Instruction::Call(&label[1..]))
+                }
                 _ => panic!(),
             };
-            self.x86gen_inst(x86inst);
         }
     }
 

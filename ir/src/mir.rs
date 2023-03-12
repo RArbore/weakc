@@ -316,7 +316,7 @@ impl fmt::Display for MIRConstant {
                 write!(f, "{}", v)?;
             }
             MIRConstant::String(v) => {
-                write!(f, "{}", v)?;
+                write!(f, "string {}", v)?;
             }
         }
         Ok(())

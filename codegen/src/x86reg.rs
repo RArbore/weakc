@@ -229,14 +229,14 @@ pub fn x86_physical_registers_overlap(
 
 #[derive(Debug, PartialEq)]
 pub enum X86Register {
-    Virtual(X86VirtualRegisterID, u32),
+    Virtual(X86VirtualRegisterID),
     Physical(X86PhysicalRegisterID),
 }
 
 impl fmt::Display for X86Register {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            X86Register::Virtual(reg, _) => write!(f, "%{}", reg),
+            X86Register::Virtual(reg) => write!(f, "%{}", reg),
             X86Register::Physical(reg) => write!(f, "{}", reg),
         }?;
         Ok(())
