@@ -99,6 +99,31 @@ impl<'a> fmt::Display for X86Instruction<'a> {
     }
 }
 
+impl<'a> fmt::Display for X86Block<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}\n",
+            str::from_utf8(self.label).expect("PANIC: Label name not convertable to Rust str.")
+        )?;
+        for i in 0..self.insts.len() {
+            write!(f, "    {}\n", self.insts.at(i))?;
+        }
+        Ok(())
+    }
+}
+
+impl<'a> fmt::Display for X86Module<'a> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, ".text")?;
+        for i in 0..self.blocks.len() {
+            write!(f, "{}\n", self.blocks.at(i))?;
+        }
+        write!(f, ".ident \"weakc: 0.0.1\"\n")?;
+        Ok(())
+    }
+}
+
 pub fn write_block_id(id: X86BlockID, buf: &mut [u8], offset: usize) {
     let conv = |x| {
         if x < 10 {
