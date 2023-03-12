@@ -73,7 +73,7 @@ impl<'a> X86GenContext<'a> {
                     self.x86gen_function_epilogue(self.curr_func.unwrap());
                     X86Instruction::Ret
                 }
-                ir::MIRInstruction::Call(_, (_, label), _) => X86Instruction::Call(label),
+                ir::MIRInstruction::Call(_, (_, label), _) => X86Instruction::Call(&label[1..]),
                 _ => panic!(),
             };
             self.x86gen_inst(x86inst);
@@ -94,18 +94,18 @@ impl<'a> X86GenContext<'a> {
         self.curr_block = func_block_id;
         self.curr_func = Some(func);
         self.module.blocks.push(X86Block {
-            label: func.name,
+            label: &func.name[1..],
             insts: self.bump.create_list(),
         });
         self.x86gen_function_prologue(func);
         for i in 0..func.blocks.len() {
-            let label = unsafe { self.bump.alloc_slice_raw(func.name.len() + 11) };
-            for j in 0..func.name.len() {
-                label[j] = func.name[j];
+            let label = unsafe { self.bump.alloc_slice_raw(func.name.len() + 10) };
+            for j in 1..func.name.len() {
+                label[j - 1] = func.name[j];
             }
-            label[func.name.len()] = b'.';
+            label[func.name.len() - 1] = b'.';
             let block_id = (i + 1) as X86BlockID + func_block_id;
-            write_block_id(block_id, label, func.name.len() + 1);
+            write_block_id(block_id, label, func.name.len());
             self.x86gen_block(func.blocks.at(i), block_id, label);
         }
         self.curr_func = None;
@@ -145,7 +145,7 @@ mod tests {
                 blocks: bump::bump_list!(
                     bump,
                     X86Block {
-                        label: b"@main",
+                        label: b"main",
                         insts: bump::bump_list!(
                             bump,
                             X86Instruction::Sub(
@@ -157,10 +157,10 @@ mod tests {
                         )
                     },
                     X86Block {
-                        label: b"@main.0x00000001",
+                        label: b"main.0x00000001",
                         insts: bump::bump_list!(
                             bump,
-                            X86Instruction::Call(b"@f_abc"),
+                            X86Instruction::Call(b"f_abc"),
                             X86Instruction::Add(
                                 X86Operand::Register(X86Register::Physical(
                                     X86PhysicalRegisterID::RSP
@@ -171,7 +171,7 @@ mod tests {
                         )
                     },
                     X86Block {
-                        label: b"@f_abc",
+                        label: b"f_abc",
                         insts: bump::bump_list!(
                             bump,
                             X86Instruction::Sub(
@@ -183,7 +183,7 @@ mod tests {
                         )
                     },
                     X86Block {
-                        label: b"@f_abc.0x00000003",
+                        label: b"f_abc.0x00000003",
                         insts: bump::bump_list!(
                             bump,
                             X86Instruction::Add(

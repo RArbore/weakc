@@ -103,7 +103,7 @@ impl<'a> fmt::Display for X86Block<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}\n",
+            "{}:\n",
             str::from_utf8(self.label).expect("PANIC: Label name not convertable to Rust str.")
         )?;
         for i in 0..self.insts.len() {
@@ -115,7 +115,7 @@ impl<'a> fmt::Display for X86Block<'a> {
 
 impl<'a> fmt::Display for X86Module<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, ".text")?;
+        write!(f, ".intel_syntax\n.text\n.globl main\n\n")?;
         for i in 0..self.blocks.len() {
             write!(f, "{}\n", self.blocks.at(i))?;
         }
