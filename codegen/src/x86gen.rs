@@ -159,6 +159,7 @@ impl<'a> X86GenContext<'a> {
                     self.x86gen_inst(X86Instruction::Ret);
                 }
                 ir::MIRInstruction::Call(ret, (_, label), args) => {
+                    let mut pushed_args_size = 0;
                     for i in 0..args.len() {
                         match i {
                             0 => self.x86gen_inst(X86Instruction::Mov(
@@ -185,10 +186,22 @@ impl<'a> X86GenContext<'a> {
                                 Self::r9_operand(),
                                 X86Operand::Register(self.mir_to_x86_virt_reg(*args.at(i))),
                             )),
-                            _ => panic!(),
+                            _ => {
+                                let virt_reg = self.mir_to_x86_virt_reg(*args.at(i));
+                                pushed_args_size += virt_reg.size();
+                                self.x86gen_inst(X86Instruction::Push(X86Operand::Register(
+                                    virt_reg,
+                                )));
+                            }
                         }
                     }
                     self.x86gen_inst(X86Instruction::Call(&label[1..]));
+                    if pushed_args_size > 0 {
+                        self.x86gen_inst(X86Instruction::Add(
+                            Self::rsp_operand(),
+                            X86Operand::Immediate(pushed_args_size),
+                        ));
+                    }
                     if let Some(ret) = ret {
                         self.x86gen_inst(X86Instruction::Mov(
                             X86Operand::Register(self.mir_to_x86_virt_reg(*ret)),

@@ -23,6 +23,16 @@ pub enum X86VirtualRegisterType {
     Float64,
 }
 
+impl X86VirtualRegisterType {
+    pub fn size(&self) -> u64 {
+        match self {
+            X86VirtualRegisterType::Fixed32 => 4,
+            X86VirtualRegisterType::Fixed64 => 8,
+            X86VirtualRegisterType::Float64 => 8,
+        }
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub enum X86PhysicalRegisterID {
     RAX,
@@ -244,6 +254,21 @@ pub fn x86_physical_registers_overlap(
 pub enum X86Register {
     Virtual(X86VirtualRegisterID, X86VirtualRegisterType),
     Physical(X86PhysicalRegisterID),
+}
+
+impl X86Register {
+    pub fn size(&self) -> u64 {
+        match self {
+            X86Register::Virtual(_, ty) => ty.size(),
+            X86Register::Physical(id) => match id.get_pack_and_pos().1 {
+                0 => 8,
+                1 => 4,
+                2 => 2,
+                3 => 2,
+                _ => panic!(),
+            },
+        }
+    }
 }
 
 impl fmt::Display for X86VirtualRegisterType {

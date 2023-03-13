@@ -44,6 +44,8 @@ pub enum X86Instruction<'a> {
     Or(X86Operand<'a>, X86Operand<'a>),
     And(X86Operand<'a>, X86Operand<'a>),
     Mov(X86Operand<'a>, X86Operand<'a>),
+    Push(X86Operand<'a>),
+    Pop(X86Operand<'a>),
     Cmp(X86Operand<'a>, X86Operand<'a>),
     Test(X86Operand<'a>, X86Operand<'a>),
     Jmp(&'a [u8]),
@@ -96,6 +98,8 @@ impl<'a> fmt::Display for X86Instruction<'a> {
             X86Instruction::Or(op1, op2) => write!(f, "or {}, {}", op1, op2),
             X86Instruction::And(op1, op2) => write!(f, "and {}, {}", op1, op2),
             X86Instruction::Mov(op1, op2) => write!(f, "mov {}, {}", op1, op2),
+            X86Instruction::Push(op) => write!(f, "push {}", op),
+            X86Instruction::Pop(op) => write!(f, "pop {}", op),
             X86Instruction::Cmp(op1, op2) => write!(f, "cmp {}, {}", op1, op2),
             X86Instruction::Test(op1, op2) => write!(f, "test {}, {}", op1, op2),
             X86Instruction::Jmp(label) => write!(
