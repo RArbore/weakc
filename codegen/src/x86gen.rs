@@ -53,7 +53,17 @@ impl<'a> X86GenContext<'a> {
     }
 
     fn mir_to_x86_virt_reg(&self, mir_reg: ir::MIRRegister) -> X86Register {
-        X86Register::Virtual(mir_reg.0)
+        X86Register::Virtual(
+            mir_reg.0,
+            match mir_reg.1 {
+                ir::MIRType::Boolean => X86VirtualRegisterType::Fixed32,
+                ir::MIRType::String => X86VirtualRegisterType::Fixed64,
+                ir::MIRType::Real => X86VirtualRegisterType::Float64,
+                ir::MIRType::Fixed => X86VirtualRegisterType::Fixed32,
+                ir::MIRType::Size => X86VirtualRegisterType::Fixed64,
+                ir::MIRType::Pointer => X86VirtualRegisterType::Fixed64,
+            },
+        )
     }
 
     fn get_curr_block_mut(&mut self) -> &mut X86Block<'a> {

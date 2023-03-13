@@ -17,6 +17,13 @@ use core::fmt;
 pub type X86VirtualRegisterID = u32;
 
 #[derive(Debug, PartialEq)]
+pub enum X86VirtualRegisterType {
+    Fixed32,
+    Fixed64,
+    Float64,
+}
+
+#[derive(Debug, PartialEq)]
 pub enum X86PhysicalRegisterID {
     RAX,
     RBX,
@@ -229,15 +236,16 @@ pub fn x86_physical_registers_overlap(
 
 #[derive(Debug, PartialEq)]
 pub enum X86Register {
-    Virtual(X86VirtualRegisterID),
+    Virtual(X86VirtualRegisterID, X86VirtualRegisterType),
     Physical(X86PhysicalRegisterID),
 }
 
-impl fmt::Display for X86Register {
+impl fmt::Display for X86VirtualRegisterType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            X86Register::Virtual(reg) => write!(f, "%{}", reg),
-            X86Register::Physical(reg) => write!(f, "{}", reg),
+            X86VirtualRegisterType::Fixed32 => write!(f, "fixed32"),
+            X86VirtualRegisterType::Fixed64 => write!(f, "fixed64"),
+            X86VirtualRegisterType::Float64 => write!(f, "float64"),
         }?;
         Ok(())
     }
@@ -313,6 +321,16 @@ impl fmt::Display for X86PhysicalRegisterID {
             X86PhysicalRegisterID::R13B => write!(f, "r13b"),
             X86PhysicalRegisterID::R14B => write!(f, "r14b"),
             X86PhysicalRegisterID::R15B => write!(f, "r15b"),
+        }?;
+        Ok(())
+    }
+}
+
+impl fmt::Display for X86Register {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            X86Register::Virtual(reg, reg_type) => write!(f, "%{} {}", reg, reg_type),
+            X86Register::Physical(reg) => write!(f, "{}", reg),
         }?;
         Ok(())
     }
