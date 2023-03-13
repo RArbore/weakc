@@ -143,6 +143,24 @@ impl<'a> X86GenContext<'a> {
                         ));
                     }
                 },
+                ir::MIRInstruction::Copy(dst_reg, src_reg) => {
+                    self.x86gen_inst(X86Instruction::Mov(
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                    ));
+                }
+                ir::MIRInstruction::Load(dst_reg, src_reg) => {
+                    self.x86gen_inst(X86Instruction::Mov(
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                        X86Operand::MemoryOffset(self.mir_to_x86_virt_reg(*src_reg), 0),
+                    ));
+                }
+                ir::MIRInstruction::Store(src_reg, dst_reg) => {
+                    self.x86gen_inst(X86Instruction::Mov(
+                        X86Operand::MemoryOffset(self.mir_to_x86_virt_reg(*dst_reg), 0),
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                    ));
+                }
                 ir::MIRInstruction::Return(ret_val) => {
                     if let Some(ret_val) = ret_val {
                         self.x86gen_inst(X86Instruction::Mov(
