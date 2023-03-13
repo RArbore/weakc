@@ -22,29 +22,30 @@ use crate::*;
 pub type X86BlockID = u32;
 
 #[derive(Debug, PartialEq)]
-pub enum X86Operand {
+pub enum X86Operand<'a> {
     Register(X86Register),
-    Memory(X86Register, usize),
+    MemoryOffset(X86Register, usize),
+    MemoryLabel(X86Register, &'a [u8]),
     Immediate(u64),
     DataSegmentVariable(u32),
 }
 
 #[derive(Debug, PartialEq)]
 pub enum X86Instruction<'a> {
-    Inc(X86Operand),
-    Dec(X86Operand),
-    Neg(X86Operand),
-    Not(X86Operand),
-    Leaq(X86Operand, X86Operand),
-    Add(X86Operand, X86Operand),
-    Sub(X86Operand, X86Operand),
-    Imul(X86Operand, X86Operand),
-    Xor(X86Operand, X86Operand),
-    Or(X86Operand, X86Operand),
-    And(X86Operand, X86Operand),
-    Mov(X86Operand, X86Operand),
-    Cmp(X86Operand, X86Operand),
-    Test(X86Operand, X86Operand),
+    Inc(X86Operand<'a>),
+    Dec(X86Operand<'a>),
+    Neg(X86Operand<'a>),
+    Not(X86Operand<'a>),
+    Lea(X86Operand<'a>, X86Operand<'a>),
+    Add(X86Operand<'a>, X86Operand<'a>),
+    Sub(X86Operand<'a>, X86Operand<'a>),
+    Imul(X86Operand<'a>, X86Operand<'a>),
+    Xor(X86Operand<'a>, X86Operand<'a>),
+    Or(X86Operand<'a>, X86Operand<'a>),
+    And(X86Operand<'a>, X86Operand<'a>),
+    Mov(X86Operand<'a>, X86Operand<'a>),
+    Cmp(X86Operand<'a>, X86Operand<'a>),
+    Test(X86Operand<'a>, X86Operand<'a>),
     Jmp(&'a [u8]),
     Call(&'a [u8]),
     Ret,
@@ -62,11 +63,17 @@ pub struct X86Module<'a> {
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
 }
 
-impl fmt::Display for X86Operand {
+impl<'a> fmt::Display for X86Operand<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             X86Operand::Register(reg) => write!(f, "{}", reg),
-            X86Operand::Memory(reg, size) => write!(f, "[{} + {}]", reg, size),
+            X86Operand::MemoryOffset(reg, size) => write!(f, "[{} + {}]", reg, size),
+            X86Operand::MemoryLabel(reg, label) => write!(
+                f,
+                "[{} + {}]",
+                reg,
+                str::from_utf8(label).expect("PANIC: Label name not convertable to Rust str.")
+            ),
             X86Operand::Immediate(con) => write!(f, "{}", con),
             X86Operand::DataSegmentVariable(_) => todo!(),
         }?;
@@ -81,7 +88,7 @@ impl<'a> fmt::Display for X86Instruction<'a> {
             X86Instruction::Dec(op) => write!(f, "dec {}", op),
             X86Instruction::Neg(op) => write!(f, "neg {}", op),
             X86Instruction::Not(op) => write!(f, "not {}", op),
-            X86Instruction::Leaq(op1, op2) => write!(f, "leaq {}, {}", op1, op2),
+            X86Instruction::Lea(op1, op2) => write!(f, "lea {}, {}", op1, op2),
             X86Instruction::Add(op1, op2) => write!(f, "add {}, {}", op1, op2),
             X86Instruction::Sub(op1, op2) => write!(f, "sub {}, {}", op1, op2),
             X86Instruction::Imul(op1, op2) => write!(f, "imul {}, {}", op1, op2),
@@ -127,7 +134,17 @@ impl<'a> fmt::Display for X86Module<'a> {
         for i in 0..self.blocks.len() {
             write!(f, "{}\n", self.blocks.at(i))?;
         }
-        write!(f, ".ident \"weakc: 0.0.1\"\n")?;
+        write!(f, ".rodata\n\n")?;
+        for i in 0..self.strings.len() {
+            write!(
+                f,
+                ".weak.string.{:#010}:\n    .asciz \"{}\"\n",
+                i,
+                str::from_utf8(self.strings.at(i))
+                    .expect("PANIC: Weak string not convertable to Rust str.")
+            )?;
+        }
+        write!(f, "\n.ident \"weakc: 0.0.1\"\n")?;
         Ok(())
     }
 }
@@ -151,4 +168,14 @@ pub fn write_block_id(id: X86BlockID, buf: &mut [u8], offset: usize) {
     buf[7 + offset] = conv((id >> 8 & 15) as u8);
     buf[8 + offset] = conv((id >> 4 & 15) as u8);
     buf[9 + offset] = conv((id & 15) as u8);
+}
+
+pub fn write_decimal(dec: usize, buf: &mut [u8], offset: usize) {
+    let conv = |x| x as u8 + b'0';
+
+    let mut pow10 = 1000000000;
+    for i in 0..10 {
+        buf[i + offset] = conv((dec / pow10) % 10);
+        pow10 /= 10;
+    }
 }

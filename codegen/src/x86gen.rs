@@ -21,6 +21,7 @@ struct X86GenContext<'a> {
     module: X86Module<'a>,
     curr_block: X86BlockID,
     curr_func: Option<&'a ir::MIRFunction<'a>>,
+    weak_string_labels: &'a mut bump::List<'a, &'a [u8]>,
     bump: &'a bump::BumpAllocator,
 }
 
@@ -39,16 +40,17 @@ impl<'a> X86GenContext<'a> {
             },
             curr_block: 0,
             curr_func: None,
+            weak_string_labels: bump.create_list(),
             bump: bump,
         };
         context
     }
 
-    fn rax_operand() -> X86Operand {
+    fn rax_operand() -> X86Operand<'a> {
         X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::RAX))
     }
 
-    fn rsp_operand() -> X86Operand {
+    fn rsp_operand() -> X86Operand<'a> {
         X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::RSP))
     }
 
@@ -107,7 +109,15 @@ impl<'a> X86GenContext<'a> {
                             X86Operand::Immediate(*val as u64),
                         ));
                     }
-                    ir::MIRConstant::String(_) => panic!(),
+                    ir::MIRConstant::String(val) => {
+                        self.x86gen_inst(X86Instruction::Lea(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*reg)),
+                            X86Operand::MemoryLabel(
+                                X86Register::Physical(X86PhysicalRegisterID::RIP),
+                                self.weak_string_labels.at(*val as usize),
+                            ),
+                        ));
+                    }
                 },
                 ir::MIRInstruction::Return(ret_val) => {
                     if let Some(ret_val) = ret_val {
@@ -135,6 +145,12 @@ impl<'a> X86GenContext<'a> {
     fn x86gen_program(&mut self, program: &'a ir::MIRModule<'a>) {
         for i in 0..program.strings.len() {
             self.module.strings.push(program.strings.at(i));
+            let weak_string_label = unsafe { self.bump.alloc_slice_raw(23) };
+            for j in 0..13 {
+                weak_string_label[j] = b".weak.string."[j];
+            }
+            write_decimal(i, weak_string_label, 13);
+            self.weak_string_labels.push(weak_string_label);
         }
         for i in 0..program.funcs.len() {
             self.x86gen_function(program.funcs.at(i));

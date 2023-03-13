@@ -92,6 +92,8 @@ pub enum X86PhysicalRegisterID {
     R13B,
     R14B,
     R15B,
+
+    RIP,
 }
 
 pub enum X86PhysicalRegisterUsageBit {
@@ -105,12 +107,13 @@ pub enum X86PhysicalRegisterUsageBit {
     FunctionParameter6 = 128,
     FunctionReturnValue = 256,
     StackPointer = 512,
+    InstructionPointer = 1024,
 }
 
 pub type X86PhysicalRegisterUsage = u32;
 
 impl X86PhysicalRegisterID {
-    fn get_pack_and_pos(&self) -> (u32, u32) {
+    fn get_pack_and_pos(&self) -> (i32, i32) {
         match self {
             X86PhysicalRegisterID::RAX => (0, 0),
             X86PhysicalRegisterID::RBX => (1, 0),
@@ -179,12 +182,15 @@ impl X86PhysicalRegisterID {
             X86PhysicalRegisterID::R13B => (13, 3),
             X86PhysicalRegisterID::R14B => (14, 3),
             X86PhysicalRegisterID::R15B => (15, 3),
+
+            X86PhysicalRegisterID::RIP => (-1, -1),
         }
     }
 
     pub fn get_usage(&self) -> X86PhysicalRegisterUsage {
         let (pack, _) = self.get_pack_and_pos();
         let bits = match pack {
+            -1 => X86PhysicalRegisterUsageBit::InstructionPointer as u32,
             0 => {
                 X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
                     | X86PhysicalRegisterUsageBit::FunctionReturnValue as u32
@@ -321,6 +327,8 @@ impl fmt::Display for X86PhysicalRegisterID {
             X86PhysicalRegisterID::R13B => write!(f, "r13b"),
             X86PhysicalRegisterID::R14B => write!(f, "r14b"),
             X86PhysicalRegisterID::R15B => write!(f, "r15b"),
+
+            X86PhysicalRegisterID::RIP => write!(f, "rip"),
         }?;
         Ok(())
     }
