@@ -21,6 +21,7 @@ struct X86GenContext<'a> {
     module: X86Module<'a>,
     curr_block: X86BlockID,
     curr_func: Option<&'a ir::MIRFunction<'a>>,
+    weak_float_labels: &'a mut bump::List<'a, &'a [u8]>,
     weak_string_labels: &'a mut bump::List<'a, &'a [u8]>,
     bump: &'a bump::BumpAllocator,
 }
@@ -37,13 +38,31 @@ impl<'a> X86GenContext<'a> {
             module: X86Module {
                 strings: bump.create_list(),
                 blocks: bump.create_list(),
+                floats: bump.create_list(),
             },
             curr_block: 0,
             curr_func: None,
+            weak_float_labels: bump.create_list(),
             weak_string_labels: bump.create_list(),
             bump: bump,
         };
         context
+    }
+
+    fn record_float(&mut self, f: f64) -> usize {
+        for i in 0..self.module.floats.len() {
+            if *self.module.floats.at(i) == f {
+                return i;
+            }
+        }
+        self.module.floats.push(f);
+        let weak_float_label = unsafe { self.bump.alloc_slice_raw(30) };
+        for j in 0..12 {
+            weak_float_label[j] = b".weak.float."[j];
+        }
+        write_bits_to_hex(f.to_bits(), weak_float_label, 12);
+        self.weak_float_labels.push(weak_float_label);
+        return self.module.floats.len() - 1;
     }
 
     fn rax_operand() -> X86Operand<'a> {
@@ -120,7 +139,16 @@ impl<'a> X86GenContext<'a> {
                             X86Operand::Immediate(if *val { 1 } else { 0 }),
                         ));
                     }
-                    ir::MIRConstant::Real(_) => panic!(),
+                    ir::MIRConstant::Real(val) => {
+                        let float_id = self.record_float(*val);
+                        self.x86gen_inst(X86Instruction::Movsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*reg)),
+                            X86Operand::MemoryLabel(
+                                X86Register::Physical(X86PhysicalRegisterID::RIP),
+                                self.weak_float_labels.at(float_id),
+                            ),
+                        ));
+                    }
                     ir::MIRConstant::Fixed(val) => {
                         self.x86gen_inst(X86Instruction::Mov(
                             X86Operand::Register(self.mir_to_x86_virt_reg(*reg)),

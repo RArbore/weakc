@@ -44,6 +44,7 @@ pub enum X86Instruction<'a> {
     Or(X86Operand<'a>, X86Operand<'a>),
     And(X86Operand<'a>, X86Operand<'a>),
     Mov(X86Operand<'a>, X86Operand<'a>),
+    Movsd(X86Operand<'a>, X86Operand<'a>),
     Push(X86Operand<'a>),
     Pop(X86Operand<'a>),
     Cmp(X86Operand<'a>, X86Operand<'a>),
@@ -63,6 +64,7 @@ pub struct X86Block<'a> {
 pub struct X86Module<'a> {
     pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
+    pub floats: &'a mut bump::List<'a, f64>,
 }
 
 impl<'a> fmt::Display for X86Operand<'a> {
@@ -98,6 +100,7 @@ impl<'a> fmt::Display for X86Instruction<'a> {
             X86Instruction::Or(op1, op2) => write!(f, "or {}, {}", op1, op2),
             X86Instruction::And(op1, op2) => write!(f, "and {}, {}", op1, op2),
             X86Instruction::Mov(op1, op2) => write!(f, "mov {}, {}", op1, op2),
+            X86Instruction::Movsd(op1, op2) => write!(f, "movsd {}, {}", op1, op2),
             X86Instruction::Push(op) => write!(f, "push {}", op),
             X86Instruction::Pop(op) => write!(f, "pop {}", op),
             X86Instruction::Cmp(op1, op2) => write!(f, "cmp {}, {}", op1, op2),
@@ -139,6 +142,10 @@ impl<'a> fmt::Display for X86Module<'a> {
             write!(f, "{}\n", self.blocks.at(i))?;
         }
         write!(f, ".rodata\n\n")?;
+        for i in 0..self.floats.len() {
+            let bits = self.floats.at(i).to_bits();
+            write!(f, ".weak.float.{:#016x}:\n    .quad {:#016x}\n", bits, bits)?;
+        }
         for i in 0..self.strings.len() {
             write!(
                 f,
@@ -172,6 +179,35 @@ pub fn write_block_id(id: X86BlockID, buf: &mut [u8], offset: usize) {
     buf[7 + offset] = conv((id >> 8 & 15) as u8);
     buf[8 + offset] = conv((id >> 4 & 15) as u8);
     buf[9 + offset] = conv((id & 15) as u8);
+}
+
+pub fn write_bits_to_hex(id: u64, buf: &mut [u8], offset: usize) {
+    let conv = |x| {
+        if x < 10 {
+            x + b'0'
+        } else {
+            x - 10 + b'a'
+        }
+    };
+
+    buf[offset] = b'0';
+    buf[1 + offset] = b'x';
+    buf[2 + offset] = conv((id >> 60) as u8);
+    buf[3 + offset] = conv((id >> 56 & 15) as u8);
+    buf[4 + offset] = conv((id >> 52 & 15) as u8);
+    buf[5 + offset] = conv((id >> 48 & 15) as u8);
+    buf[6 + offset] = conv((id >> 44 & 15) as u8);
+    buf[7 + offset] = conv((id >> 40 & 15) as u8);
+    buf[8 + offset] = conv((id >> 36 & 15) as u8);
+    buf[9 + offset] = conv((id >> 32 & 15) as u8);
+    buf[10 + offset] = conv((id >> 28 & 15) as u8);
+    buf[11 + offset] = conv((id >> 24 & 15) as u8);
+    buf[12 + offset] = conv((id >> 20 & 15) as u8);
+    buf[13 + offset] = conv((id >> 16 & 15) as u8);
+    buf[14 + offset] = conv((id >> 12 & 15) as u8);
+    buf[15 + offset] = conv((id >> 8 & 15) as u8);
+    buf[16 + offset] = conv((id >> 4 & 15) as u8);
+    buf[17 + offset] = conv((id & 15) as u8);
 }
 
 pub fn write_decimal(dec: usize, buf: &mut [u8], offset: usize) {
