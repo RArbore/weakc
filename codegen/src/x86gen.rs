@@ -289,9 +289,19 @@ impl<'a> X86GenContext<'a> {
                                 )),
                                 _ => {
                                     num_pushed_args += 1;
-                                    self.x86gen_inst(X86Instruction::Push(X86Operand::Register(
-                                        virt_reg,
-                                    )));
+                                    self.x86gen_inst(X86Instruction::Sub(
+                                        X86Operand::Register(X86Register::Physical(
+                                            X86PhysicalRegisterID::RSP,
+                                        )),
+                                        X86Operand::Immediate(8),
+                                    ));
+                                    self.x86gen_inst(X86Instruction::Movsd(
+                                        X86Operand::MemoryOffset(
+                                            X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                            0,
+                                        ),
+                                        X86Operand::Register(virt_reg),
+                                    ));
                                 }
                             }
                             num_floating_args += 1;
