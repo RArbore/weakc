@@ -16,7 +16,7 @@ use core::fmt;
 
 pub type X86VirtualRegisterID = u32;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum X86VirtualRegisterType {
     Fixed32,
     Fixed64,
@@ -33,7 +33,7 @@ impl X86VirtualRegisterType {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum X86PhysicalRegisterID {
     RAX,
     RBX,
@@ -106,6 +106,7 @@ pub enum X86PhysicalRegisterID {
     RIP,
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum X86PhysicalRegisterUsageBit {
     GeneralPurposeCallerSaved = 1,
     GeneralPurposeCalleeSaved = 2,
@@ -250,7 +251,7 @@ pub fn x86_physical_registers_overlap(
         && (first_pos == 2 && second_pos == 3 || first_pos == 3 && second_pos == 2)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub enum X86Register {
     Virtual(X86VirtualRegisterID, X86VirtualRegisterType),
     Physical(X86PhysicalRegisterID),

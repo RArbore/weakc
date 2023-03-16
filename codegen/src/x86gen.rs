@@ -140,14 +140,22 @@ impl<'a> X86GenContext<'a> {
                         ));
                     }
                     ir::MIRConstant::Real(val) => {
-                        let float_id = self.record_float(*val);
-                        self.x86gen_inst(X86Instruction::Movsd(
-                            X86Operand::Register(self.mir_to_x86_virt_reg(*reg)),
-                            X86Operand::MemoryLabel(
-                                X86Register::Physical(X86PhysicalRegisterID::RIP),
-                                self.weak_float_labels.at(float_id),
-                            ),
-                        ));
+                        let virt_reg = self.mir_to_x86_virt_reg(*reg);
+                        if *val != 0.0 {
+                            let float_id = self.record_float(*val);
+                            self.x86gen_inst(X86Instruction::Movsd(
+                                X86Operand::Register(virt_reg),
+                                X86Operand::MemoryLabel(
+                                    X86Register::Physical(X86PhysicalRegisterID::RIP),
+                                    self.weak_float_labels.at(float_id),
+                                ),
+                            ));
+                        } else {
+                            self.x86gen_inst(X86Instruction::Xorps(
+                                X86Operand::Register(virt_reg),
+                                X86Operand::Register(virt_reg),
+                            ));
+                        }
                     }
                     ir::MIRConstant::Fixed(val) => {
                         self.x86gen_inst(X86Instruction::Mov(
