@@ -103,22 +103,49 @@ pub enum X86PhysicalRegisterID {
     R14B,
     R15B,
 
+    XMM0,
+    XMM1,
+    XMM2,
+    XMM3,
+    XMM4,
+    XMM5,
+    XMM6,
+    XMM7,
+    XMM8,
+    XMM9,
+    XMM10,
+    XMM11,
+    XMM12,
+    XMM13,
+    XMM14,
+    XMM15,
+
     RIP,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum X86PhysicalRegisterUsageBit {
-    GeneralPurposeCallerSaved = 1,
-    GeneralPurposeCalleeSaved = 2,
-    FunctionParameter1 = 4,
-    FunctionParameter2 = 8,
-    FunctionParameter3 = 16,
-    FunctionParameter4 = 32,
-    FunctionParameter5 = 64,
-    FunctionParameter6 = 128,
-    FunctionReturnValue = 256,
-    StackPointer = 512,
-    InstructionPointer = 1024,
+    FixedCallerSaved = 1 << 0,
+    FixedCalleeSaved = 1 << 1,
+    FloatingCallerSaved = 1 << 2,
+    FixedFunctionParameter1 = 1 << 3,
+    FixedFunctionParameter2 = 1 << 4,
+    FixedFunctionParameter3 = 1 << 5,
+    FixedFunctionParameter4 = 1 << 6,
+    FixedFunctionParameter5 = 1 << 7,
+    FixedFunctionParameter6 = 1 << 8,
+    FloatingFunctionParameter1 = 1 << 9,
+    FloatingFunctionParameter2 = 1 << 10,
+    FloatingFunctionParameter3 = 1 << 11,
+    FloatingFunctionParameter4 = 1 << 12,
+    FloatingFunctionParameter5 = 1 << 13,
+    FloatingFunctionParameter6 = 1 << 14,
+    FloatingFunctionParameter7 = 1 << 15,
+    FloatingFunctionParameter8 = 1 << 16,
+    FixedFunctionReturnValue = 1 << 17,
+    FloatingFunctionReturnValue = 1 << 18,
+    StackPointer = 1 << 19,
+    InstructionPointer = 1 << 20,
 }
 
 pub type X86PhysicalRegisterUsage = u32;
@@ -194,6 +221,23 @@ impl X86PhysicalRegisterID {
             X86PhysicalRegisterID::R14B => (14, 3),
             X86PhysicalRegisterID::R15B => (15, 3),
 
+            X86PhysicalRegisterID::XMM0 => (16, 0),
+            X86PhysicalRegisterID::XMM1 => (17, 0),
+            X86PhysicalRegisterID::XMM2 => (18, 0),
+            X86PhysicalRegisterID::XMM3 => (19, 0),
+            X86PhysicalRegisterID::XMM4 => (20, 0),
+            X86PhysicalRegisterID::XMM5 => (21, 0),
+            X86PhysicalRegisterID::XMM6 => (22, 0),
+            X86PhysicalRegisterID::XMM7 => (23, 0),
+            X86PhysicalRegisterID::XMM8 => (24, 0),
+            X86PhysicalRegisterID::XMM9 => (25, 0),
+            X86PhysicalRegisterID::XMM10 => (26, 0),
+            X86PhysicalRegisterID::XMM11 => (27, 0),
+            X86PhysicalRegisterID::XMM12 => (28, 0),
+            X86PhysicalRegisterID::XMM13 => (29, 0),
+            X86PhysicalRegisterID::XMM14 => (30, 0),
+            X86PhysicalRegisterID::XMM15 => (31, 0),
+
             X86PhysicalRegisterID::RIP => (-1, -1),
         }
     }
@@ -203,38 +247,74 @@ impl X86PhysicalRegisterID {
         let bits = match pack {
             -1 => X86PhysicalRegisterUsageBit::InstructionPointer as u32,
             0 => {
-                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
-                    | X86PhysicalRegisterUsageBit::FunctionReturnValue as u32
+                X86PhysicalRegisterUsageBit::FixedCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FixedFunctionReturnValue as u32
             }
-            1 => X86PhysicalRegisterUsageBit::GeneralPurposeCalleeSaved as u32,
+            1 => X86PhysicalRegisterUsageBit::FixedCalleeSaved as u32,
             2 => {
-                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
-                    | X86PhysicalRegisterUsageBit::FunctionParameter4 as u32
+                X86PhysicalRegisterUsageBit::FixedCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FixedFunctionParameter4 as u32
             }
             3 => {
-                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
-                    | X86PhysicalRegisterUsageBit::FunctionParameter3 as u32
+                X86PhysicalRegisterUsageBit::FixedCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FixedFunctionParameter3 as u32
             }
             4 => {
-                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
-                    | X86PhysicalRegisterUsageBit::FunctionParameter2 as u32
+                X86PhysicalRegisterUsageBit::FixedCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FixedFunctionParameter2 as u32
             }
             5 => {
-                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
-                    | X86PhysicalRegisterUsageBit::FunctionParameter1 as u32
+                X86PhysicalRegisterUsageBit::FixedCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FixedFunctionParameter1 as u32
             }
             6 => X86PhysicalRegisterUsageBit::StackPointer as u32,
-            7 => X86PhysicalRegisterUsageBit::GeneralPurposeCalleeSaved as u32,
+            7 => X86PhysicalRegisterUsageBit::FixedCalleeSaved as u32,
             8 => {
-                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
-                    | X86PhysicalRegisterUsageBit::FunctionParameter5 as u32
+                X86PhysicalRegisterUsageBit::FixedCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FixedFunctionParameter5 as u32
             }
             9 => {
-                X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32
-                    | X86PhysicalRegisterUsageBit::FunctionParameter6 as u32
+                X86PhysicalRegisterUsageBit::FixedCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FixedFunctionParameter6 as u32
             }
-            10 | 11 => X86PhysicalRegisterUsageBit::GeneralPurposeCallerSaved as u32,
-            12 | 13 | 14 | 15 => X86PhysicalRegisterUsageBit::GeneralPurposeCalleeSaved as u32,
+            10 | 11 => X86PhysicalRegisterUsageBit::FixedCallerSaved as u32,
+            12 | 13 | 14 | 15 => X86PhysicalRegisterUsageBit::FixedCalleeSaved as u32,
+            16 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter1 as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionReturnValue as u32
+            }
+            17 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter2 as u32
+            }
+            18 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter3 as u32
+            }
+            19 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter4 as u32
+            }
+            20 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter5 as u32
+            }
+            21 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter6 as u32
+            }
+            22 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter7 as u32
+            }
+            23 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+                    | X86PhysicalRegisterUsageBit::FloatingFunctionParameter8 as u32
+            }
+            24 | 25 | 26 | 27 | 28 | 29 | 30 | 31 => {
+                X86PhysicalRegisterUsageBit::FloatingCallerSaved as u32
+            }
             _ => panic!("PANIC: Invalid register pack."),
         };
         bits
@@ -248,7 +328,7 @@ pub fn x86_physical_registers_overlap(
     let (first_pack, first_pos) = first.get_pack_and_pos();
     let (second_pack, second_pos) = second.get_pack_and_pos();
     first_pack == second_pack
-        && (first_pos == 2 && second_pos == 3 || first_pos == 3 && second_pos == 2)
+        && !(first_pos == 2 && second_pos == 3 || first_pos == 3 && second_pos == 2)
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -353,6 +433,23 @@ impl fmt::Display for X86PhysicalRegisterID {
             X86PhysicalRegisterID::R13B => write!(f, "r13b"),
             X86PhysicalRegisterID::R14B => write!(f, "r14b"),
             X86PhysicalRegisterID::R15B => write!(f, "r15b"),
+
+            X86PhysicalRegisterID::XMM0 => write!(f, "xmm0"),
+            X86PhysicalRegisterID::XMM1 => write!(f, "xmm1"),
+            X86PhysicalRegisterID::XMM2 => write!(f, "xmm2"),
+            X86PhysicalRegisterID::XMM3 => write!(f, "xmm3"),
+            X86PhysicalRegisterID::XMM4 => write!(f, "xmm4"),
+            X86PhysicalRegisterID::XMM5 => write!(f, "xmm5"),
+            X86PhysicalRegisterID::XMM6 => write!(f, "xmm6"),
+            X86PhysicalRegisterID::XMM7 => write!(f, "xmm7"),
+            X86PhysicalRegisterID::XMM8 => write!(f, "xmm8"),
+            X86PhysicalRegisterID::XMM9 => write!(f, "xmm9"),
+            X86PhysicalRegisterID::XMM10 => write!(f, "xmm10"),
+            X86PhysicalRegisterID::XMM11 => write!(f, "xmm11"),
+            X86PhysicalRegisterID::XMM12 => write!(f, "xmm12"),
+            X86PhysicalRegisterID::XMM13 => write!(f, "xmm13"),
+            X86PhysicalRegisterID::XMM14 => write!(f, "xmm14"),
+            X86PhysicalRegisterID::XMM15 => write!(f, "xmm15"),
 
             X86PhysicalRegisterID::RIP => write!(f, "rip"),
         }?;
