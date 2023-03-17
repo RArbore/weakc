@@ -45,7 +45,28 @@ void rt_print_string(const char *val) {
 }
 
 void rt_print_number(double val) {
-    printf("%f\n", val);
+    long precision = 1000000000;
+
+    if (val < 0.0) {
+	printf("-");
+	val = -val;
+    }
+
+    val += 0.5 / precision;
+    long integral = val;
+    long fractional = (val - integral) * precision;
+    if (fractional < 0) {
+	printf("inf");
+    } else {
+	printf("%ld.", integral);
+	for (long i = precision / 10; i > 1; i /= 10) {
+	    if (i > fractional) {
+		printf("0");
+	    }
+	}
+	printf("%ld", fractional);
+    }
+    printf("\n");
 }
 
 void rt_print_tensor(const tensor *val) {
