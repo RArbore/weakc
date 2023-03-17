@@ -24,7 +24,8 @@ pub type X86BlockID = u32;
 #[derive(Debug, PartialEq)]
 pub enum X86Operand<'a> {
     Register(X86Register),
-    MemoryOffset(X86Register, usize),
+    MemoryOffsetConstant(X86Register, usize),
+    MemoryOffsetLinear(usize, X86Register, X86Register),
     MemoryLabel(X86Register, &'a [u8]),
     Immediate(u64),
     DataSegmentVariable(u32),
@@ -72,7 +73,10 @@ impl<'a> fmt::Display for X86Operand<'a> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             X86Operand::Register(reg) => write!(f, "{}", reg),
-            X86Operand::MemoryOffset(reg, size) => write!(f, "[{} + {}]", reg, size),
+            X86Operand::MemoryOffsetConstant(reg, size) => write!(f, "[{} + {}]", reg, size),
+            X86Operand::MemoryOffsetLinear(coeff, linear_reg, constant_reg) => {
+                write!(f, "[{} * {} + {}]", coeff, linear_reg, constant_reg)
+            }
             X86Operand::MemoryLabel(reg, label) => write!(
                 f,
                 "[{} + {}]",
