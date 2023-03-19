@@ -202,15 +202,29 @@ impl<'a> MIRGenContext<'a> {
                     }
                 }
                 HIRInstruction::Unary(left_reg, op, right_reg) => {
-                    let op = match op {
-                        HIRUnaryOp::Not => MIRUnaryOp::Not,
-                        HIRUnaryOp::Negate => MIRUnaryOp::Negate,
-                        HIRUnaryOp::Shape => todo!(),
-                    };
-                    if let Some((left_mir_reg, right_mir_reg)) =
-                        convert_2_registers((*left_reg, *right_reg))
-                    {
-                        self.add_inst(MIRInstruction::Unary(left_mir_reg, op, right_mir_reg));
+                    if let HIRUnaryOp::Shape = op {
+                        if let Some((left_mir_reg, right_mir_reg)) =
+                            convert_2_registers((*left_reg, *right_reg))
+                        {
+                            self.add_inst(MIRInstruction::Call(
+                                Some(left_mir_reg),
+                                MIR_EXTERNAL_FUNCTION_RT_SHAPE_OF_TENSOR.0,
+                                bump_list!(self.bump, right_mir_reg),
+                            ));
+                        }
+                    } else {
+                        let op = match op {
+                            HIRUnaryOp::Not => MIRUnaryOp::Not,
+                            HIRUnaryOp::Negate => MIRUnaryOp::Negate,
+                            _ => {
+                                panic!("PANIC: HIRUnaryOp should've been handled by outer branch.")
+                            }
+                        };
+                        if let Some((left_mir_reg, right_mir_reg)) =
+                            convert_2_registers((*left_reg, *right_reg))
+                        {
+                            self.add_inst(MIRInstruction::Unary(left_mir_reg, op, right_mir_reg));
+                        }
                     }
                 }
                 HIRInstruction::Binary(result_reg, op, left_reg, right_reg) => {

@@ -168,6 +168,11 @@ pub const MIR_EXTERNAL_FUNCTION_RT_EQUALS_EQUALS_TENSORS: MIRExternalFunction = 
     ),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_SHAPE_OF_TENSOR: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"@rt_shape_of_tensor"),
+    (&[MIRType::Pointer], Some(MIRType::Pointer)),
+);
+
 pub const MIR_TENSOR_SIZE: u32 = 24;
 
 #[derive(Debug, PartialEq, Clone, Copy)]

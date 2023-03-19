@@ -434,7 +434,6 @@ impl<'a> X86GenContext<'a> {
             label: &func.name[1..],
             insts: self.bump.create_list(),
         });
-        self.x86gen_function_prologue(func);
         for i in 0..func.blocks.len() {
             let label = unsafe { self.bump.alloc_slice_raw(func.name.len() + 10) };
             for j in 1..func.name.len() {
@@ -443,12 +442,15 @@ impl<'a> X86GenContext<'a> {
             label[func.name.len() - 1] = b'.';
             let block_id = (i + 1) as X86BlockID + func_block_id;
             write_block_id(block_id, label, func.name.len());
+            if i == 0 {
+                self.x86gen_function_prologue(func, label);
+            }
             self.x86gen_block(func.blocks.at(i), block_id, label);
         }
         self.curr_func = None;
     }
 
-    fn x86gen_function_prologue(&mut self, func: &'a ir::MIRFunction<'a>) {
+    fn x86gen_function_prologue(&mut self, func: &'a ir::MIRFunction<'a>, label: &'a [u8]) {
         self.x86gen_inst(X86Instruction::Sub(
             Self::rsp_operand(),
             X86Operand::Immediate(func.naive_stack_vars_size() as u64),
@@ -545,6 +547,7 @@ impl<'a> X86GenContext<'a> {
                 num_fixed_params += 1;
             }
         }
+        self.x86gen_inst(X86Instruction::Jmp(label));
     }
 
     fn x86gen_function_epilogue(&mut self, func: &'a ir::MIRFunction<'a>) {

@@ -109,8 +109,10 @@ impl<'a> fmt::Display for X86Instruction<'a> {
             X86Instruction::And(op1, op2) => write!(f, "and {}, {}", op1, op2),
             X86Instruction::Mov(op1, op2) => write!(f, "mov {}, {}", op1, op2),
             X86Instruction::Movsd(op1, op2) => write!(f, "movsd {}, {}", op1, op2),
+            X86Instruction::Movsxd(op1, op2) => write!(f, "movsxd {}, {}", op1, op2),
             X86Instruction::Push(op) => write!(f, "push {}", op),
             X86Instruction::Pop(op) => write!(f, "pop {}", op),
+            X86Instruction::Cvttsd2si(op1, op2) => write!(f, "cvttsd2si {}, {}", op1, op2),
             X86Instruction::Cmp(op1, op2) => write!(f, "cmp {}, {}", op1, op2),
             X86Instruction::Test(op1, op2) => write!(f, "test {}, {}", op1, op2),
             X86Instruction::Jmp(label) => write!(
