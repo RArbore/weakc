@@ -251,6 +251,79 @@ impl<'a> X86GenContext<'a> {
                         }
                     };
                 }
+                ir::MIRInstruction::Binary(dst_reg, op, left_reg, right_reg) => match op {
+                    ir::MIRBinaryOp::AddReals => {
+                        self.x86gen_inst(X86Instruction::Movsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Addsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                    ir::MIRBinaryOp::SubtractReals => {
+                        self.x86gen_inst(X86Instruction::Movsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Subsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                    ir::MIRBinaryOp::MultiplyReals => {
+                        self.x86gen_inst(X86Instruction::Movsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Mulsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                    ir::MIRBinaryOp::DivideReals => {
+                        self.x86gen_inst(X86Instruction::Movsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Divsd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+
+                    ir::MIRBinaryOp::AddFixed | ir::MIRBinaryOp::AddSizes => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Add(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                    ir::MIRBinaryOp::SubtractFixed | ir::MIRBinaryOp::SubtractSizes => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Sub(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                    ir::MIRBinaryOp::MultiplyFixed | ir::MIRBinaryOp::MultiplySizes => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Imul(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                },
                 ir::MIRInstruction::Gep(dst_reg, src_reg, offset_reg, offset_type) => {
                     self.x86gen_inst(X86Instruction::Lea(
                         X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
