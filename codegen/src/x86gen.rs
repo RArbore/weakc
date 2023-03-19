@@ -217,6 +217,40 @@ impl<'a> X86GenContext<'a> {
                         X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
                     ));
                 }
+                ir::MIRInstruction::Unary(dst_reg, op, src_reg) => {
+                    match op {
+                        ir::MIRUnaryOp::Not => {
+                            self.x86gen_inst(X86Instruction::Mov(
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                            ));
+                            self.x86gen_inst(X86Instruction::Not(X86Operand::Register(
+                                self.mir_to_x86_virt_reg(*dst_reg),
+                            )));
+                        }
+                        ir::MIRUnaryOp::Negate => {
+                            self.x86gen_inst(X86Instruction::Mov(
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                            ));
+                            self.x86gen_inst(X86Instruction::Neg(X86Operand::Register(
+                                self.mir_to_x86_virt_reg(*dst_reg),
+                            )));
+                        }
+                        ir::MIRUnaryOp::Round => {
+                            self.x86gen_inst(X86Instruction::Cvttsd2si(
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                            ));
+                        }
+                        ir::MIRUnaryOp::Widen => {
+                            self.x86gen_inst(X86Instruction::Movsxd(
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                            ));
+                        }
+                    };
+                }
                 ir::MIRInstruction::Gep(dst_reg, src_reg, offset_reg, offset_type) => {
                     self.x86gen_inst(X86Instruction::Lea(
                         X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),

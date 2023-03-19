@@ -12,6 +12,7 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <stdio.h>
 
@@ -25,6 +26,10 @@ void rt_memcpy(char *restrict dst, char *restrict src, size_t size) {
     for (size_t i = 0; i < size; ++i) {
 	dst[i] = src[i];
     }
+}
+
+void rt_assert(int cond) {
+    assert(cond);
 }
 
 void *rt_malloc(size_t size) {

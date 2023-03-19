@@ -205,7 +205,7 @@ impl<'a> MIRGenContext<'a> {
                     let op = match op {
                         HIRUnaryOp::Not => MIRUnaryOp::Not,
                         HIRUnaryOp::Negate => MIRUnaryOp::Negate,
-                        HIRUnaryOp::Shape => MIRUnaryOp::Shape,
+                        HIRUnaryOp::Shape => todo!(),
                     };
                     if let Some((left_mir_reg, right_mir_reg)) =
                         convert_2_registers((*left_reg, *right_reg))

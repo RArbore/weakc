@@ -174,7 +174,6 @@ pub const MIR_TENSOR_SIZE: u32 = 24;
 pub enum MIRUnaryOp {
     Not,
     Negate,
-    Shape,
     Round,
     Widen,
 }
