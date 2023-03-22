@@ -58,6 +58,7 @@ pub enum X86Instruction<'a> {
     Cmp(X86Operand<'a>, X86Operand<'a>),
     Test(X86Operand<'a>, X86Operand<'a>),
     Jmp(&'a [u8]),
+    Jnz(&'a [u8]),
     Call(&'a [u8]),
     Ret,
 }
@@ -126,6 +127,11 @@ impl<'a> fmt::Display for X86Instruction<'a> {
             X86Instruction::Jmp(label) => write!(
                 f,
                 "jmp {}",
+                str::from_utf8(label).expect("PANIC: Label name not convertable to Rust str.")
+            ),
+            X86Instruction::Jnz(label) => write!(
+                f,
+                "jnz {}",
                 str::from_utf8(label).expect("PANIC: Label name not convertable to Rust str.")
             ),
             X86Instruction::Call(label) => write!(

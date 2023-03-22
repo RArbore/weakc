@@ -23,6 +23,7 @@ struct X86GenContext<'a> {
     curr_func: Option<&'a ir::MIRFunction<'a>>,
     weak_float_labels: &'a mut bump::List<'a, &'a [u8]>,
     weak_string_labels: &'a mut bump::List<'a, &'a [u8]>,
+    curr_func_block_labels: &'a mut bump::List<'a, &'a [u8]>,
     bump: &'a bump::BumpAllocator,
 }
 
@@ -44,6 +45,7 @@ impl<'a> X86GenContext<'a> {
             curr_func: None,
             weak_float_labels: bump.create_list(),
             weak_string_labels: bump.create_list(),
+            curr_func_block_labels: bump.create_list(),
             bump: bump,
         };
         context
@@ -323,6 +325,8 @@ impl<'a> X86GenContext<'a> {
                             X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
                         ));
                     }
+
+                    _ => todo!(),
                 },
                 ir::MIRInstruction::Gep(dst_reg, src_reg, offset_reg, offset_type) => {
                     self.x86gen_inst(X86Instruction::Lea(
@@ -344,6 +348,23 @@ impl<'a> X86GenContext<'a> {
                     self.x86gen_inst(X86Instruction::Mov(
                         X86Operand::MemoryOffsetConstant(self.mir_to_x86_virt_reg(*dst_reg), 0),
                         X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                    ));
+                }
+                ir::MIRInstruction::BranchUncond(mir_block_id) => {
+                    self.x86gen_inst(X86Instruction::Jmp(
+                        self.curr_func_block_labels.at(*mir_block_id as usize),
+                    ));
+                }
+                ir::MIRInstruction::BranchCond(cond_reg, true_mir_block_id, false_mir_block_id) => {
+                    self.x86gen_inst(X86Instruction::Test(
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*cond_reg)),
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*cond_reg)),
+                    ));
+                    self.x86gen_inst(X86Instruction::Jnz(
+                        self.curr_func_block_labels.at(*true_mir_block_id as usize),
+                    ));
+                    self.x86gen_inst(X86Instruction::Jmp(
+                        self.curr_func_block_labels.at(*false_mir_block_id as usize),
                     ));
                 }
                 ir::MIRInstruction::Call(ret, (_, label), args) => {
@@ -479,7 +500,6 @@ impl<'a> X86GenContext<'a> {
                     self.x86gen_function_epilogue(self.curr_func.unwrap());
                     self.x86gen_inst(X86Instruction::Ret);
                 }
-                _ => panic!(),
             };
         }
     }
@@ -493,6 +513,15 @@ impl<'a> X86GenContext<'a> {
             }
             write_decimal(i, weak_string_label, 13);
             self.weak_string_labels.push(weak_string_label);
+        }
+        let mut max_len = 0;
+        for i in 0..program.funcs.len() {
+            if max_len > program.funcs.at(i).blocks.len() {
+                max_len = program.funcs.at(i).blocks.len();
+            }
+        }
+        for _ in 0..max_len {
+            unsafe { self.curr_func_block_labels.push_empty() };
         }
         for i in 0..program.funcs.len() {
             self.x86gen_function(program.funcs.at(i));
@@ -515,9 +544,15 @@ impl<'a> X86GenContext<'a> {
             label[func.name.len() - 1] = b'.';
             let block_id = (i + 1) as X86BlockID + func_block_id;
             write_block_id(block_id, label, func.name.len());
+            *self.curr_func_block_labels.at_mut(i) = label;
+        }
+        for i in 0..func.blocks.len() {
+            let label = self.curr_func_block_labels.at(i);
             if i == 0 {
                 self.x86gen_function_prologue(func, label);
             }
+            let label = self.curr_func_block_labels.at(i);
+            let block_id = (i + 1) as X86BlockID + func_block_id;
             self.x86gen_block(func.blocks.at(i), block_id, label);
         }
         self.curr_func = None;
