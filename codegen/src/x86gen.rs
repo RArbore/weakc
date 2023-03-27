@@ -343,6 +343,38 @@ impl<'a> X86GenContext<'a> {
                             self.mir_to_x86_virt_reg(*dst_reg),
                         )));
                     }
+                    ir::MIRBinaryOp::LesserSizes => {
+                        self.x86gen_inst(X86Instruction::Cmp(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Seta(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
+                    ir::MIRBinaryOp::NotEqualsBooleans => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Xor(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                    ir::MIRBinaryOp::EqualsEqualsBooleans => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Xor(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Not(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
                     _ => todo!(),
                 },
                 ir::MIRInstruction::Gep(dst_reg, src_reg, offset_reg, offset_type) => {
