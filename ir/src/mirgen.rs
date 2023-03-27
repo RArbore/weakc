@@ -302,40 +302,55 @@ impl<'a> MIRGenContext<'a> {
                                 ));
                             }
                             _ => {
-                                let mir_op = match op {
-                                    HIRBinaryOp::AddNumbers => MIRBinaryOp::AddReals,
-                                    HIRBinaryOp::SubtractNumbers => MIRBinaryOp::SubtractReals,
-                                    HIRBinaryOp::MultiplyNumbers => MIRBinaryOp::MultiplyReals,
-                                    HIRBinaryOp::DivideNumbers => MIRBinaryOp::DivideReals,
-                                    HIRBinaryOp::PowerNumbers => MIRBinaryOp::PowerReals,
-                                    HIRBinaryOp::Greater => MIRBinaryOp::GreaterReals,
-                                    HIRBinaryOp::Lesser => MIRBinaryOp::LesserReals,
-                                    HIRBinaryOp::NotEqualsBooleans => {
-                                        MIRBinaryOp::NotEqualsBooleans
-                                    }
-                                    HIRBinaryOp::EqualsEqualsBooleans => {
-                                        MIRBinaryOp::EqualsEqualsBooleans
-                                    }
-                                    HIRBinaryOp::NotEqualsStrings => MIRBinaryOp::NotEqualsStrings,
-                                    HIRBinaryOp::EqualsEqualsStrings => {
-                                        MIRBinaryOp::EqualsEqualsStrings
-                                    }
-                                    HIRBinaryOp::NotEqualsNumbers => MIRBinaryOp::NotEqualsReals,
-                                    HIRBinaryOp::EqualsEqualsNumbers => {
-                                        MIRBinaryOp::EqualsEqualsReals
-                                    }
-                                    HIRBinaryOp::GreaterEquals => MIRBinaryOp::GreaterEqualsReals,
-                                    HIRBinaryOp::LesserEquals => MIRBinaryOp::LesserEqualsReals,
-                                    HIRBinaryOp::And => MIRBinaryOp::AndBooleans,
-                                    HIRBinaryOp::Or => MIRBinaryOp::OrBooleans,
-                                    _ => panic!("PANIC: Unimplemented simple HIR->MIR binary op."),
-                                };
-                                self.add_inst(MIRInstruction::Binary(
-                                    result_mir_reg,
-                                    mir_op,
-                                    left_mir_reg,
-                                    right_mir_reg,
-                                ));
+                                if let HIRBinaryOp::PowerNumbers = op {
+                                    self.add_inst(MIRInstruction::Call(
+                                        Some(result_mir_reg),
+                                        MIR_EXTERNAL_FUNCTION_RT_POWER_REALS.0,
+                                        bump_list!(self.bump, left_mir_reg, right_mir_reg),
+                                    ));
+                                } else {
+                                    let mir_op = match op {
+                                        HIRBinaryOp::AddNumbers => MIRBinaryOp::AddReals,
+                                        HIRBinaryOp::SubtractNumbers => MIRBinaryOp::SubtractReals,
+                                        HIRBinaryOp::MultiplyNumbers => MIRBinaryOp::MultiplyReals,
+                                        HIRBinaryOp::DivideNumbers => MIRBinaryOp::DivideReals,
+                                        HIRBinaryOp::Greater => MIRBinaryOp::GreaterReals,
+                                        HIRBinaryOp::Lesser => MIRBinaryOp::LesserReals,
+                                        HIRBinaryOp::NotEqualsBooleans => {
+                                            MIRBinaryOp::NotEqualsBooleans
+                                        }
+                                        HIRBinaryOp::EqualsEqualsBooleans => {
+                                            MIRBinaryOp::EqualsEqualsBooleans
+                                        }
+                                        HIRBinaryOp::NotEqualsStrings => {
+                                            MIRBinaryOp::NotEqualsStrings
+                                        }
+                                        HIRBinaryOp::EqualsEqualsStrings => {
+                                            MIRBinaryOp::EqualsEqualsStrings
+                                        }
+                                        HIRBinaryOp::NotEqualsNumbers => {
+                                            MIRBinaryOp::NotEqualsReals
+                                        }
+                                        HIRBinaryOp::EqualsEqualsNumbers => {
+                                            MIRBinaryOp::EqualsEqualsReals
+                                        }
+                                        HIRBinaryOp::GreaterEquals => {
+                                            MIRBinaryOp::GreaterEqualsReals
+                                        }
+                                        HIRBinaryOp::LesserEquals => MIRBinaryOp::LesserEqualsReals,
+                                        HIRBinaryOp::And => MIRBinaryOp::AndBooleans,
+                                        HIRBinaryOp::Or => MIRBinaryOp::OrBooleans,
+                                        _ => panic!(
+                                            "PANIC: Unimplemented simple HIR->MIR binary op."
+                                        ),
+                                    };
+                                    self.add_inst(MIRInstruction::Binary(
+                                        result_mir_reg,
+                                        mir_op,
+                                        left_mir_reg,
+                                        right_mir_reg,
+                                    ));
+                                }
                             }
                         }
                     }

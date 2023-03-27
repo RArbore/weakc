@@ -104,6 +104,11 @@ pub const MIR_EXTERNAL_FUNCTION_RT_LINE: MIRExternalFunction = (
     (&[], Some(MIRType::Pointer)),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_POWER_REALS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"@rt_power_reals"),
+    (&[MIRType::Real, MIRType::Real], Some(MIRType::Real)),
+);
+
 pub const MIR_EXTERNAL_FUNCTION_RT_MATMUL: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"@rt_matmul"),
     (
@@ -189,22 +194,14 @@ pub enum MIRBinaryOp {
     SubtractReals,
     MultiplyReals,
     DivideReals,
-    PowerReals,
     AddFixed,
     SubtractFixed,
     MultiplyFixed,
-    DivideFixed,
-    PowerFixed,
     AddSizes,
     SubtractSizes,
     MultiplySizes,
-    DivideSizes,
-    PowerSizes,
     GreaterReals,
     LesserReals,
-    GreaterFixed,
-    LesserFixed,
-    GreaterSizes,
     LesserSizes,
     NotEqualsBooleans,
     EqualsEqualsBooleans,
@@ -212,16 +209,10 @@ pub enum MIRBinaryOp {
     EqualsEqualsStrings,
     NotEqualsReals,
     EqualsEqualsReals,
-    NotEqualsFixed,
     EqualsEqualsFixed,
-    NotEqualsSizes,
     EqualsEqualsSizes,
     GreaterEqualsReals,
     LesserEqualsReals,
-    GreaterEqualsFixed,
-    LesserEqualsFixed,
-    GreaterEqualsSizes,
-    LesserEqualsSizes,
     AndBooleans,
     OrBooleans,
 }
