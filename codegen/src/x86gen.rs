@@ -640,7 +640,7 @@ impl<'a> X86GenContext<'a> {
         }
         let mut max_len = 0;
         for i in 0..program.funcs.len() {
-            if max_len > program.funcs.at(i).blocks.len() {
+            if max_len < program.funcs.at(i).blocks.len() {
                 max_len = program.funcs.at(i).blocks.len();
             }
         }
