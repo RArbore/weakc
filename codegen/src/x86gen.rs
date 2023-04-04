@@ -388,7 +388,82 @@ impl<'a> X86GenContext<'a> {
                             self.mir_to_x86_virt_reg(*dst_reg),
                         )));
                     }
-                    _ => todo!(),
+                    ir::MIRBinaryOp::NotEqualsStrings => {
+                        self.x86gen_inst(X86Instruction::Cmp(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Setne(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
+                    ir::MIRBinaryOp::EqualsEqualsStrings
+                    | ir::MIRBinaryOp::EqualsEqualsFixed
+                    | ir::MIRBinaryOp::EqualsEqualsSizes => {
+                        self.x86gen_inst(X86Instruction::Cmp(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Sete(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
+                    ir::MIRBinaryOp::NotEqualsReals => {
+                        self.x86gen_inst(X86Instruction::Comisd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Setne(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
+                    ir::MIRBinaryOp::EqualsEqualsReals => {
+                        self.x86gen_inst(X86Instruction::Comisd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Sete(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
+                    ir::MIRBinaryOp::GreaterEqualsReals => {
+                        self.x86gen_inst(X86Instruction::Comisd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Setae(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
+                    ir::MIRBinaryOp::LesserEqualsReals => {
+                        self.x86gen_inst(X86Instruction::Comisd(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Setae(X86Operand::Register(
+                            self.mir_to_x86_virt_reg(*dst_reg),
+                        )));
+                    }
+                    ir::MIRBinaryOp::AndBooleans => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::And(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
+                    ir::MIRBinaryOp::OrBooleans => {
+                        self.x86gen_inst(X86Instruction::Mov(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*left_reg)),
+                        ));
+                        self.x86gen_inst(X86Instruction::Or(
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                            X86Operand::Register(self.mir_to_x86_virt_reg(*right_reg)),
+                        ));
+                    }
                 },
                 ir::MIRInstruction::Gep(dst_reg, src_reg, offset_reg, offset_type) => {
                     self.x86gen_inst(X86Instruction::Lea(
@@ -578,7 +653,7 @@ impl<'a> X86GenContext<'a> {
         }
         let mut max_len = 0;
         for i in 0..program.funcs.len() {
-            if max_len > program.funcs.at(i).blocks.len() {
+            if max_len < program.funcs.at(i).blocks.len() {
                 max_len = program.funcs.at(i).blocks.len();
             }
         }
