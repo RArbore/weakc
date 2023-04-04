@@ -12,12 +12,8 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-pub mod x86;
-pub mod x86gen;
-pub mod x86reg;
-pub mod x86regalloc;
+use crate::*;
 
-pub use crate::x86::*;
-pub use crate::x86gen::*;
-pub use crate::x86reg::*;
-pub use crate::x86regalloc::*;
+pub fn x86regalloc<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
+    program
+}

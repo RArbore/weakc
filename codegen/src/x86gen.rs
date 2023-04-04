@@ -37,6 +37,7 @@ impl<'a> X86GenContext<'a> {
     fn new(bump: &'a bump::BumpAllocator) -> Self {
         let context = X86GenContext {
             module: X86Module {
+                func_entries: bump.create_list(),
                 strings: bump.create_list(),
                 blocks: bump.create_list(),
                 floats: bump.create_list(),
@@ -157,12 +158,24 @@ impl<'a> X86GenContext<'a> {
         &mut self,
         block: &'a ir::MIRBasicBlock<'a>,
         block_id: X86BlockID,
+        func_block_id: X86BlockID,
         label: &'a [u8],
     ) {
+        let mir_successors = block.successors();
+        let x86_successors = match mir_successors {
+            ir::MIRBasicBlockSuccessors::Returns => X86BlockSuccessors::Returns,
+            ir::MIRBasicBlockSuccessors::Jumps(id) => {
+                X86BlockSuccessors::Jumps(id + func_block_id + 1)
+            }
+            ir::MIRBasicBlockSuccessors::Branches(id1, id2) => {
+                X86BlockSuccessors::Branches(id1 + func_block_id + 1, id2 + func_block_id + 1)
+            }
+        };
         self.curr_block = block_id;
         self.module.blocks.push(X86Block {
             label,
             insts: self.bump.create_list(),
+            successors: x86_successors,
         });
         for i in 0..block.insts.len() {
             match block.insts.at(i) {
@@ -581,9 +594,11 @@ impl<'a> X86GenContext<'a> {
         let func_block_id = self.module.blocks.len() as X86BlockID;
         self.curr_block = func_block_id;
         self.curr_func = Some(func);
+        self.module.func_entries.push(func_block_id);
         self.module.blocks.push(X86Block {
             label: &func.name[1..],
             insts: self.bump.create_list(),
+            successors: X86BlockSuccessors::Jumps(func_block_id + 1),
         });
         for i in 0..func.blocks.len() {
             let label = unsafe { self.bump.alloc_slice_raw(func.name.len() + 10) };
@@ -602,7 +617,7 @@ impl<'a> X86GenContext<'a> {
             }
             let label = self.curr_func_block_labels.at(i);
             let block_id = (i + 1) as X86BlockID + func_block_id;
-            self.x86gen_block(func.blocks.at(i), block_id, label);
+            self.x86gen_block(func.blocks.at(i), block_id, func_block_id, label);
         }
         self.curr_func = None;
     }

@@ -65,14 +65,23 @@ pub enum X86Instruction<'a> {
     Ret,
 }
 
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum X86BlockSuccessors {
+    Returns,
+    Jumps(X86BlockID),
+    Branches(X86BlockID, X86BlockID),
+}
+
 #[derive(Debug, PartialEq)]
 pub struct X86Block<'a> {
     pub label: &'a [u8],
     pub insts: &'a mut bump::List<'a, X86Instruction<'a>>,
+    pub successors: X86BlockSuccessors,
 }
 
 #[derive(Debug, PartialEq)]
 pub struct X86Module<'a> {
+    pub func_entries: &'a mut bump::List<'a, X86BlockID>,
     pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
     pub floats: &'a mut bump::List<'a, f64>,
