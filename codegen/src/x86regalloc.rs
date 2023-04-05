@@ -14,6 +14,31 @@
 
 use crate::*;
 
-pub fn x86regalloc<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
-    program
+pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
+    let num_blocks_in_func = |i| {
+        if i < program.func_entries.len() - 1 {
+            program.func_entries.at(i + 1) - program.func_entries.at(i)
+        } else {
+            program.blocks.len() as u32 - program.func_entries.at(i)
+        }
+    };
+    for i in 0..program.func_entries.len() {
+        let num_blocks = num_blocks_in_func(i);
+        let func_blocks = bump.create_list();
+        for j in 0..num_blocks {
+            func_blocks.push(
+                program
+                    .blocks
+                    .at(*program.func_entries.at(i) as usize + j as usize),
+            );
+        }
+        build_interference_graph(func_blocks);
+    }
+
+    todo!()
+}
+
+fn build_interference_graph<'a>(function: &'a mut bump::List<'a, &'a X86Block<'a>>) {
+    println!("Here's a function: {:?}", function);
+    println!("");
 }

@@ -178,7 +178,8 @@ fn main() {
                         ir::write_mir_dot_graph(&mir_program, file, i as ir::HIRFunctionID);
                     }
                 }
-                let x86_program = codegen::x86gen(&mir_program, &bump);
+                let virtual_x86_program = codegen::x86gen(&mir_program, &bump);
+                let x86_program = codegen::x86regalloc(&virtual_x86_program, &bump);
                 let mut file =
                     File::create(output.clone()).expect("PANIC: Unable to open output file.");
                 file.write_all(x86_program.to_string().as_bytes())
