@@ -32,13 +32,29 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
                     .at(*program.func_entries.at(i) as usize + j as usize),
             );
         }
-        build_interference_graph(func_blocks);
+        build_interference_graph(func_blocks, bump);
     }
 
     todo!()
 }
 
-fn build_interference_graph<'a>(function: &'a mut bump::List<'a, &'a X86Block<'a>>) {
+fn post_order_traversal<'a>(
+    curr_block: &'a X86Block<'a>,
+    post_order_function: &'a bump::List<'a, u32>,
+) -> &'a bump::List<'a, u32> {
+    post_order_function
+}
+
+fn build_interference_graph<'a>(
+    function: &'a mut bump::List<'a, &'a X86Block<'a>>,
+    bump: &'a bump::BumpAllocator,
+) {
     println!("Here's a function: {:?}", function);
+    println!("");
+    let post_order_function = post_order_traversal(function.at(0), bump.create_list());
+    println!(
+        "Here's the function in post-order: {:?}",
+        post_order_function
+    );
     println!("");
 }

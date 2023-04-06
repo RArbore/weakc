@@ -44,6 +44,13 @@ pub struct List<'a, T: Sized + PartialEq + fmt::Debug> {
     bump: &'a BumpAllocator,
 }
 
+pub struct Bitset<'a> {
+    chunk: &'a mut u8,
+    total_size: usize,
+    next: Option<&'a mut Bitset<'a>>,
+    bump: &'a BumpAllocator,
+}
+
 impl BumpAllocator {
     pub fn new() -> BumpAllocator {
         Self::new_with_start_size(STARTING_SIZE)
@@ -306,6 +313,8 @@ impl<'a, T: Sized + PartialEq + fmt::Debug> List<'a, T> {
         }
     }
 }
+
+impl<'a> Bitset<'a> {}
 
 impl<T: Sized + PartialEq + fmt::Debug> PartialEq for List<'_, T> {
     fn eq(&self, other: &Self) -> bool {
