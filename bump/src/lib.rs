@@ -45,10 +45,7 @@ pub struct List<'a, T: Sized + PartialEq + fmt::Debug> {
 }
 
 pub struct Bitset<'a> {
-    chunk: &'a mut u8,
-    total_size: usize,
-    next: Option<&'a mut Bitset<'a>>,
-    bump: &'a BumpAllocator,
+    chunk: &'a mut [u8],
 }
 
 impl BumpAllocator {
@@ -188,6 +185,18 @@ impl BumpAllocator {
         }
         list
     }
+
+    fn create_bitset_impl(&self, num_bits: usize) -> &mut Bitset {
+        assert!(num_bits > 0, "ERROR: Cannot allocate a slice of size 0.");
+        let layout = alloc::alloc::Layout::new::<u8>();
+        let alloc = self.alloc_impl((num_bits + 7) / 8, layout.align()) as *mut u8;
+        let alloc = unsafe { slice::from_raw_parts_mut(alloc, (num_bits + 7) / 8) };
+        self.alloc(Bitset { chunk: alloc })
+    }
+
+    pub fn create_bitset(&self, num_bits: usize) -> &mut Bitset {
+        self.create_bitset_impl(num_bits)
+    }
 }
 
 impl Drop for BumpAllocator {
@@ -314,8 +323,6 @@ impl<'a, T: Sized + PartialEq + fmt::Debug> List<'a, T> {
     }
 }
 
-impl<'a> Bitset<'a> {}
-
 impl<T: Sized + PartialEq + fmt::Debug> PartialEq for List<'_, T> {
     fn eq(&self, other: &Self) -> bool {
         self.eq_impl(other, 0, 0)
@@ -327,6 +334,42 @@ impl<T: Sized + PartialEq + fmt::Debug> fmt::Debug for List<'_, T> {
         let mut fmt_list = f.debug_list();
         for i in 0..self.len() {
             fmt_list.entry(self.at(i));
+        }
+        fmt_list.finish()
+    }
+}
+
+impl<'a> Bitset<'a> {
+    pub fn at(&self, idx: usize) -> bool {
+        let byte = self.chunk[idx / 8];
+        let bit = idx % 8;
+        ((byte >> bit) & 1) != 0
+    }
+
+    pub fn set(&mut self, idx: usize) {
+        let byte = self.chunk[idx / 8];
+        let bit = idx % 8;
+        self.chunk[idx / 8] = byte | (1 << bit);
+    }
+
+    pub fn unset(&mut self, idx: usize) {
+        let byte = self.chunk[idx / 8];
+        let bit = idx % 8;
+        self.chunk[idx / 8] = byte & !(1 << bit);
+    }
+}
+
+impl PartialEq for Bitset<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.chunk == other.chunk
+    }
+}
+
+impl fmt::Debug for Bitset<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut fmt_list = f.debug_list();
+        for i in 0..self.chunk.len() * 8 {
+            fmt_list.entry(&self.at(i));
         }
         fmt_list.finish()
     }
