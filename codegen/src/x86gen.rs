@@ -175,6 +175,7 @@ impl<'a> X86GenContext<'a> {
         self.module.blocks.push(X86Block {
             label,
             insts: self.bump.create_list(),
+            id: block_id,
             successors: x86_successors,
         });
         for i in 0..block.insts.len() {
@@ -673,6 +674,7 @@ impl<'a> X86GenContext<'a> {
         self.module.blocks.push(X86Block {
             label: &func.name[1..],
             insts: self.bump.create_list(),
+            id: func_block_id,
             successors: X86BlockSuccessors::Jumps(func_block_id + 1),
         });
         for i in 0..func.blocks.len() {

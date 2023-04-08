@@ -79,6 +79,7 @@ pub enum X86BlockSuccessors {
 pub struct X86Block<'a> {
     pub label: &'a [u8],
     pub insts: &'a mut bump::List<'a, X86Instruction<'a>>,
+    pub id: X86BlockID,
     pub successors: X86BlockSuccessors,
 }
 

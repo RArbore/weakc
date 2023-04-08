@@ -39,19 +39,62 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
 }
 
 fn post_order_traversal<'a>(
-    curr_block: &'a X86Block<'a>,
-    post_order_function: &'a bump::List<'a, u32>,
-) -> &'a bump::List<'a, u32> {
-    post_order_function
+    curr_block: u32,
+    function_base_id: X86BlockID,
+    found_bitset: &'a mut bump::Bitset<'a>,
+    function: &'a bump::List<'a, &'a X86Block<'a>>,
+    post_order_function: &'a mut bump::List<'a, u32>,
+) -> (&'a mut bump::List<'a, u32>, &'a mut bump::Bitset<'a>) {
+    if found_bitset.at(curr_block as usize) {
+        return (post_order_function, found_bitset);
+    }
+    found_bitset.set(curr_block as usize);
+
+    let (post_order_function, found_bitset) = match function.at(curr_block as usize).successors {
+        X86BlockSuccessors::Returns => (post_order_function, found_bitset),
+        X86BlockSuccessors::Jumps(id) => post_order_traversal(
+            id - function_base_id,
+            function_base_id,
+            found_bitset,
+            function,
+            post_order_function,
+        ),
+        X86BlockSuccessors::Branches(id1, id2) => {
+            let (left_post_order_function, left_found_bitset) = post_order_traversal(
+                id1 - function_base_id,
+                function_base_id,
+                found_bitset,
+                function,
+                post_order_function,
+            );
+            post_order_traversal(
+                id2 - function_base_id,
+                function_base_id,
+                left_found_bitset,
+                function,
+                left_post_order_function,
+            )
+        }
+    };
+
+    post_order_function.push(curr_block);
+    (post_order_function, found_bitset)
 }
 
 fn build_interference_graph<'a>(
-    function: &'a mut bump::List<'a, &'a X86Block<'a>>,
+    function: &'a bump::List<'a, &'a X86Block<'a>>,
     bump: &'a bump::BumpAllocator,
 ) {
     println!("Here's a function: {:?}", function);
     println!("");
-    let post_order_function = post_order_traversal(function.at(0), bump.create_list());
+    let found_bitset = bump.create_bitset(function.len());
+    let post_order_function = post_order_traversal(
+        0,
+        function.at(0).id,
+        found_bitset,
+        function,
+        bump.create_list(),
+    );
     println!(
         "Here's the function in post-order: {:?}",
         post_order_function
