@@ -22,7 +22,7 @@ typedef struct tensor {
     double *elements;
 } tensor;
 
-void rt_memcpy(char *restrict dst, char *restrict src, size_t size) {
+void rt_memcpy(char *restrict dst, const char *restrict src, size_t size) {
     for (size_t i = 0; i < size; ++i) {
 	dst[i] = src[i];
     }

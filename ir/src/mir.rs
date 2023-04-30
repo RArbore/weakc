@@ -109,6 +109,14 @@ pub const MIR_EXTERNAL_FUNCTION_RT_POWER_REALS: MIRExternalFunction = (
     (&[MIRType::Real, MIRType::Real], Some(MIRType::Real)),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_SHAPED_AS: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"@rt_shaped_as"),
+    (
+        &[MIRType::Pointer, MIRType::Pointer],
+        Some(MIRType::Pointer),
+    ),
+);
+
 pub const MIR_EXTERNAL_FUNCTION_RT_MATMUL: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"@rt_matmul"),
     (
@@ -482,28 +490,32 @@ impl<W: Write> MIRDotContext<W> {
                 .as_bytes(),
             )
             .unwrap();
-        match basic_block.successors() {
-            MIRBasicBlockSuccessors::Returns => {}
-            MIRBasicBlockSuccessors::Jumps(id) => {
-                self.writer.write(&name).unwrap();
-                self.writer.write(b" -> ").unwrap();
-                write_basic_block_id(id, &mut name);
-                self.writer.write(&name).unwrap();
-                self.writer.write(b";\n").unwrap();
+        if basic_block.insts.len() > 0 {
+            match basic_block.successors() {
+                MIRBasicBlockSuccessors::Returns => {}
+                MIRBasicBlockSuccessors::Jumps(id) => {
+                    self.writer.write(&name).unwrap();
+                    self.writer.write(b" -> ").unwrap();
+                    write_basic_block_id(id, &mut name);
+                    self.writer.write(&name).unwrap();
+                    self.writer.write(b";\n").unwrap();
+                }
+                MIRBasicBlockSuccessors::Branches(id1, id2) => {
+                    let mut dest = [0; 14];
+                    write_basic_block_id(id1, &mut dest);
+                    self.writer.write(&name).unwrap();
+                    self.writer.write(b" -> ").unwrap();
+                    self.writer.write(&dest).unwrap();
+                    self.writer.write(b";\n").unwrap();
+                    write_basic_block_id(id2, &mut dest);
+                    self.writer.write(&name).unwrap();
+                    self.writer.write(b" -> ").unwrap();
+                    self.writer.write(&dest).unwrap();
+                    self.writer.write(b";\n").unwrap();
+                }
             }
-            MIRBasicBlockSuccessors::Branches(id1, id2) => {
-                let mut dest = [0; 14];
-                write_basic_block_id(id1, &mut dest);
-                self.writer.write(&name).unwrap();
-                self.writer.write(b" -> ").unwrap();
-                self.writer.write(&dest).unwrap();
-                self.writer.write(b";\n").unwrap();
-                write_basic_block_id(id2, &mut dest);
-                self.writer.write(&name).unwrap();
-                self.writer.write(b" -> ").unwrap();
-                self.writer.write(&dest).unwrap();
-                self.writer.write(b";\n").unwrap();
-            }
+        } else {
+            eprintln!("WARNING: MIR Basic Block is empty for some reason.");
         }
     }
 }
