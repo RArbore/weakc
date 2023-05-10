@@ -34,7 +34,9 @@ pub enum X86Operand<'a> {
 #[derive(Debug, PartialEq)]
 pub enum X86VirtualRegisterPack {
     Zero,
+    OneDef(X86VirtualRegisterID),
     One(X86VirtualRegisterID),
+    TwoDef(X86VirtualRegisterID, X86VirtualRegisterID),
     Two(X86VirtualRegisterID, X86VirtualRegisterID),
 }
 
@@ -117,8 +119,20 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Mov(op1, op2)
             | X86Instruction::Movsd(op1, op2)
             | X86Instruction::Movsxd(op1, op2)
-            | X86Instruction::Cvttsd2si(op1, op2)
-            | X86Instruction::Cmp(op1, op2)
+            | X86Instruction::Cvttsd2si(op1, op2) => match (op1, op2) {
+                (
+                    X86Operand::Register(X86Register::Virtual(id1, _)),
+                    X86Operand::Register(X86Register::Virtual(id2, _)),
+                ) => X86VirtualRegisterPack::TwoDef(*id1, *id2),
+                (X86Operand::Register(X86Register::Virtual(id, _)), _) => {
+                    X86VirtualRegisterPack::OneDef(*id)
+                }
+                (_, X86Operand::Register(X86Register::Virtual(id, _))) => {
+                    X86VirtualRegisterPack::One(*id)
+                }
+                _ => X86VirtualRegisterPack::Zero,
+            },
+            X86Instruction::Cmp(op1, op2)
             | X86Instruction::Comisd(op1, op2)
             | X86Instruction::Test(op1, op2) => match (op1, op2) {
                 (
@@ -137,12 +151,16 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Dec(op)
             | X86Instruction::Neg(op)
             | X86Instruction::Not(op)
-            | X86Instruction::Push(op)
-            | X86Instruction::Pop(op)
             | X86Instruction::Seta(op)
             | X86Instruction::Setae(op)
             | X86Instruction::Sete(op)
             | X86Instruction::Setne(op) => match op {
+                X86Operand::Register(X86Register::Virtual(id, _)) => {
+                    X86VirtualRegisterPack::OneDef(*id)
+                }
+                _ => X86VirtualRegisterPack::Zero,
+            },
+            X86Instruction::Push(op) | X86Instruction::Pop(op) => match op {
                 X86Operand::Register(X86Register::Virtual(id, _)) => {
                     X86VirtualRegisterPack::One(*id)
                 }

@@ -155,12 +155,12 @@ impl<'a> X86GenContext<'a> {
 
     fn x86gen_inst(&mut self, inst: X86Instruction<'a>) {
         match inst.get_virtual_register_pack() {
-            X86VirtualRegisterPack::Two(id1, id2) => {
+            X86VirtualRegisterPack::OneDef(id) | X86VirtualRegisterPack::One(id) => {
+                self.module.num_virtual_registers = max(self.module.num_virtual_registers, id);
+            }
+            X86VirtualRegisterPack::TwoDef(id1, id2) | X86VirtualRegisterPack::Two(id1, id2) => {
                 self.module.num_virtual_registers =
                     max(self.module.num_virtual_registers, max(id1, id2));
-            }
-            X86VirtualRegisterPack::One(id) => {
-                self.module.num_virtual_registers = max(self.module.num_virtual_registers, id);
             }
             _ => {}
         }
