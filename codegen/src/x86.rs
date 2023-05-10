@@ -32,6 +32,13 @@ pub enum X86Operand<'a> {
 }
 
 #[derive(Debug, PartialEq)]
+pub enum X86VirtualRegisterPack {
+    Zero,
+    One(X86VirtualRegisterID),
+    Two(X86VirtualRegisterID, X86VirtualRegisterID),
+}
+
+#[derive(Debug, PartialEq)]
 pub enum X86Instruction<'a> {
     Inc(X86Operand<'a>),
     Dec(X86Operand<'a>),
@@ -89,6 +96,64 @@ pub struct X86Module<'a> {
     pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
     pub floats: &'a mut bump::List<'a, f64>,
+    pub num_virtual_registers: u32,
+}
+
+impl<'a> X86Instruction<'a> {
+    pub fn get_virtual_register_pack(&self) -> X86VirtualRegisterPack {
+        match self {
+            X86Instruction::Lea(op1, op2)
+            | X86Instruction::Add(op1, op2)
+            | X86Instruction::Addsd(op1, op2)
+            | X86Instruction::Sub(op1, op2)
+            | X86Instruction::Subsd(op1, op2)
+            | X86Instruction::Imul(op1, op2)
+            | X86Instruction::Mulsd(op1, op2)
+            | X86Instruction::Divsd(op1, op2)
+            | X86Instruction::Xor(op1, op2)
+            | X86Instruction::Xorps(op1, op2)
+            | X86Instruction::Or(op1, op2)
+            | X86Instruction::And(op1, op2)
+            | X86Instruction::Mov(op1, op2)
+            | X86Instruction::Movsd(op1, op2)
+            | X86Instruction::Movsxd(op1, op2)
+            | X86Instruction::Cvttsd2si(op1, op2)
+            | X86Instruction::Cmp(op1, op2)
+            | X86Instruction::Comisd(op1, op2)
+            | X86Instruction::Test(op1, op2) => match (op1, op2) {
+                (
+                    X86Operand::Register(X86Register::Virtual(id1, _)),
+                    X86Operand::Register(X86Register::Virtual(id2, _)),
+                ) => X86VirtualRegisterPack::Two(*id1, *id2),
+                (X86Operand::Register(X86Register::Virtual(id, _)), _) => {
+                    X86VirtualRegisterPack::One(*id)
+                }
+                (_, X86Operand::Register(X86Register::Virtual(id, _))) => {
+                    X86VirtualRegisterPack::One(*id)
+                }
+                _ => X86VirtualRegisterPack::Zero,
+            },
+            X86Instruction::Inc(op)
+            | X86Instruction::Dec(op)
+            | X86Instruction::Neg(op)
+            | X86Instruction::Not(op)
+            | X86Instruction::Push(op)
+            | X86Instruction::Pop(op)
+            | X86Instruction::Seta(op)
+            | X86Instruction::Setae(op)
+            | X86Instruction::Sete(op)
+            | X86Instruction::Setne(op) => match op {
+                X86Operand::Register(X86Register::Virtual(id, _)) => {
+                    X86VirtualRegisterPack::One(*id)
+                }
+                _ => X86VirtualRegisterPack::Zero,
+            },
+            X86Instruction::Jmp(_)
+            | X86Instruction::Jnz(_)
+            | X86Instruction::Call(_)
+            | X86Instruction::Ret => X86VirtualRegisterPack::Zero,
+        }
+    }
 }
 
 impl<'a> fmt::Display for X86Operand<'a> {

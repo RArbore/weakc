@@ -32,7 +32,7 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
                     .at(*program.func_entries.at(i) as usize + j as usize),
             );
         }
-        build_interference_graph(func_blocks, bump);
+        build_interference_graph(func_blocks, bump, program.num_virtual_registers);
     }
 
     todo!()
@@ -81,9 +81,15 @@ fn post_order_traversal<'a>(
     (post_order_function, found_bitset)
 }
 
+struct X86ProgramPoint {
+    block: X86BlockID,
+    inst: usize,
+}
+
 fn build_interference_graph<'a>(
     function: &'a bump::List<'a, &'a X86Block<'a>>,
     bump: &'a bump::BumpAllocator,
+    num_virtual_registers: u32,
 ) {
     println!("Here's a function: {:?}", function);
     println!("");
@@ -100,4 +106,8 @@ fn build_interference_graph<'a>(
         post_order_function
     );
     println!("");
+    println!(
+        "There are {} virtual registers present in the program.",
+        num_virtual_registers
+    );
 }

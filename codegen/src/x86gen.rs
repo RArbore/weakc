@@ -12,6 +12,8 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
+use core::cmp::max;
+
 extern crate bump;
 extern crate ir;
 
@@ -41,6 +43,7 @@ impl<'a> X86GenContext<'a> {
                 strings: bump.create_list(),
                 blocks: bump.create_list(),
                 floats: bump.create_list(),
+                num_virtual_registers: 0,
             },
             curr_block: 0,
             curr_func: None,
@@ -151,6 +154,16 @@ impl<'a> X86GenContext<'a> {
     }
 
     fn x86gen_inst(&mut self, inst: X86Instruction<'a>) {
+        match inst.get_virtual_register_pack() {
+            X86VirtualRegisterPack::Two(id1, id2) => {
+                self.module.num_virtual_registers =
+                    max(self.module.num_virtual_registers, max(id1, id2));
+            }
+            X86VirtualRegisterPack::One(id) => {
+                self.module.num_virtual_registers = max(self.module.num_virtual_registers, id);
+            }
+            _ => {}
+        }
         self.get_curr_block_mut().insts.push(inst);
     }
 
