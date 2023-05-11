@@ -14,7 +14,7 @@
 
 use crate::*;
 
-pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
+pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) {
     let num_blocks_in_func = |i| {
         if i < program.func_entries.len() - 1 {
             program.func_entries.at(i + 1) - program.func_entries.at(i)
@@ -34,8 +34,6 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
         }
         build_interference_graph(func_blocks, bump, program.num_virtual_registers);
     }
-
-    todo!()
 }
 
 fn post_order_traversal<'a>(
@@ -194,14 +192,11 @@ fn build_interference_graph<'a>(
         function,
         bump.create_list(),
     );
+    let base_block_id = function.at(0).id;
+    println!("{}", core::str::from_utf8(function.at(0).label).unwrap());
     println!(
         "Here's the function in post-order: {:?}",
         post_order_function
-    );
-    println!("");
-    println!(
-        "There are {} virtual registers present in the program.",
-        num_virtual_registers
     );
 
     let def_sets = unsafe { bump.alloc_slice_raw(function.len()) };
@@ -230,11 +225,11 @@ fn build_interference_graph<'a>(
             match successors {
                 X86BlockSuccessors::Returns => {}
                 X86BlockSuccessors::Jumps(si) => {
-                    out_sets[i].or(in_sets[si as usize]);
+                    out_sets[i].or(in_sets[(si - base_block_id) as usize]);
                 }
                 X86BlockSuccessors::Branches(si1, si2) => {
-                    out_sets[i].or(in_sets[si1 as usize]);
-                    out_sets[i].or(in_sets[si2 as usize]);
+                    out_sets[i].or(in_sets[(si1 - base_block_id) as usize]);
+                    out_sets[i].or(in_sets[(si2 - base_block_id) as usize]);
                 }
             }
             scratch_bitset.copy(out_sets[i]);
