@@ -105,17 +105,6 @@ impl<'a> X86Instruction<'a> {
     pub fn get_virtual_register_pack(&self) -> X86VirtualRegisterPack {
         match self {
             X86Instruction::Lea(op1, op2)
-            | X86Instruction::Add(op1, op2)
-            | X86Instruction::Addsd(op1, op2)
-            | X86Instruction::Sub(op1, op2)
-            | X86Instruction::Subsd(op1, op2)
-            | X86Instruction::Imul(op1, op2)
-            | X86Instruction::Mulsd(op1, op2)
-            | X86Instruction::Divsd(op1, op2)
-            | X86Instruction::Xor(op1, op2)
-            | X86Instruction::Xorps(op1, op2)
-            | X86Instruction::Or(op1, op2)
-            | X86Instruction::And(op1, op2)
             | X86Instruction::Mov(op1, op2)
             | X86Instruction::Movsd(op1, op2)
             | X86Instruction::Movsxd(op1, op2)
@@ -132,7 +121,35 @@ impl<'a> X86Instruction<'a> {
                 }
                 _ => X86VirtualRegisterPack::Zero,
             },
-            X86Instruction::Cmp(op1, op2)
+            X86Instruction::Xor(op1, op2) | X86Instruction::Xorps(op1, op2) => match (op1, op2) {
+                (
+                    X86Operand::Register(X86Register::Virtual(id1, _)),
+                    X86Operand::Register(X86Register::Virtual(id2, _)),
+                ) => {
+                    if *id1 == *id2 {
+                        X86VirtualRegisterPack::OneDef(*id1)
+                    } else {
+                        X86VirtualRegisterPack::Two(*id1, *id2)
+                    }
+                }
+                (X86Operand::Register(X86Register::Virtual(id, _)), _) => {
+                    X86VirtualRegisterPack::One(*id)
+                }
+                (_, X86Operand::Register(X86Register::Virtual(id, _))) => {
+                    X86VirtualRegisterPack::One(*id)
+                }
+                _ => X86VirtualRegisterPack::Zero,
+            },
+            X86Instruction::Add(op1, op2)
+            | X86Instruction::Addsd(op1, op2)
+            | X86Instruction::Sub(op1, op2)
+            | X86Instruction::Subsd(op1, op2)
+            | X86Instruction::Imul(op1, op2)
+            | X86Instruction::Mulsd(op1, op2)
+            | X86Instruction::Divsd(op1, op2)
+            | X86Instruction::Or(op1, op2)
+            | X86Instruction::And(op1, op2)
+            | X86Instruction::Cmp(op1, op2)
             | X86Instruction::Comisd(op1, op2)
             | X86Instruction::Test(op1, op2) => match (op1, op2) {
                 (
@@ -147,11 +164,7 @@ impl<'a> X86Instruction<'a> {
                 }
                 _ => X86VirtualRegisterPack::Zero,
             },
-            X86Instruction::Inc(op)
-            | X86Instruction::Dec(op)
-            | X86Instruction::Neg(op)
-            | X86Instruction::Not(op)
-            | X86Instruction::Seta(op)
+            X86Instruction::Seta(op)
             | X86Instruction::Setae(op)
             | X86Instruction::Sete(op)
             | X86Instruction::Setne(op) => match op {
@@ -160,7 +173,12 @@ impl<'a> X86Instruction<'a> {
                 }
                 _ => X86VirtualRegisterPack::Zero,
             },
-            X86Instruction::Push(op) | X86Instruction::Pop(op) => match op {
+            X86Instruction::Inc(op)
+            | X86Instruction::Dec(op)
+            | X86Instruction::Neg(op)
+            | X86Instruction::Not(op)
+            | X86Instruction::Push(op)
+            | X86Instruction::Pop(op) => match op {
                 X86Operand::Register(X86Register::Virtual(id, _)) => {
                     X86VirtualRegisterPack::One(*id)
                 }

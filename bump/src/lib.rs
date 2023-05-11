@@ -369,7 +369,9 @@ impl fmt::Debug for Bitset<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut fmt_list = f.debug_list();
         for i in 0..self.chunk.len() * 8 {
-            fmt_list.entry(&self.at(i));
+            if self.at(i) {
+                fmt_list.entry(&i);
+            }
         }
         fmt_list.finish()
     }

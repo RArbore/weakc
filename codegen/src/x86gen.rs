@@ -772,28 +772,28 @@ impl<'a> X86GenContext<'a> {
             } else {
                 match num_fixed_params {
                     0 => self.x86gen_inst(X86Instruction::Mov(
-                        Self::rdi_operand(),
                         X86Operand::Register(virt_reg),
+                        Self::rdi_operand(),
                     )),
                     1 => self.x86gen_inst(X86Instruction::Mov(
-                        Self::rsi_operand(),
                         X86Operand::Register(virt_reg),
+                        Self::rsi_operand(),
                     )),
                     2 => self.x86gen_inst(X86Instruction::Mov(
-                        Self::rdx_operand(),
                         X86Operand::Register(virt_reg),
+                        Self::rdx_operand(),
                     )),
                     3 => self.x86gen_inst(X86Instruction::Mov(
-                        Self::rcx_operand(),
                         X86Operand::Register(virt_reg),
+                        Self::rcx_operand(),
                     )),
                     4 => self.x86gen_inst(X86Instruction::Mov(
-                        Self::r8_operand(),
                         X86Operand::Register(virt_reg),
+                        Self::r8_operand(),
                     )),
                     5 => self.x86gen_inst(X86Instruction::Mov(
-                        Self::r9_operand(),
                         X86Operand::Register(virt_reg),
+                        Self::r9_operand(),
                     )),
                     _ => {
                         num_pushed_params += 1;

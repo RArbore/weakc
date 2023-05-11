@@ -81,6 +81,51 @@ fn post_order_traversal<'a>(
     (post_order_function, found_bitset)
 }
 
+fn generate_def_use_sets<'a>(
+    block: &'a X86Block<'a>,
+    bump: &'a bump::BumpAllocator,
+    num_virtual_registers: u32,
+) -> (&'a mut bump::Bitset<'a>, &'a mut bump::Bitset<'a>) {
+    let def_bitset = bump.create_bitset(num_virtual_registers as usize);
+    let use_bitset = bump.create_bitset(num_virtual_registers as usize);
+
+    for i in 0..block.insts.len() {
+        let inst = block.insts.at(i);
+        let pack = inst.get_virtual_register_pack();
+        match pack {
+            X86VirtualRegisterPack::Zero => {}
+            X86VirtualRegisterPack::OneDef(id) => {
+                if !use_bitset.at(id as usize) {
+                    def_bitset.set(id as usize);
+                }
+            }
+            X86VirtualRegisterPack::One(id) => {
+                if !def_bitset.at(id as usize) {
+                    use_bitset.set(id as usize);
+                }
+            }
+            X86VirtualRegisterPack::TwoDef(id1, id2) => {
+                if !use_bitset.at(id1 as usize) {
+                    def_bitset.set(id1 as usize);
+                }
+                if !def_bitset.at(id2 as usize) {
+                    use_bitset.set(id2 as usize);
+                }
+            }
+            X86VirtualRegisterPack::Two(id1, id2) => {
+                if !def_bitset.at(id1 as usize) {
+                    use_bitset.set(id1 as usize);
+                }
+                if !def_bitset.at(id2 as usize) {
+                    use_bitset.set(id2 as usize);
+                }
+            }
+        }
+    }
+
+    (def_bitset, use_bitset)
+}
+
 struct X86ProgramPoint {
     block: X86BlockID,
     inst: usize,
@@ -110,4 +155,12 @@ fn build_interference_graph<'a>(
         "There are {} virtual registers present in the program.",
         num_virtual_registers
     );
+
+    for i in 0..function.len() {
+        let block = function.at(i);
+        let def_use_sets = generate_def_use_sets(block, bump, num_virtual_registers);
+        println!("{}", core::str::from_utf8(block.label).unwrap());
+        println!("Def: {:?}", def_use_sets.0);
+        println!("Use: {:?}", def_use_sets.1);
+    }
 }
