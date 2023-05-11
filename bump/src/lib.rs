@@ -195,7 +195,9 @@ impl BumpAllocator {
     }
 
     pub fn create_bitset(&self, num_bits: usize) -> &mut Bitset {
-        self.create_bitset_impl(num_bits)
+        let bitset = self.create_bitset_impl(num_bits);
+        bitset.clear();
+        bitset
     }
 }
 
@@ -356,6 +358,58 @@ impl<'a> Bitset<'a> {
         let byte = self.chunk[idx / 8];
         let bit = idx % 8;
         self.chunk[idx / 8] = byte & !(1 << bit);
+    }
+
+    pub fn copy(&mut self, other: &Bitset) {
+        assert!(
+            self.chunk.len() == other.chunk.len(),
+            "PANIC: Can't copy bitsets of differing size."
+        );
+        for i in 0..self.chunk.len() {
+            self.chunk[i] = other.chunk[i];
+        }
+    }
+
+    pub fn or(&mut self, other: &Bitset) {
+        assert!(
+            self.chunk.len() == other.chunk.len(),
+            "PANIC: Can't or bitsets of differing size."
+        );
+        for i in 0..self.chunk.len() {
+            self.chunk[i] |= other.chunk[i];
+        }
+    }
+
+    pub fn and(&mut self, other: &Bitset) {
+        assert!(
+            self.chunk.len() == other.chunk.len(),
+            "PANIC: Can't and bitsets of differing size."
+        );
+        for i in 0..self.chunk.len() {
+            self.chunk[i] &= other.chunk[i];
+        }
+    }
+
+    pub fn sub(&mut self, other: &Bitset) {
+        assert!(
+            self.chunk.len() == other.chunk.len(),
+            "PANIC: Can't subtract bitsets of differing size."
+        );
+        for i in 0..self.chunk.len() {
+            self.chunk[i] &= !other.chunk[i];
+        }
+    }
+
+    pub fn clear(&mut self) {
+        for i in 0..self.chunk.len() {
+            self.chunk[i] = 0;
+        }
+    }
+
+    pub fn fill(&mut self) {
+        for i in 0..self.chunk.len() {
+            self.chunk[i] = !0;
+        }
     }
 }
 

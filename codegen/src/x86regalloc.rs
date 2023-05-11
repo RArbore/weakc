@@ -204,11 +204,53 @@ fn build_interference_graph<'a>(
         num_virtual_registers
     );
 
+    let def_sets = unsafe { bump.alloc_slice_raw(function.len()) };
+    let use_sets = unsafe { bump.alloc_slice_raw(function.len()) };
+    let in_sets = unsafe { bump.alloc_slice_raw(function.len()) };
+    let out_sets = unsafe { bump.alloc_slice_raw(function.len()) };
+
     for i in 0..function.len() {
         let block = function.at(i);
         let def_use_sets = generate_def_use_sets(block, bump, num_virtual_registers);
+        def_sets[i] = def_use_sets.0;
+        use_sets[i] = def_use_sets.1;
+        in_sets[i] = bump.create_bitset(num_virtual_registers as usize);
+        out_sets[i] = bump.create_bitset(num_virtual_registers as usize);
+        out_sets[i].copy(use_sets[i]);
+    }
+
+    let scratch_bitset = bump.create_bitset(num_virtual_registers as usize);
+    let mut change = true;
+    while change {
+        change = false;
+        for i in 0..function.len() {
+            let i = *post_order_function.0.at(i) as usize;
+            out_sets[i].clear();
+            let successors = function.at(i).successors;
+            match successors {
+                X86BlockSuccessors::Returns => {}
+                X86BlockSuccessors::Jumps(si) => {
+                    out_sets[i].or(in_sets[si as usize]);
+                }
+                X86BlockSuccessors::Branches(si1, si2) => {
+                    out_sets[i].or(in_sets[si1 as usize]);
+                    out_sets[i].or(in_sets[si2 as usize]);
+                }
+            }
+            scratch_bitset.copy(out_sets[i]);
+            scratch_bitset.sub(def_sets[i]);
+            scratch_bitset.or(use_sets[i]);
+            if scratch_bitset != in_sets[i] {
+                change = true;
+            }
+            in_sets[i].copy(scratch_bitset);
+        }
+    }
+
+    for i in 0..function.len() {
+        let block = function.at(i);
         println!("{}", core::str::from_utf8(block.label).unwrap());
-        println!("Def: {:?}", def_use_sets.0);
-        println!("Use: {:?}", def_use_sets.1);
+        println!("In: {:?}", in_sets[i as usize]);
+        println!("Out: {:?}", out_sets[i as usize]);
     }
 }
