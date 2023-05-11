@@ -120,6 +120,56 @@ fn generate_def_use_sets<'a>(
                     use_bitset.set(id2 as usize);
                 }
             }
+            X86VirtualRegisterPack::ThreeDef(id1, id2, id3) => {
+                if !use_bitset.at(id1 as usize) {
+                    def_bitset.set(id1 as usize);
+                }
+                if !def_bitset.at(id2 as usize) {
+                    use_bitset.set(id2 as usize);
+                }
+                if !def_bitset.at(id3 as usize) {
+                    use_bitset.set(id3 as usize);
+                }
+            }
+            X86VirtualRegisterPack::Three(id1, id2, id3) => {
+                if !def_bitset.at(id1 as usize) {
+                    use_bitset.set(id1 as usize);
+                }
+                if !def_bitset.at(id2 as usize) {
+                    use_bitset.set(id2 as usize);
+                }
+                if !def_bitset.at(id3 as usize) {
+                    use_bitset.set(id3 as usize);
+                }
+            }
+            X86VirtualRegisterPack::FourDef(id1, id2, id3, id4) => {
+                if !use_bitset.at(id1 as usize) {
+                    def_bitset.set(id1 as usize);
+                }
+                if !def_bitset.at(id2 as usize) {
+                    use_bitset.set(id2 as usize);
+                }
+                if !def_bitset.at(id3 as usize) {
+                    use_bitset.set(id3 as usize);
+                }
+                if !def_bitset.at(id4 as usize) {
+                    use_bitset.set(id4 as usize);
+                }
+            }
+            X86VirtualRegisterPack::Four(id1, id2, id3, id4) => {
+                if !def_bitset.at(id1 as usize) {
+                    use_bitset.set(id1 as usize);
+                }
+                if !def_bitset.at(id2 as usize) {
+                    use_bitset.set(id2 as usize);
+                }
+                if !def_bitset.at(id3 as usize) {
+                    use_bitset.set(id3 as usize);
+                }
+                if !def_bitset.at(id4 as usize) {
+                    use_bitset.set(id4 as usize);
+                }
+            }
         }
     }
 
@@ -136,8 +186,6 @@ fn build_interference_graph<'a>(
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
 ) {
-    println!("Here's a function: {:?}", function);
-    println!("");
     let found_bitset = bump.create_bitset(function.len());
     let post_order_function = post_order_traversal(
         0,

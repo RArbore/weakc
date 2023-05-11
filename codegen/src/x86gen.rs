@@ -162,6 +162,18 @@ impl<'a> X86GenContext<'a> {
                 self.module.num_virtual_registers =
                     max(self.module.num_virtual_registers, max(id1, id2));
             }
+            X86VirtualRegisterPack::ThreeDef(id1, id2, id3)
+            | X86VirtualRegisterPack::Three(id1, id2, id3) => {
+                self.module.num_virtual_registers =
+                    max(self.module.num_virtual_registers, max(id1, max(id2, id3)));
+            }
+            X86VirtualRegisterPack::FourDef(id1, id2, id3, id4)
+            | X86VirtualRegisterPack::Four(id1, id2, id3, id4) => {
+                self.module.num_virtual_registers = max(
+                    self.module.num_virtual_registers,
+                    max(id1, max(id2, max(id3, id4))),
+                );
+            }
             _ => {}
         }
         self.get_curr_block_mut().insts.push(inst);
