@@ -305,11 +305,36 @@ fn build_interference_graph<'a>(
         println!("Out: {:?}", out_sets[i as usize]);
     }
 
-    let graph_bitset =
+    let mut scratch_exists = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+    let mut graph_bitset =
         bump.create_bitset(num_virtual_registers as usize * num_virtual_registers as usize);
     for i in 0..function.len() {
         let block = function.at(i);
         scratch_bitset.copy(out_sets[i]);
+        let populate_graph = |scratch_exists: &'a mut [usize],
+                              graph_bitset: &'a mut bump::Bitset<'a>|
+         -> (&'a mut [usize], &'a mut bump::Bitset<'a>) {
+            let mut num_exists = 0;
+            for vid in 0..num_virtual_registers as usize {
+                if scratch_bitset.at(vid) {
+                    scratch_exists[num_exists] = vid;
+                    num_exists += 1;
+                }
+            }
+            for i in 0..num_exists {
+                for j in i..num_exists {
+                    let vid1 = scratch_exists[i];
+                    let vid2 = scratch_exists[j];
+                    graph_bitset.set(vid1 * num_exists + vid2);
+                }
+            }
+            (scratch_exists, graph_bitset)
+        };
+        (scratch_exists, graph_bitset) = populate_graph(scratch_exists, graph_bitset);
+        for j in (0..block.insts.len()).rev() {
+            let inst = block.insts.at(j);
+            let virtual_register_pack = inst.get_virtual_register_pack();
+        }
     }
     graph_bitset
 }
