@@ -14,22 +14,83 @@
 
 use crate::*;
 
-pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) {
-    let num_blocks_in_func = |i| {
-        if i < program.func_entries.len() - 1 {
-            program.func_entries.at(i + 1) - program.func_entries.at(i)
-        } else {
-            program.blocks.len() as u32 - program.func_entries.at(i)
-        }
-    };
+pub fn x86regnorm<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
+    let scratch_bitset = bump.create_bitset(program.num_virtual_registers as usize);
+    let scratch_scan = unsafe { bump.alloc_slice_raw(program.num_virtual_registers as usize) };
     for i in 0..program.func_entries.len() {
-        let num_blocks = num_blocks_in_func(i);
+        scratch_bitset.clear();
+        let num_blocks = if i < program.func_entries.len() - 1 {
+            program.func_entries.at(i + 1).0 - program.func_entries.at(i).0
+        } else {
+            program.blocks.len() as u32 - program.func_entries.at(i).0
+        };
+        for b in 0..num_blocks {
+            let block = program
+                .blocks
+                .at((program.func_entries.at(i).0 + b) as usize);
+            for i in 0..block.insts.len() {
+                let inst = block.insts.at(i);
+                let virtual_pack = inst.get_virtual_register_pack();
+                match virtual_pack {
+                    X86VirtualRegisterPack::Zero => {}
+                    X86VirtualRegisterPack::OneDef(id1) | X86VirtualRegisterPack::One(id1) => {
+                        scratch_bitset.set(id1 as usize);
+                    }
+                    X86VirtualRegisterPack::TwoDef(id1, id2)
+                    | X86VirtualRegisterPack::Two(id1, id2) => {
+                        scratch_bitset.set(id1 as usize);
+                        scratch_bitset.set(id2 as usize);
+                    }
+                    X86VirtualRegisterPack::ThreeDef(id1, id2, id3)
+                    | X86VirtualRegisterPack::Three(id1, id2, id3) => {
+                        scratch_bitset.set(id1 as usize);
+                        scratch_bitset.set(id2 as usize);
+                        scratch_bitset.set(id3 as usize);
+                    }
+                    X86VirtualRegisterPack::FourDef(id1, id2, id3, id4)
+                    | X86VirtualRegisterPack::Four(id1, id2, id3, id4) => {
+                        scratch_bitset.set(id1 as usize);
+                        scratch_bitset.set(id2 as usize);
+                        scratch_bitset.set(id3 as usize);
+                        scratch_bitset.set(id4 as usize);
+                    }
+                }
+            }
+        }
+        let mut cur_vid = 0;
+        for i in 0..program.num_virtual_registers as usize {
+            scratch_scan[i] = cur_vid;
+            if scratch_bitset.at(i) {
+                cur_vid += 1;
+            }
+        }
+        for b in 0..num_blocks {
+            let block = program
+                .blocks
+                .at_mut((program.func_entries.at(i).0 + b) as usize);
+            for i in 0..block.insts.len() {
+                let inst = block.insts.at_mut(i);
+                inst.map_virtual_registers(scratch_scan);
+            }
+        }
+        program.func_entries.at_mut(i).1 = cur_vid;
+    }
+    program
+}
+
+pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) {
+    for i in 0..program.func_entries.len() {
+        let num_blocks = if i < program.func_entries.len() - 1 {
+            program.func_entries.at(i + 1).0 - program.func_entries.at(i).0
+        } else {
+            program.blocks.len() as u32 - program.func_entries.at(i).0
+        };
         let func_blocks = bump.create_list();
         for j in 0..num_blocks {
             func_blocks.push(
                 program
                     .blocks
-                    .at(*program.func_entries.at(i) as usize + j as usize),
+                    .at(program.func_entries.at(i).0 as usize + j as usize),
             );
         }
         build_interference_graph(func_blocks, bump, program.num_virtual_registers);
@@ -174,16 +235,11 @@ fn generate_def_use_sets<'a>(
     (def_bitset, use_bitset)
 }
 
-struct X86ProgramPoint {
-    block: X86BlockID,
-    inst: usize,
-}
-
 fn build_interference_graph<'a>(
     function: &'a bump::List<'a, &'a X86Block<'a>>,
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
-) {
+) -> &'a mut bump::Bitset<'a> {
     let found_bitset = bump.create_bitset(function.len());
     let post_order_function = post_order_traversal(
         0,
@@ -248,4 +304,12 @@ fn build_interference_graph<'a>(
         println!("In: {:?}", in_sets[i as usize]);
         println!("Out: {:?}", out_sets[i as usize]);
     }
+
+    let graph_bitset =
+        bump.create_bitset(num_virtual_registers as usize * num_virtual_registers as usize);
+    for i in 0..function.len() {
+        let block = function.at(i);
+        scratch_bitset.copy(out_sets[i]);
+    }
+    graph_bitset
 }

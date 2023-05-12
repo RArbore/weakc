@@ -411,6 +411,14 @@ impl<'a> Bitset<'a> {
             self.chunk[i] = !0;
         }
     }
+
+    pub fn count(&self) -> usize {
+        let mut count = 0;
+        for i in 0..self.chunk.len() {
+            count += self.chunk[i].count_ones() as usize;
+        }
+        count
+    }
 }
 
 impl PartialEq for Bitset<'_> {

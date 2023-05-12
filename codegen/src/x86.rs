@@ -116,7 +116,7 @@ pub struct X86Block<'a> {
 
 #[derive(Debug, PartialEq)]
 pub struct X86Module<'a> {
-    pub func_entries: &'a mut bump::List<'a, X86BlockID>,
+    pub func_entries: &'a mut bump::List<'a, (X86BlockID, u32)>,
     pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
     pub floats: &'a mut bump::List<'a, f64>,
@@ -197,6 +197,20 @@ fn create_virtual_register_pack(
     }
 }
 
+impl<'a> X86Operand<'a> {
+    pub fn map_virtual_registers(&mut self, map: &[X86VirtualRegisterID]) {
+        match self {
+            X86Operand::Register(reg) => reg.map_virtual_registers(map),
+            X86Operand::MemoryOffsetConstant(reg, _) => reg.map_virtual_registers(map),
+            X86Operand::MemoryOffsetLinear(_, reg1, reg2) => {
+                reg1.map_virtual_registers(map);
+                reg2.map_virtual_registers(map);
+            }
+            _ => {}
+        }
+    }
+}
+
 impl<'a> X86Instruction<'a> {
     pub fn get_virtual_register_pack(&self) -> X86VirtualRegisterPack {
         match self {
@@ -248,6 +262,49 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Jnz(_)
             | X86Instruction::Call(_)
             | X86Instruction::Ret => X86VirtualRegisterPack::Zero,
+        }
+    }
+
+    pub fn map_virtual_registers(&mut self, map: &[X86VirtualRegisterID]) {
+        match self {
+            X86Instruction::Lea(op1, op2)
+            | X86Instruction::Mov(op1, op2)
+            | X86Instruction::Movsd(op1, op2)
+            | X86Instruction::Movsxd(op1, op2)
+            | X86Instruction::Cvttsd2si(op1, op2)
+            | X86Instruction::Xor(op1, op2)
+            | X86Instruction::Xorps(op1, op2)
+            | X86Instruction::Add(op1, op2)
+            | X86Instruction::Addsd(op1, op2)
+            | X86Instruction::Sub(op1, op2)
+            | X86Instruction::Subsd(op1, op2)
+            | X86Instruction::Imul(op1, op2)
+            | X86Instruction::Mulsd(op1, op2)
+            | X86Instruction::Divsd(op1, op2)
+            | X86Instruction::Or(op1, op2)
+            | X86Instruction::And(op1, op2)
+            | X86Instruction::Cmp(op1, op2)
+            | X86Instruction::Comisd(op1, op2)
+            | X86Instruction::Test(op1, op2) => {
+                op1.map_virtual_registers(map);
+                op2.map_virtual_registers(map);
+            }
+            X86Instruction::Seta(op)
+            | X86Instruction::Setae(op)
+            | X86Instruction::Sete(op)
+            | X86Instruction::Setne(op)
+            | X86Instruction::Inc(op)
+            | X86Instruction::Dec(op)
+            | X86Instruction::Neg(op)
+            | X86Instruction::Not(op)
+            | X86Instruction::Push(op)
+            | X86Instruction::Pop(op) => {
+                op.map_virtual_registers(map);
+            }
+            X86Instruction::Jmp(_)
+            | X86Instruction::Jnz(_)
+            | X86Instruction::Call(_)
+            | X86Instruction::Ret => {}
         }
     }
 }

@@ -350,6 +350,15 @@ impl X86Register {
             },
         }
     }
+
+    pub fn map_virtual_registers(&mut self, map: &[X86VirtualRegisterID]) {
+        match self {
+            X86Register::Virtual(vid, _) => {
+                *vid = map[*vid as usize];
+            }
+            _ => {}
+        }
+    }
 }
 
 impl fmt::Display for X86VirtualRegisterType {

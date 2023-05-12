@@ -156,22 +156,24 @@ impl<'a> X86GenContext<'a> {
     fn x86gen_inst(&mut self, inst: X86Instruction<'a>) {
         match inst.get_virtual_register_pack() {
             X86VirtualRegisterPack::OneDef(id) | X86VirtualRegisterPack::One(id) => {
-                self.module.num_virtual_registers = max(self.module.num_virtual_registers, id);
+                self.module.num_virtual_registers = max(self.module.num_virtual_registers, id + 1);
             }
             X86VirtualRegisterPack::TwoDef(id1, id2) | X86VirtualRegisterPack::Two(id1, id2) => {
                 self.module.num_virtual_registers =
-                    max(self.module.num_virtual_registers, max(id1, id2));
+                    max(self.module.num_virtual_registers, max(id1 + 1, id2 + 1));
             }
             X86VirtualRegisterPack::ThreeDef(id1, id2, id3)
             | X86VirtualRegisterPack::Three(id1, id2, id3) => {
-                self.module.num_virtual_registers =
-                    max(self.module.num_virtual_registers, max(id1, max(id2, id3)));
+                self.module.num_virtual_registers = max(
+                    self.module.num_virtual_registers,
+                    max(id1 + 1, max(id2 + 1, id3 + 1)),
+                );
             }
             X86VirtualRegisterPack::FourDef(id1, id2, id3, id4)
             | X86VirtualRegisterPack::Four(id1, id2, id3, id4) => {
                 self.module.num_virtual_registers = max(
                     self.module.num_virtual_registers,
-                    max(id1, max(id2, max(id3, id4))),
+                    max(id1 + 1, max(id2 + 1, max(id3 + 1, id4 + 1))),
                 );
             }
             _ => {}
@@ -695,7 +697,7 @@ impl<'a> X86GenContext<'a> {
         let func_block_id = self.module.blocks.len() as X86BlockID;
         self.curr_block = func_block_id;
         self.curr_func = Some(func);
-        self.module.func_entries.push(func_block_id);
+        self.module.func_entries.push((func_block_id, 0));
         self.module.blocks.push(X86Block {
             label: &func.name[1..],
             insts: self.bump.create_list(),
