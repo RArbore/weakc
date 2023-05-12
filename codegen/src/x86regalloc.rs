@@ -93,7 +93,7 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
                     .at(program.func_entries.at(i).0 as usize + j as usize),
             );
         }
-        build_interference_graph(func_blocks, bump, program.num_virtual_registers);
+        build_interference_graph(func_blocks, bump, program.func_entries.at(i).1);
     }
 }
 
