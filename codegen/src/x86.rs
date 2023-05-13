@@ -126,6 +126,7 @@ pub struct X86Module<'a> {
 fn create_virtual_register_pack(
     operands: &[&X86Operand],
     mut defines: bool,
+    mut uses_define_register: bool,
 ) -> X86VirtualRegisterPack {
     assert!(
         operands.len() <= 2,
@@ -135,15 +136,26 @@ fn create_virtual_register_pack(
     let mut num_virtual_registers = 0;
     let mut first_operand = true;
     for operand in operands {
+        assert!(
+            num_virtual_registers <= 4,
+            "PANIC: Too many virtual registers in instruction."
+        );
         if let X86Operand::Register(X86Register::Virtual(_, _)) = operand {
         } else if first_operand {
+            uses_define_register = false;
             defines = false;
         }
         match operand {
             X86Operand::Register(X86Register::Virtual(id, _))
             | X86Operand::MemoryOffsetConstant(X86Register::Virtual(id, _), _) => {
-                virtual_registers[num_virtual_registers] = *id;
-                num_virtual_registers += 1;
+                if uses_define_register {
+                    virtual_registers[num_virtual_registers] = *id;
+                    virtual_registers[num_virtual_registers + 1] = *id;
+                    num_virtual_registers += 2;
+                } else {
+                    virtual_registers[num_virtual_registers] = *id;
+                    num_virtual_registers += 1;
+                }
             }
             X86Operand::MemoryOffsetLinear(
                 _,
@@ -219,7 +231,7 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Movsd(op1, op2)
             | X86Instruction::Movsxd(op1, op2)
             | X86Instruction::Cvttsd2si(op1, op2) => {
-                create_virtual_register_pack(&[op1, op2], true)
+                create_virtual_register_pack(&[op1, op2], true, false)
             }
             X86Instruction::Xor(op1, op2) | X86Instruction::Xorps(op1, op2) => {
                 if let (
@@ -233,7 +245,7 @@ impl<'a> X86Instruction<'a> {
                         X86VirtualRegisterPack::Two(*id1, *id2)
                     }
                 } else {
-                    create_virtual_register_pack(&[op1, op2], false)
+                    create_virtual_register_pack(&[op1, op2], true, true)
                 }
             }
             X86Instruction::Add(op1, op2)
@@ -244,20 +256,24 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Mulsd(op1, op2)
             | X86Instruction::Divsd(op1, op2)
             | X86Instruction::Or(op1, op2)
-            | X86Instruction::And(op1, op2)
-            | X86Instruction::Cmp(op1, op2)
+            | X86Instruction::And(op1, op2) => {
+                create_virtual_register_pack(&[op1, op2], true, true)
+            }
+            X86Instruction::Cmp(op1, op2)
             | X86Instruction::Comisd(op1, op2)
-            | X86Instruction::Test(op1, op2) => create_virtual_register_pack(&[op1, op2], false),
+            | X86Instruction::Test(op1, op2) => {
+                create_virtual_register_pack(&[op1, op2], false, false)
+            }
             X86Instruction::Seta(op)
             | X86Instruction::Setae(op)
             | X86Instruction::Sete(op)
-            | X86Instruction::Setne(op) => create_virtual_register_pack(&[op], true),
+            | X86Instruction::Setne(op) => create_virtual_register_pack(&[op], true, false),
             X86Instruction::Inc(op)
             | X86Instruction::Dec(op)
             | X86Instruction::Neg(op)
             | X86Instruction::Not(op)
             | X86Instruction::Push(op)
-            | X86Instruction::Pop(op) => create_virtual_register_pack(&[op], false),
+            | X86Instruction::Pop(op) => create_virtual_register_pack(&[op], true, false),
             X86Instruction::Jmp(_)
             | X86Instruction::Jnz(_)
             | X86Instruction::Call(_)
