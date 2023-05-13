@@ -312,9 +312,61 @@ fn build_interference_graph<'a>(
         scratch_bitset.copy(out_sets[i]);
         for j in (0..block.insts.len()).rev() {
             let inst = block.insts.at(j);
-            for vid in 0..num_virtual_registers as usize {
-                if scratch_bitset.at(vid) {}
+            let pack = inst.get_virtual_register_pack();
+            let def = match pack {
+                X86VirtualRegisterPack::Zero => None,
+                X86VirtualRegisterPack::OneDef(id) => Some(id),
+                X86VirtualRegisterPack::One(_) => None,
+                X86VirtualRegisterPack::TwoDef(id, _) => Some(id),
+                X86VirtualRegisterPack::Two(_, _) => None,
+                X86VirtualRegisterPack::ThreeDef(id, _, _) => Some(id),
+                X86VirtualRegisterPack::Three(_, _, _) => None,
+                X86VirtualRegisterPack::FourDef(id, _, _, _) => Some(id),
+                X86VirtualRegisterPack::Four(_, _, _, _) => None,
+            };
+            if let Some(def) = def {
+                for vid in 0..num_virtual_registers as usize {
+                    if scratch_bitset.at(vid) {
+                        graph_bitset.set(vid * num_virtual_registers as usize + def as usize);
+                        graph_bitset.set(def as usize * num_virtual_registers as usize + vid);
+                    }
+                }
+                scratch_bitset.unset(def as usize);
             }
+            match pack {
+                X86VirtualRegisterPack::Zero => {}
+                X86VirtualRegisterPack::OneDef(_) => {}
+                X86VirtualRegisterPack::One(id1) => {
+                    scratch_bitset.set(id1 as usize);
+                }
+                X86VirtualRegisterPack::TwoDef(_, id1) => {
+                    scratch_bitset.set(id1 as usize);
+                }
+                X86VirtualRegisterPack::Two(id1, id2) => {
+                    scratch_bitset.set(id1 as usize);
+                    scratch_bitset.set(id2 as usize);
+                }
+                X86VirtualRegisterPack::ThreeDef(_, id1, id2) => {
+                    scratch_bitset.set(id1 as usize);
+                    scratch_bitset.set(id2 as usize);
+                }
+                X86VirtualRegisterPack::Three(id1, id2, id3) => {
+                    scratch_bitset.set(id1 as usize);
+                    scratch_bitset.set(id2 as usize);
+                    scratch_bitset.set(id3 as usize);
+                }
+                X86VirtualRegisterPack::FourDef(_, id1, id2, id3) => {
+                    scratch_bitset.set(id1 as usize);
+                    scratch_bitset.set(id2 as usize);
+                    scratch_bitset.set(id3 as usize);
+                }
+                X86VirtualRegisterPack::Four(id1, id2, id3, id4) => {
+                    scratch_bitset.set(id1 as usize);
+                    scratch_bitset.set(id2 as usize);
+                    scratch_bitset.set(id3 as usize);
+                    scratch_bitset.set(id4 as usize);
+                }
+            };
         }
     }
     graph_bitset
