@@ -93,7 +93,15 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
                     .at(program.func_entries.at(i).0 as usize + j as usize),
             );
         }
-        build_interference_graph(func_blocks, bump, program.func_entries.at(i).1);
+        let graph = build_interference_graph(func_blocks, bump, program.func_entries.at(i).1);
+        _write_dot_interference_graph(
+            program
+                .blocks
+                .at(program.func_entries.at(i).0 as usize)
+                .label,
+            graph,
+            program.func_entries.at(i).1,
+        );
     }
 }
 
@@ -370,4 +378,33 @@ fn build_interference_graph<'a>(
         }
     }
     graph_bitset
+}
+
+use std::fs::write;
+
+fn _write_dot_interference_graph<'a>(
+    label: &'a [u8],
+    graph: &'a mut bump::Bitset<'a>,
+    num_virtual_registers: u32,
+) {
+    let mut content = format!(
+        "digraph \"{}\" {{\nlabel=\"{}\";\n",
+        core::str::from_utf8(label).unwrap(),
+        core::str::from_utf8(label).unwrap()
+    );
+    for i in 0..num_virtual_registers {
+        content = format!(
+            "{}Node{} [shape=record, style=filled, label={}];\n",
+            content, i, i
+        );
+    }
+    for i in 0..num_virtual_registers as usize {
+        for j in (i + 1)..num_virtual_registers as usize {
+            if graph.at(i * num_virtual_registers as usize + j) {
+                content = format!("{}Node{} -> Node{};\n", content, i, j);
+            }
+        }
+    }
+    content = format!("{}}}\n", content);
+    write("debug_interference_graph.dot", content).unwrap();
 }
