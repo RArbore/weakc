@@ -406,5 +406,12 @@ fn _write_dot_interference_graph<'a>(
         }
     }
     content = format!("{}}}\n", content);
-    write("debug_interference_graph.dot", content).unwrap();
+    write(
+        format!(
+            "debug_interference_graph_{}.dot",
+            core::str::from_utf8(label).unwrap()
+        ),
+        content,
+    )
+    .unwrap();
 }
