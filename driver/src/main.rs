@@ -24,12 +24,12 @@ Usage:
     weakc COMMAND [OPTIONS] INPUT
 
 Commands:
-    build         Compile the input program
-    run           Interpret the input program
+    build                     Compile the input program
+    run                       Interpret the input program
 
 Options:
-    -h, --help            Display this message
-    -o, --output <OUTPUT> Set the output file when building
+    -h, --help                Display this message
+    -o, --output <OUTPUT>     Set the output file when building
     -dot-cfg-hir              Output a HIR dot CFG
     -dot-cfg-mir              Output a MIR dot CFG
 "#;
