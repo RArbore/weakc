@@ -388,7 +388,7 @@ fn _write_dot_interference_graph<'a>(
     num_virtual_registers: u32,
 ) {
     let mut content = format!(
-        "digraph \"{}\" {{\nlabel=\"{}\";\n",
+        "graph \"{}\" {{\nlabel=\"{}\";\n",
         core::str::from_utf8(label).unwrap(),
         core::str::from_utf8(label).unwrap()
     );
@@ -401,7 +401,7 @@ fn _write_dot_interference_graph<'a>(
     for i in 0..num_virtual_registers as usize {
         for j in (i + 1)..num_virtual_registers as usize {
             if graph.at(i * num_virtual_registers as usize + j) {
-                content = format!("{}Node{} -> Node{};\n", content, i, j);
+                content = format!("{}Node{} -- Node{};\n", content, i, j);
             }
         }
     }
