@@ -148,7 +148,8 @@ fn create_virtual_register_pack(
         }
         match operand {
             X86Operand::Register(X86Register::Virtual(id, _))
-            | X86Operand::MemoryOffsetConstant(X86Register::Virtual(id, _), _) => {
+            | X86Operand::MemoryOffsetConstant(X86Register::Virtual(id, _), _)
+            | X86Operand::MemoryLabel(X86Register::Virtual(id, _), _) => {
                 if uses_define_register {
                     virtual_registers[num_virtual_registers] = *id;
                     virtual_registers[num_virtual_registers + 1] = *id;
@@ -208,6 +209,77 @@ fn create_virtual_register_pack(
             _ => panic!("PANIC: Too many virtual registers to create virtual register pack."),
         }
     }
+}
+
+pub fn get_vid_types<'a>(
+    function: &'a bump::List<'a, &'a X86Block<'a>>,
+    bump: &'a bump::BumpAllocator,
+    num_virtual_registers: u32,
+) -> &'a bump::List<'a, X86VirtualRegisterType> {
+    let vid_types = bump.create_list();
+    for _ in 0..num_virtual_registers {
+        vid_types.push(X86VirtualRegisterType::Fixed32);
+    }
+    let mut add_reg = |reg: &'a X86Register| {
+        if let X86Register::Virtual(id, ty) = reg {
+            *vid_types.at_mut(*id as usize) = *ty;
+        }
+    };
+    let mut add_op = |op: &'a X86Operand| match op {
+        X86Operand::Register(reg)
+        | X86Operand::MemoryOffsetConstant(reg, _)
+        | X86Operand::MemoryLabel(reg, _) => {
+            add_reg(reg);
+        }
+        X86Operand::MemoryOffsetLinear(_, reg1, reg2) => {
+            add_reg(reg1);
+            add_reg(reg2);
+        }
+        _ => {}
+    };
+    for i in 0..function.len() {
+        for j in 0..function.at(i).insts.len() {
+            let inst = function.at(i).insts.at(j);
+            match inst {
+                X86Instruction::Lea(op1, op2)
+                | X86Instruction::Add(op1, op2)
+                | X86Instruction::Addsd(op1, op2)
+                | X86Instruction::Sub(op1, op2)
+                | X86Instruction::Subsd(op1, op2)
+                | X86Instruction::Imul(op1, op2)
+                | X86Instruction::Mulsd(op1, op2)
+                | X86Instruction::Divsd(op1, op2)
+                | X86Instruction::Xor(op1, op2)
+                | X86Instruction::Xorps(op1, op2)
+                | X86Instruction::Or(op1, op2)
+                | X86Instruction::And(op1, op2)
+                | X86Instruction::Mov(op1, op2)
+                | X86Instruction::Movsd(op1, op2)
+                | X86Instruction::Movsxd(op1, op2)
+                | X86Instruction::Cvttsd2si(op1, op2)
+                | X86Instruction::Cmp(op1, op2)
+                | X86Instruction::Comisd(op1, op2)
+                | X86Instruction::Test(op1, op2) => {
+                    add_op(op1);
+                    add_op(op2);
+                }
+                X86Instruction::Inc(op)
+                | X86Instruction::Dec(op)
+                | X86Instruction::Neg(op)
+                | X86Instruction::Not(op)
+                | X86Instruction::Push(op)
+                | X86Instruction::Pop(op)
+                | X86Instruction::Seta(op)
+                | X86Instruction::Setae(op)
+                | X86Instruction::Sete(op)
+                | X86Instruction::Setne(op) => {
+                    add_op(op);
+                }
+                _ => {}
+            }
+        }
+    }
+    vid_types
 }
 
 impl<'a> X86Operand<'a> {

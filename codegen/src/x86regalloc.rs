@@ -248,6 +248,18 @@ fn build_interference_graph<'a>(
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
 ) -> &'a mut bump::Bitset<'a> {
+    let vid_types = get_vid_types(function, bump, num_virtual_registers);
+    let same_register_space = |vid1: X86VirtualRegisterID, vid2: X86VirtualRegisterID| -> bool {
+        match (vid_types.at(vid1 as usize), vid_types.at(vid2 as usize)) {
+            (X86VirtualRegisterType::Fixed32, X86VirtualRegisterType::Fixed32)
+            | (X86VirtualRegisterType::Fixed32, X86VirtualRegisterType::Fixed64)
+            | (X86VirtualRegisterType::Fixed64, X86VirtualRegisterType::Fixed32)
+            | (X86VirtualRegisterType::Fixed64, X86VirtualRegisterType::Fixed64)
+            | (X86VirtualRegisterType::Float64, X86VirtualRegisterType::Float64) => true,
+            _ => false,
+        }
+    };
+
     let found_bitset = bump.create_bitset(function.len());
     let post_order_function = post_order_traversal(
         0,
@@ -334,7 +346,9 @@ fn build_interference_graph<'a>(
             };
             if let Some(def) = def {
                 for vid in 0..num_virtual_registers as usize {
-                    if scratch_bitset.at(vid) {
+                    if scratch_bitset.at(vid)
+                        && same_register_space(vid as X86VirtualRegisterID, def)
+                    {
                         graph_bitset.set(vid * num_virtual_registers as usize + def as usize);
                         graph_bitset.set(def as usize * num_virtual_registers as usize + vid);
                     }
