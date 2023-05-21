@@ -93,7 +93,9 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
                     .at(program.func_entries.at(i).0 as usize + j as usize),
             );
         }
-        let graph = build_interference_graph(func_blocks, bump, program.func_entries.at(i).1);
+        let vid_types = get_vid_types(func_blocks, bump, program.func_entries.at(i).1);
+        let graph =
+            build_interference_graph(func_blocks, bump, program.func_entries.at(i).1, vid_types);
         _write_dot_interference_graph(
             program
                 .blocks
@@ -247,8 +249,8 @@ fn build_interference_graph<'a>(
     function: &'a bump::List<'a, &'a X86Block<'a>>,
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
+    vid_types: &'a bump::List<'a, X86VirtualRegisterType>,
 ) -> &'a mut bump::Bitset<'a> {
-    let vid_types = get_vid_types(function, bump, num_virtual_registers);
     let same_register_space = |vid1: X86VirtualRegisterID, vid2: X86VirtualRegisterID| -> bool {
         match (vid_types.at(vid1 as usize), vid_types.at(vid2 as usize)) {
             (X86VirtualRegisterType::Fixed32, X86VirtualRegisterType::Fixed32)
