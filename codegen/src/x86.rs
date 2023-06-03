@@ -215,14 +215,14 @@ pub fn get_vid_types<'a>(
     function: &'a bump::List<'a, &'a X86Block<'a>>,
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
-) -> &'a bump::List<'a, X86VirtualRegisterType> {
-    let vid_types = bump.create_list();
-    for _ in 0..num_virtual_registers {
-        vid_types.push(X86VirtualRegisterType::Fixed32);
+) -> &'a [X86VirtualRegisterType] {
+    let vid_types = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+    for i in 0..num_virtual_registers {
+        vid_types[i as usize] = X86VirtualRegisterType::Fixed32;
     }
     let mut add_reg = |reg: &'a X86Register| {
         if let X86Register::Virtual(id, ty) = reg {
-            *vid_types.at_mut(*id as usize) = *ty;
+            vid_types[*id as usize] = *ty;
         }
     };
     let mut add_op = |op: &'a X86Operand| match op {

@@ -14,6 +14,12 @@
 
 use crate::*;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum X86Color {
+    Register(X86PhysicalRegisterID),
+    StackSlot(u64),
+}
+
 pub fn x86regnorm<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
     let scratch_bitset = bump.create_bitset(program.num_virtual_registers as usize);
     let scratch_scan = unsafe { bump.alloc_slice_raw(program.num_virtual_registers as usize) };
@@ -96,6 +102,8 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
         let vid_types = get_vid_types(func_blocks, bump, program.func_entries.at(i).1);
         let graph =
             build_interference_graph(func_blocks, bump, program.func_entries.at(i).1, vid_types);
+        let coloring =
+            color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
         _write_dot_interference_graph(
             program
                 .blocks
@@ -249,10 +257,10 @@ fn build_interference_graph<'a>(
     function: &'a bump::List<'a, &'a X86Block<'a>>,
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
-    vid_types: &'a bump::List<'a, X86VirtualRegisterType>,
+    vid_types: &'a [X86VirtualRegisterType],
 ) -> &'a mut bump::Bitset<'a> {
     let same_register_space = |vid1: X86VirtualRegisterID, vid2: X86VirtualRegisterID| -> bool {
-        match (vid_types.at(vid1 as usize), vid_types.at(vid2 as usize)) {
+        match (vid_types[vid1 as usize], vid_types[vid2 as usize]) {
             (X86VirtualRegisterType::Fixed32, X86VirtualRegisterType::Fixed32)
             | (X86VirtualRegisterType::Fixed32, X86VirtualRegisterType::Fixed64)
             | (X86VirtualRegisterType::Fixed64, X86VirtualRegisterType::Fixed32)
@@ -394,6 +402,16 @@ fn build_interference_graph<'a>(
         }
     }
     graph_bitset
+}
+
+fn color_interference_graph<'a>(
+    graph: &'a bump::Bitset<'a>,
+    bump: &'a bump::BumpAllocator,
+    num_virtual_registers: u32,
+    vid_types: &'a [X86VirtualRegisterType],
+) -> &'a [X86Color] {
+    let colors = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+    colors
 }
 
 use std::fs::write;
