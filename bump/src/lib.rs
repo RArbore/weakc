@@ -126,6 +126,21 @@ impl BumpAllocator {
         slice::from_raw_parts_mut(alloc, len)
     }
 
+    pub fn alloc_slice_filled<'a, 'b, T: Sized + Copy>(
+        &'a self,
+        replicate: &T,
+        len: usize,
+    ) -> &'a mut [T] {
+        let layout = alloc::alloc::Layout::new::<T>();
+        let alloc = self.alloc_impl(layout.size() * len, layout.align()) as *mut T;
+        unsafe {
+            for i in 0..len {
+                alloc.offset(i as isize).write(*replicate);
+            }
+            slice::from_raw_parts_mut(alloc, len)
+        }
+    }
+
     pub fn create_checkpoint<'a>(&'a self) -> Checkpoint<'a> {
         let mut_self = unsafe { &mut *(self as *const BumpAllocator as *mut BumpAllocator) };
 

@@ -114,6 +114,7 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
             build_interference_graph(func_blocks, bump, program.func_entries.at(i).1, vid_types);
         let coloring =
             color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
+        println!("{:?}", coloring);
         _write_dot_interference_graph(
             program
                 .blocks
@@ -420,9 +421,9 @@ fn color_interference_graph<'a>(
     num_virtual_registers: u32,
     vid_types: &'a [X86VirtualRegisterType],
 ) -> &'a [X86Color] {
-    let colors = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+    let colors: &mut [X86Color] = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+    let removed: &mut [bool] = bump.alloc_slice_filled(&false, num_virtual_registers as usize);
 
-    let removed: &mut [bool] = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
     let node_stack = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
     for head in 0..num_virtual_registers {
         let mut selection: i64 = -1;
@@ -430,7 +431,9 @@ fn color_interference_graph<'a>(
             if !removed[vid as usize] {
                 let mut degree = 0;
                 for other_vid in 0..num_virtual_registers {
-                    degree += graph.at((vid * num_virtual_registers + other_vid) as usize) as u32;
+                    degree += (!removed[other_vid as usize]
+                        && graph.at((vid * num_virtual_registers + other_vid) as usize))
+                        as u32;
                 }
                 if degree < vid_types[vid as usize].num_units() {
                     selection = vid as i64;
@@ -441,9 +444,96 @@ fn color_interference_graph<'a>(
             }
         }
         node_stack[head as usize] = selection as u32;
+        removed[selection as usize] = true;
+    }
+
+    let mut stack_slot_counter = 0;
+    'pop: for head in (0..num_virtual_registers).rev() {
+        let vid = node_stack[head as usize];
+        removed[vid as usize] = false;
+        'color: for pid in reg_order_for_type(vid_types[vid as usize]) {
+            let potential_color = X86Color::Register(*pid);
+            for other_vid in 0..num_virtual_registers {
+                if !removed[other_vid as usize]
+                    && graph.at((vid * num_virtual_registers + other_vid) as usize)
+                    && colors_interfere(&potential_color, &colors[other_vid as usize])
+                {
+                    continue 'color;
+                }
+            }
+            colors[vid as usize] = potential_color;
+            continue 'pop;
+        }
+        colors[vid as usize] = X86Color::StackSlot(stack_slot_counter);
+        stack_slot_counter += 1;
     }
 
     colors
+}
+
+const FIXED32_REG_ORDER: [X86PhysicalRegisterID; 16] = [
+    X86PhysicalRegisterID::EAX,
+    X86PhysicalRegisterID::EBX,
+    X86PhysicalRegisterID::ECX,
+    X86PhysicalRegisterID::EDX,
+    X86PhysicalRegisterID::ESI,
+    X86PhysicalRegisterID::EDI,
+    X86PhysicalRegisterID::ESP,
+    X86PhysicalRegisterID::EBP,
+    X86PhysicalRegisterID::R8D,
+    X86PhysicalRegisterID::R9D,
+    X86PhysicalRegisterID::R10D,
+    X86PhysicalRegisterID::R11D,
+    X86PhysicalRegisterID::R12D,
+    X86PhysicalRegisterID::R13D,
+    X86PhysicalRegisterID::R14D,
+    X86PhysicalRegisterID::R15D,
+];
+
+const FIXED64_REG_ORDER: [X86PhysicalRegisterID; 16] = [
+    X86PhysicalRegisterID::RAX,
+    X86PhysicalRegisterID::RBX,
+    X86PhysicalRegisterID::RCX,
+    X86PhysicalRegisterID::RDX,
+    X86PhysicalRegisterID::RSI,
+    X86PhysicalRegisterID::RDI,
+    X86PhysicalRegisterID::RSP,
+    X86PhysicalRegisterID::RBP,
+    X86PhysicalRegisterID::R8,
+    X86PhysicalRegisterID::R9,
+    X86PhysicalRegisterID::R10,
+    X86PhysicalRegisterID::R11,
+    X86PhysicalRegisterID::R12,
+    X86PhysicalRegisterID::R13,
+    X86PhysicalRegisterID::R14,
+    X86PhysicalRegisterID::R15,
+];
+
+const FLOAT64_REG_ORDER: [X86PhysicalRegisterID; 16] = [
+    X86PhysicalRegisterID::XMM0,
+    X86PhysicalRegisterID::XMM1,
+    X86PhysicalRegisterID::XMM2,
+    X86PhysicalRegisterID::XMM3,
+    X86PhysicalRegisterID::XMM4,
+    X86PhysicalRegisterID::XMM5,
+    X86PhysicalRegisterID::XMM6,
+    X86PhysicalRegisterID::XMM7,
+    X86PhysicalRegisterID::XMM8,
+    X86PhysicalRegisterID::XMM9,
+    X86PhysicalRegisterID::XMM10,
+    X86PhysicalRegisterID::XMM11,
+    X86PhysicalRegisterID::XMM12,
+    X86PhysicalRegisterID::XMM13,
+    X86PhysicalRegisterID::XMM14,
+    X86PhysicalRegisterID::XMM15,
+];
+
+fn reg_order_for_type(ty: X86VirtualRegisterType) -> &'static [X86PhysicalRegisterID] {
+    match ty {
+        X86VirtualRegisterType::Fixed32 => &FIXED32_REG_ORDER,
+        X86VirtualRegisterType::Fixed64 => &FIXED64_REG_ORDER,
+        X86VirtualRegisterType::Float64 => &FLOAT64_REG_ORDER,
+    }
 }
 
 use std::fs::write;
