@@ -16,6 +16,9 @@ use core::fmt;
 
 pub type X86VirtualRegisterID = u32;
 
+pub const NUM_FIXED_REGISTER_UNITS: u32 = 16;
+pub const NUM_FLOAT_REGISTER_UNITS: u32 = 16;
+
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum X86VirtualRegisterType {
     Fixed32,
@@ -29,6 +32,14 @@ impl X86VirtualRegisterType {
             X86VirtualRegisterType::Fixed32 => 4,
             X86VirtualRegisterType::Fixed64 => 8,
             X86VirtualRegisterType::Float64 => 8,
+        }
+    }
+
+    pub fn num_units(&self) -> u32 {
+        match self {
+            X86VirtualRegisterType::Fixed32 => NUM_FIXED_REGISTER_UNITS,
+            X86VirtualRegisterType::Fixed64 => NUM_FIXED_REGISTER_UNITS,
+            X86VirtualRegisterType::Float64 => NUM_FLOAT_REGISTER_UNITS,
         }
     }
 }

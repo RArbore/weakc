@@ -20,6 +20,16 @@ enum X86Color {
     StackSlot(u64),
 }
 
+fn colors_interfere(color1: &X86Color, color2: &X86Color) -> bool {
+    match (color1, color2) {
+        (X86Color::Register(id1), X86Color::Register(id2)) => {
+            x86_physical_registers_overlap(*id1, *id2)
+        }
+        (X86Color::StackSlot(slot1), X86Color::StackSlot(slot2)) => slot1 == slot2,
+        _ => false,
+    }
+}
+
 pub fn x86regnorm<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
     let scratch_bitset = bump.create_bitset(program.num_virtual_registers as usize);
     let scratch_scan = unsafe { bump.alloc_slice_raw(program.num_virtual_registers as usize) };
@@ -411,6 +421,28 @@ fn color_interference_graph<'a>(
     vid_types: &'a [X86VirtualRegisterType],
 ) -> &'a [X86Color] {
     let colors = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+
+    let removed: &mut [bool] = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+    let node_stack = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
+    for head in 0..num_virtual_registers {
+        let mut selection: i64 = -1;
+        for vid in 0..num_virtual_registers {
+            if !removed[vid as usize] {
+                let mut degree = 0;
+                for other_vid in 0..num_virtual_registers {
+                    degree += graph.at((vid * num_virtual_registers + other_vid) as usize) as u32;
+                }
+                if degree < vid_types[vid as usize].num_units() {
+                    selection = vid as i64;
+                    break;
+                } else if selection == -1 {
+                    selection = vid as i64;
+                }
+            }
+        }
+        node_stack[head as usize] = selection as u32;
+    }
+
     colors
 }
 
