@@ -454,7 +454,8 @@ fn color_interference_graph<'a>(
         'color: for pid in reg_order_for_type(vid_types[vid as usize]) {
             let potential_color = X86Color::Register(*pid);
             for other_vid in 0..num_virtual_registers {
-                if !removed[other_vid as usize]
+                if vid != other_vid
+                    && !removed[other_vid as usize]
                     && graph.at((vid * num_virtual_registers + other_vid) as usize)
                     && colors_interfere(&potential_color, &colors[other_vid as usize])
                 {
