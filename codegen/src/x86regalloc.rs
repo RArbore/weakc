@@ -94,7 +94,8 @@ pub fn x86regnorm<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> 
     program
 }
 
-pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) {
+pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
+    let colorings = bump.create_list();
     for i in 0..program.func_entries.len() {
         let num_blocks = if i < program.func_entries.len() - 1 {
             program.func_entries.at(i + 1).0 - program.func_entries.at(i).0
@@ -112,9 +113,6 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
         let vid_types = get_vid_types(func_blocks, bump, program.func_entries.at(i).1);
         let graph =
             build_interference_graph(func_blocks, bump, program.func_entries.at(i).1, vid_types);
-        let coloring =
-            color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
-        println!("{:?}", coloring);
         _write_dot_interference_graph(
             program
                 .blocks
@@ -123,7 +121,12 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
             graph,
             program.func_entries.at(i).1,
         );
+        let coloring =
+            color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
+        println!("{:?}", coloring);
+        colorings.push(coloring);
     }
+    color_x86_module(program, colorings, bump)
 }
 
 fn post_order_traversal<'a>(
@@ -537,11 +540,19 @@ fn reg_order_for_type(ty: X86VirtualRegisterType) -> &'static [X86PhysicalRegist
     }
 }
 
+fn color_x86_module<'a>(
+    program: &'a X86Module<'a>,
+    colorings: &'a bump::List<'a, &'a [X86Color]>,
+    bump: &'a bump::BumpAllocator,
+) -> X86Module<'a> {
+    todo!()
+}
+
 use std::fs::write;
 
 fn _write_dot_interference_graph<'a>(
     label: &'a [u8],
-    graph: &'a mut bump::Bitset<'a>,
+    graph: &'a bump::Bitset<'a>,
     num_virtual_registers: u32,
 ) {
     let mut content = format!(

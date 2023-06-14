@@ -180,10 +180,10 @@ fn main() {
                 }
                 let virtual_x86_program = codegen::x86gen(&mir_program, &bump);
                 let normalized_x86_program = codegen::x86regnorm(virtual_x86_program, &bump);
-                codegen::x86regalloc(&normalized_x86_program, &bump);
+                let x86_program = codegen::x86regalloc(&normalized_x86_program, &bump);
                 let mut file =
                     File::create(output.clone()).expect("PANIC: Unable to open output file.");
-                file.write_all(normalized_x86_program.to_string().as_bytes())
+                file.write_all(x86_program.to_string().as_bytes())
                     .expect("PANIC: Unable to write output file.");
             }
             Command::Run(input) => {
