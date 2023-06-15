@@ -585,14 +585,32 @@ macro_rules! color_inst_arm {
         $b.blocks.at_mut($a as usize).insts.push($i);
     }};
     ($i:expr, $o1:expr, $a:expr, $b:expr, $c:expr) => {{
-        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c);
+        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false);
         $c = moved_colored_program;
         $c.blocks.at_mut($b as usize).insts.push($i(new_op));
     }};
     ($i:expr, $o1:expr, $o2:expr, $a:expr, $b:expr, $c:expr) => {{
-        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c);
+        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false);
         let (new_op2, moved_colored_program) =
-            color_x86_operand($o2, $a, $b, moved_colored_program);
+            color_x86_operand($o2, $a, $b, moved_colored_program, false);
+        $c = moved_colored_program;
+        $c.blocks
+            .at_mut($b as usize)
+            .insts
+            .push($i(new_op1, new_op2));
+    }};
+}
+
+macro_rules! color_inst_arm_byte_regs {
+    ($i:expr, $o1:expr, $a:expr, $b:expr, $c:expr) => {{
+        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, true);
+        $c = moved_colored_program;
+        $c.blocks.at_mut($b as usize).insts.push($i(new_op));
+    }};
+    ($i:expr, $o1:expr, $o2:expr, $a:expr, $b:expr, $c:expr) => {{
+        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, true);
+        let (new_op2, moved_colored_program) =
+            color_x86_operand($o2, $a, $b, moved_colored_program, true);
         $c = moved_colored_program;
         $c.blocks
             .at_mut($b as usize)
@@ -665,28 +683,28 @@ fn color_x86_block<'a>(
             X86Instruction::Pop(op) => {
                 color_inst_arm!(X86Instruction::Pop, op, coloring, block_id, colored_program)
             }
-            X86Instruction::Seta(op) => color_inst_arm!(
+            X86Instruction::Seta(op) => color_inst_arm_byte_regs!(
                 X86Instruction::Seta,
                 op,
                 coloring,
                 block_id,
                 colored_program
             ),
-            X86Instruction::Setae(op) => color_inst_arm!(
+            X86Instruction::Setae(op) => color_inst_arm_byte_regs!(
                 X86Instruction::Setae,
                 op,
                 coloring,
                 block_id,
                 colored_program
             ),
-            X86Instruction::Sete(op) => color_inst_arm!(
+            X86Instruction::Sete(op) => color_inst_arm_byte_regs!(
                 X86Instruction::Sete,
                 op,
                 coloring,
                 block_id,
                 colored_program
             ),
-            X86Instruction::Setne(op) => color_inst_arm!(
+            X86Instruction::Setne(op) => color_inst_arm_byte_regs!(
                 X86Instruction::Setne,
                 op,
                 coloring,
@@ -837,7 +855,7 @@ fn color_x86_block<'a>(
                 block_id,
                 colored_program
             ),
-            X86Instruction::Test(op1, op2) => color_inst_arm!(
+            X86Instruction::Test(op1, op2) => color_inst_arm_byte_regs!(
                 X86Instruction::Test,
                 op1,
                 op2,
@@ -845,7 +863,6 @@ fn color_x86_block<'a>(
                 block_id,
                 colored_program
             ),
-            _ => todo!(),
         }
     }
     colored_program
@@ -856,64 +873,74 @@ fn color_x86_operand<'a>(
     coloring: &'a [X86Color],
     block_id: X86BlockID,
     colored_program: X86Module<'a>,
+    convert_to_byte_regs: bool,
 ) -> (X86Operand<'a>, X86Module<'a>) {
     let colored_block = colored_program.blocks.at_mut(block_id as usize);
+    let conv = if convert_to_byte_regs {
+        |reg| get_lowest_byte(reg)
+    } else {
+        |reg| reg
+    };
     let new_op = match op {
         X86Operand::Register(X86Register::Virtual(vid, _)) => match coloring[*vid as usize] {
-            X86Color::Register(pid) => X86Operand::Register(X86Register::Physical(pid)),
+            X86Color::Register(pid) => X86Operand::Register(X86Register::Physical(conv(pid))),
             X86Color::StackSlot(slot) => X86Operand::MemoryOffsetConstant(
-                X86Register::Physical(X86PhysicalRegisterID::RSP),
+                X86Register::Physical(conv(X86PhysicalRegisterID::RSP)),
                 (slot * 8) as usize,
             ),
         },
         X86Operand::Register(X86Register::Physical(pid)) => {
-            X86Operand::Register(X86Register::Physical(*pid))
+            X86Operand::Register(X86Register::Physical(conv(*pid)))
         }
         X86Operand::MemoryOffsetConstant(X86Register::Virtual(vid, _), constant) => {
             match coloring[*vid as usize] {
                 X86Color::Register(pid) => {
-                    X86Operand::MemoryOffsetConstant(X86Register::Physical(pid), *constant)
+                    X86Operand::MemoryOffsetConstant(X86Register::Physical(conv(pid)), *constant)
                 }
                 X86Color::StackSlot(slot) => {
                     colored_block.insts.push(X86Instruction::Mov(
-                        X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::R15)),
+                        X86Operand::Register(X86Register::Physical(conv(
+                            X86PhysicalRegisterID::R15,
+                        ))),
                         X86Operand::MemoryOffsetConstant(
-                            X86Register::Physical(X86PhysicalRegisterID::RSP),
+                            X86Register::Physical(conv(X86PhysicalRegisterID::RSP)),
                             (slot * 8) as usize,
                         ),
                     ));
                     X86Operand::MemoryOffsetConstant(
-                        X86Register::Physical(X86PhysicalRegisterID::R15),
+                        X86Register::Physical(conv(X86PhysicalRegisterID::R15)),
                         *constant,
                     )
                 }
             }
         }
         X86Operand::MemoryOffsetConstant(X86Register::Physical(pid), constant) => {
-            X86Operand::MemoryOffsetConstant(X86Register::Physical(*pid), *constant)
+            X86Operand::MemoryOffsetConstant(X86Register::Physical(conv(*pid)), *constant)
         }
         X86Operand::MemoryLabel(X86Register::Virtual(vid, _), label) => {
             match coloring[*vid as usize] {
                 X86Color::Register(pid) => {
-                    X86Operand::MemoryLabel(X86Register::Physical(pid), label)
+                    X86Operand::MemoryLabel(X86Register::Physical(conv(pid)), label)
                 }
                 X86Color::StackSlot(slot) => {
                     colored_block.insts.push(X86Instruction::Mov(
-                        X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::R15)),
+                        X86Operand::Register(X86Register::Physical(conv(
+                            X86PhysicalRegisterID::R15,
+                        ))),
                         X86Operand::MemoryOffsetConstant(
-                            X86Register::Physical(X86PhysicalRegisterID::RSP),
+                            X86Register::Physical(conv(X86PhysicalRegisterID::RSP)),
                             (slot * 8) as usize,
                         ),
                     ));
                     X86Operand::MemoryLabel(
-                        X86Register::Physical(X86PhysicalRegisterID::R15),
+                        X86Register::Physical(conv(X86PhysicalRegisterID::R15)),
                         label,
                     )
                 }
             }
         }
         X86Operand::MemoryLabel(X86Register::Physical(pid), label) => {
-            X86Operand::MemoryLabel(X86Register::Physical(*pid), label)
+            X86Operand::MemoryLabel(X86Register::Physical(conv(*pid)), label)
         }
         X86Operand::Immediate(imm) => X86Operand::Immediate(*imm),
     };
