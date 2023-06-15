@@ -497,13 +497,21 @@ impl<'a> X86GenContext<'a> {
                     }
                 },
                 ir::MIRInstruction::Gep(dst_reg, src_reg, offset_reg, offset_type) => {
+                    self.x86gen_inst(X86Instruction::Mov(
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*offset_reg)),
+                    ));
+                    self.x86gen_inst(X86Instruction::Imul(
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                        X86Operand::Immediate(offset_type.get_size() as u64),
+                    ));
+                    self.x86gen_inst(X86Instruction::Add(
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                        X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                    ));
                     self.x86gen_inst(X86Instruction::Lea(
                         X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
-                        X86Operand::MemoryOffsetLinear(
-                            offset_type.get_size(),
-                            self.mir_to_x86_virt_reg(*offset_reg),
-                            self.mir_to_x86_virt_reg(*src_reg),
-                        ),
+                        X86Operand::MemoryOffsetConstant(self.mir_to_x86_virt_reg(*offset_reg), 0),
                     ));
                 }
                 ir::MIRInstruction::Load(dst_reg, src_reg) => {

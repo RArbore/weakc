@@ -25,10 +25,8 @@ pub type X86BlockID = u32;
 pub enum X86Operand<'a> {
     Register(X86Register),
     MemoryOffsetConstant(X86Register, usize),
-    MemoryOffsetLinear(usize, X86Register, X86Register),
     MemoryLabel(X86Register, &'a [u8]),
     Immediate(u64),
-    DataSegmentVariable(u32),
 }
 
 #[derive(Debug, PartialEq)]
@@ -159,15 +157,6 @@ fn create_virtual_register_pack(
                     num_virtual_registers += 1;
                 }
             }
-            X86Operand::MemoryOffsetLinear(
-                _,
-                X86Register::Virtual(id1, _),
-                X86Register::Virtual(id2, _),
-            ) => {
-                virtual_registers[num_virtual_registers] = *id1;
-                virtual_registers[num_virtual_registers + 1] = *id2;
-                num_virtual_registers += 2;
-            }
             _ => {}
         }
         first_operand = false;
@@ -231,10 +220,6 @@ pub fn get_vid_types<'a>(
         | X86Operand::MemoryLabel(reg, _) => {
             add_reg(reg);
         }
-        X86Operand::MemoryOffsetLinear(_, reg1, reg2) => {
-            add_reg(reg1);
-            add_reg(reg2);
-        }
         _ => {}
     };
     for i in 0..function.len() {
@@ -287,10 +272,6 @@ impl<'a> X86Operand<'a> {
         match self {
             X86Operand::Register(reg) => reg.map_virtual_registers(map),
             X86Operand::MemoryOffsetConstant(reg, _) => reg.map_virtual_registers(map),
-            X86Operand::MemoryOffsetLinear(_, reg1, reg2) => {
-                reg1.map_virtual_registers(map);
-                reg2.map_virtual_registers(map);
-            }
             _ => {}
         }
     }
@@ -405,9 +386,6 @@ impl<'a> fmt::Display for X86Operand<'a> {
         match self {
             X86Operand::Register(reg) => write!(f, "{}", reg),
             X86Operand::MemoryOffsetConstant(reg, size) => write!(f, "[{} + {}]", reg, size),
-            X86Operand::MemoryOffsetLinear(coeff, linear_reg, constant_reg) => {
-                write!(f, "[{} * {} + {}]", coeff, linear_reg, constant_reg)
-            }
             X86Operand::MemoryLabel(reg, label) => write!(
                 f,
                 "[{} + {}]",
@@ -415,7 +393,6 @@ impl<'a> fmt::Display for X86Operand<'a> {
                 str::from_utf8(label).expect("PANIC: Label name not convertable to Rust str.")
             ),
             X86Operand::Immediate(con) => write!(f, "{}", con),
-            X86Operand::DataSegmentVariable(_) => todo!(),
         }?;
         Ok(())
     }
