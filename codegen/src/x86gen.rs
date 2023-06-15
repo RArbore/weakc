@@ -258,10 +258,21 @@ impl<'a> X86GenContext<'a> {
                     }
                 },
                 ir::MIRInstruction::Copy(dst_reg, src_reg) => {
-                    self.x86gen_inst(X86Instruction::Mov(
-                        X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
-                        X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
-                    ));
+                    assert_eq!(dst_reg.1, src_reg.1);
+                    match dst_reg.1 {
+                        ir::MIRType::Real => {
+                            self.x86gen_inst(X86Instruction::Movsd(
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                            ));
+                        }
+                        _ => {
+                            self.x86gen_inst(X86Instruction::Mov(
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                            ));
+                        }
+                    }
                 }
                 ir::MIRInstruction::Unary(dst_reg, op, src_reg) => {
                     match op {
