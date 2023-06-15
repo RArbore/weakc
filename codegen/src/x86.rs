@@ -21,7 +21,7 @@ use crate::*;
 
 pub type X86BlockID = u32;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum X86Operand<'a> {
     Register(X86Register),
     MemoryOffsetConstant(X86Register, usize),
@@ -62,7 +62,7 @@ pub enum X86VirtualRegisterPack {
     ),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum X86Instruction<'a> {
     Inc(X86Operand<'a>),
     Dec(X86Operand<'a>),
@@ -121,7 +121,7 @@ pub struct X86Module<'a> {
     pub blocks: &'a mut bump::List<'a, X86Block<'a>>,
     pub strings: &'a mut bump::List<'a, &'a [u8]>,
     pub floats: &'a mut bump::List<'a, f64>,
-    pub num_virtual_registers: u32,
+    pub pre_norm_num_virtual_registers: u32,
 }
 
 fn create_virtual_register_pack(

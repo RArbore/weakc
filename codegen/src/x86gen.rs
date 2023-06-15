@@ -40,10 +40,10 @@ impl<'a> X86GenContext<'a> {
         let context = X86GenContext {
             module: X86Module {
                 func_entries: bump.create_list(),
-                strings: bump.create_list(),
                 blocks: bump.create_list(),
+                strings: bump.create_list(),
                 floats: bump.create_list(),
-                num_virtual_registers: 0,
+                pre_norm_num_virtual_registers: 0,
             },
             curr_block: 0,
             curr_func: None,
@@ -156,23 +156,26 @@ impl<'a> X86GenContext<'a> {
     fn x86gen_inst(&mut self, inst: X86Instruction<'a>) {
         match inst.get_virtual_register_pack() {
             X86VirtualRegisterPack::OneDef(id) | X86VirtualRegisterPack::One(id) => {
-                self.module.num_virtual_registers = max(self.module.num_virtual_registers, id + 1);
+                self.module.pre_norm_num_virtual_registers =
+                    max(self.module.pre_norm_num_virtual_registers, id + 1);
             }
             X86VirtualRegisterPack::TwoDef(id1, id2) | X86VirtualRegisterPack::Two(id1, id2) => {
-                self.module.num_virtual_registers =
-                    max(self.module.num_virtual_registers, max(id1 + 1, id2 + 1));
+                self.module.pre_norm_num_virtual_registers = max(
+                    self.module.pre_norm_num_virtual_registers,
+                    max(id1 + 1, id2 + 1),
+                );
             }
             X86VirtualRegisterPack::ThreeDef(id1, id2, id3)
             | X86VirtualRegisterPack::Three(id1, id2, id3) => {
-                self.module.num_virtual_registers = max(
-                    self.module.num_virtual_registers,
+                self.module.pre_norm_num_virtual_registers = max(
+                    self.module.pre_norm_num_virtual_registers,
                     max(id1 + 1, max(id2 + 1, id3 + 1)),
                 );
             }
             X86VirtualRegisterPack::FourDef(id1, id2, id3, id4)
             | X86VirtualRegisterPack::Four(id1, id2, id3, id4) => {
-                self.module.num_virtual_registers = max(
-                    self.module.num_virtual_registers,
+                self.module.pre_norm_num_virtual_registers = max(
+                    self.module.pre_norm_num_virtual_registers,
                     max(id1 + 1, max(id2 + 1, max(id3 + 1, id4 + 1))),
                 );
             }

@@ -31,8 +31,9 @@ fn colors_interfere(color1: &X86Color, color2: &X86Color) -> bool {
 }
 
 pub fn x86regnorm<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
-    let scratch_bitset = bump.create_bitset(program.num_virtual_registers as usize);
-    let scratch_scan = unsafe { bump.alloc_slice_raw(program.num_virtual_registers as usize) };
+    let scratch_bitset = bump.create_bitset(program.pre_norm_num_virtual_registers as usize);
+    let scratch_scan =
+        unsafe { bump.alloc_slice_raw(program.pre_norm_num_virtual_registers as usize) };
     for i in 0..program.func_entries.len() {
         scratch_bitset.clear();
         let num_blocks = if i < program.func_entries.len() - 1 {
@@ -74,7 +75,7 @@ pub fn x86regnorm<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> 
             }
         }
         let mut cur_vid = 0;
-        for i in 0..program.num_virtual_registers as usize {
+        for i in 0..program.pre_norm_num_virtual_registers as usize {
             scratch_scan[i] = cur_vid;
             if scratch_bitset.at(i) {
                 cur_vid += 1;
@@ -545,6 +546,177 @@ fn color_x86_module<'a>(
     colorings: &'a bump::List<'a, &'a [X86Color]>,
     bump: &'a bump::BumpAllocator,
 ) -> X86Module<'a> {
+    assert_eq!(program.func_entries.len(), colorings.len());
+    let mut colored_program = X86Module {
+        func_entries: bump.create_list(),
+        blocks: bump.create_list(),
+        strings: bump.create_list(),
+        floats: bump.create_list(),
+        pre_norm_num_virtual_registers: program.pre_norm_num_virtual_registers,
+    };
+    for i in 0..program.func_entries.len() {
+        colored_program
+            .func_entries
+            .push(*program.func_entries.at(i));
+    }
+    for i in 0..program.strings.len() {
+        colored_program.strings.push(program.strings.at(i));
+    }
+    for i in 0..program.floats.len() {
+        colored_program.floats.push(*program.floats.at(i));
+    }
+    for i in 0..program.func_entries.len() {
+        let num_blocks = program.blocks.len() as u32;
+        let entry_block = program.func_entries.at(i).0;
+        let next_entry_block = if i == program.func_entries.len() - 1 {
+            num_blocks
+        } else {
+            program.func_entries.at(i + 1).0
+        };
+        for j in entry_block..next_entry_block {
+            colored_program = color_x86_block(program, colorings.at(i), j, colored_program, bump);
+        }
+    }
+    colored_program
+}
+
+fn color_x86_block<'a>(
+    program: &'a X86Module<'a>,
+    coloring: &'a [X86Color],
+    block_id: X86BlockID,
+    colored_program: X86Module<'a>,
+    bump: &'a bump::BumpAllocator,
+) -> X86Module<'a> {
+    assert_eq!(colored_program.blocks.len() as u32, block_id);
+    let block = program.blocks.at(block_id as usize);
+    colored_program.blocks.push(X86Block {
+        label: block.label,
+        insts: bump.create_list(),
+        id: block.id,
+        successors: block.successors,
+    });
+    let colored_block = colored_program.blocks.at_mut(block_id as usize);
+    for i in 0..block.insts.len() {
+        match block.insts.at(i) {
+            X86Instruction::Inc(op) => colored_block
+                .insts
+                .push(X86Instruction::Inc(color_x86_operand(op, coloring))),
+            X86Instruction::Dec(op) => colored_block
+                .insts
+                .push(X86Instruction::Dec(color_x86_operand(op, coloring))),
+            X86Instruction::Neg(op) => colored_block
+                .insts
+                .push(X86Instruction::Neg(color_x86_operand(op, coloring))),
+            X86Instruction::Not(op) => colored_block
+                .insts
+                .push(X86Instruction::Not(color_x86_operand(op, coloring))),
+            X86Instruction::Push(op) => colored_block
+                .insts
+                .push(X86Instruction::Push(color_x86_operand(op, coloring))),
+            X86Instruction::Pop(op) => colored_block
+                .insts
+                .push(X86Instruction::Pop(color_x86_operand(op, coloring))),
+            X86Instruction::Seta(op) => colored_block
+                .insts
+                .push(X86Instruction::Seta(color_x86_operand(op, coloring))),
+            X86Instruction::Setae(op) => colored_block
+                .insts
+                .push(X86Instruction::Setae(color_x86_operand(op, coloring))),
+            X86Instruction::Sete(op) => colored_block
+                .insts
+                .push(X86Instruction::Sete(color_x86_operand(op, coloring))),
+            X86Instruction::Setne(op) => colored_block
+                .insts
+                .push(X86Instruction::Setne(color_x86_operand(op, coloring))),
+            X86Instruction::Lea(op1, op2) => colored_block.insts.push(X86Instruction::Lea(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Add(op1, op2) => colored_block.insts.push(X86Instruction::Add(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Addsd(op1, op2) => colored_block.insts.push(X86Instruction::Addsd(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Sub(op1, op2) => colored_block.insts.push(X86Instruction::Sub(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Subsd(op1, op2) => colored_block.insts.push(X86Instruction::Subsd(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Imul(op1, op2) => colored_block.insts.push(X86Instruction::Imul(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Mulsd(op1, op2) => colored_block.insts.push(X86Instruction::Mulsd(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Divsd(op1, op2) => colored_block.insts.push(X86Instruction::Divsd(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Xor(op1, op2) => colored_block.insts.push(X86Instruction::Xor(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Xorps(op1, op2) => colored_block.insts.push(X86Instruction::Xorps(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Or(op1, op2) => colored_block.insts.push(X86Instruction::Or(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::And(op1, op2) => colored_block.insts.push(X86Instruction::And(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Mov(op1, op2) => colored_block.insts.push(X86Instruction::Mov(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Movsd(op1, op2) => colored_block.insts.push(X86Instruction::Movsd(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Movsxd(op1, op2) => colored_block.insts.push(X86Instruction::Movsxd(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Cvttsd2si(op1, op2) => {
+                colored_block.insts.push(X86Instruction::Cvttsd2si(
+                    color_x86_operand(op1, coloring),
+                    color_x86_operand(op2, coloring),
+                ))
+            }
+            X86Instruction::Cmp(op1, op2) => colored_block.insts.push(X86Instruction::Cmp(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Comisd(op1, op2) => colored_block.insts.push(X86Instruction::Comisd(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Test(op1, op2) => colored_block.insts.push(X86Instruction::Test(
+                color_x86_operand(op1, coloring),
+                color_x86_operand(op2, coloring),
+            )),
+            X86Instruction::Jmp(label) => colored_block.insts.push(X86Instruction::Jmp(label)),
+            X86Instruction::Jnz(label) => colored_block.insts.push(X86Instruction::Jnz(label)),
+            X86Instruction::Call(label) => colored_block.insts.push(X86Instruction::Call(label)),
+            X86Instruction::Ret => colored_block.insts.push(X86Instruction::Ret),
+            X86Instruction::Nop => colored_block.insts.push(X86Instruction::Nop),
+        }
+    }
+    colored_program
+}
+
+fn color_x86_operand<'a>(operand: &'a X86Operand<'a>, coloring: &'a [X86Color]) -> X86Operand<'a> {
     todo!()
 }
 
