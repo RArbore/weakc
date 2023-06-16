@@ -615,22 +615,6 @@ fn color_x86_module<'a>(
                         .push(X86Instruction::Push(X86Operand::Register(
                             X86Register::Physical(*pid),
                         )));
-                } else if (pid.get_usage()
-                    & X86PhysicalRegisterUsageBit::FloatingCallerSaved as X86PhysicalRegisterUsage)
-                    == 0
-                    && pid.is_floating()
-                {
-                    entry_block.insts.push(X86Instruction::Sub(
-                        X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::RSP)),
-                        X86Operand::Immediate(8),
-                    ));
-                    entry_block.insts.push(X86Instruction::Movsd(
-                        X86Operand::MemoryOffsetConstant(
-                            X86Register::Physical(X86PhysicalRegisterID::RSP),
-                            0,
-                        ),
-                        X86Operand::Register(X86Register::Physical(*pid)),
-                    ));
                 }
             }
         }
@@ -722,25 +706,6 @@ fn color_x86_block<'a>(
                             block.insts.push(X86Instruction::Pop(X86Operand::Register(
                                 X86Register::Physical(*pid),
                             )));
-                        } else if (pid.get_usage()
-                            & X86PhysicalRegisterUsageBit::FloatingCallerSaved
-                                as X86PhysicalRegisterUsage)
-                            == 0
-                            && pid.is_floating()
-                        {
-                            block.insts.push(X86Instruction::Movsd(
-                                X86Operand::Register(X86Register::Physical(*pid)),
-                                X86Operand::MemoryOffsetConstant(
-                                    X86Register::Physical(X86PhysicalRegisterID::RSP),
-                                    0,
-                                ),
-                            ));
-                            block.insts.push(X86Instruction::Add(
-                                X86Operand::Register(X86Register::Physical(
-                                    X86PhysicalRegisterID::RSP,
-                                )),
-                                X86Operand::Immediate(8),
-                            ));
                         }
                     }
                 }
