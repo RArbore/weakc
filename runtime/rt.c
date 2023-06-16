@@ -81,9 +81,11 @@ void rt_print_tensor(const tensor *val) {
 	total_size *= val->dim_sizes[i];
     }
     for (size_t i = 0; i < total_size - 1; ++i) {
-	printf("%f, ", val->elements[i]);
+	rt_print_number(val->elements[i]);
+	printf(", ");
     }
-    printf("%f] sa [", val->elements[total_size - 1]);
+    rt_print_number(val->elements[total_size - 1]);
+    printf("] sa [");
     for (unsigned i = 0; i < val->num_dims - 1; ++i) {
 	printf("%u, ", val->dim_sizes[i]);
     }
