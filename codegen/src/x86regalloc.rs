@@ -625,7 +625,7 @@ fn color_x86_module<'a>(
                     entry_block
                         .insts
                         .push(X86Instruction::Push(X86Operand::Register(
-                            X86Register::Physical(*pid),
+                            X86Register::Physical(get_64_bits(*pid)),
                         )));
                     already_seen.set(pid.get_pack_and_pos().0 as usize);
                 }
@@ -653,14 +653,14 @@ macro_rules! color_inst_arm {
         $b.blocks.at_mut($a as usize).insts.push($i);
     }};
     ($i:expr, $o1:expr, $a:expr, $b:expr, $c:expr) => {{
-        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false);
+        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false, false);
         $c = moved_colored_program;
         $c.blocks.at_mut($b as usize).insts.push($i(new_op));
     }};
     ($i:expr, $o1:expr, $o2:expr, $a:expr, $b:expr, $c:expr) => {{
-        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false);
+        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false, false);
         let (new_op2, moved_colored_program) =
-            color_x86_operand($o2, $a, $b, moved_colored_program, false);
+            color_x86_operand($o2, $a, $b, moved_colored_program, false, false);
         $c = moved_colored_program;
         $c.blocks
             .at_mut($b as usize)
@@ -671,14 +671,32 @@ macro_rules! color_inst_arm {
 
 macro_rules! color_inst_arm_byte_regs {
     ($i:expr, $o1:expr, $a:expr, $b:expr, $c:expr) => {{
-        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, true);
+        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, true, false);
         $c = moved_colored_program;
         $c.blocks.at_mut($b as usize).insts.push($i(new_op));
     }};
     ($i:expr, $o1:expr, $o2:expr, $a:expr, $b:expr, $c:expr) => {{
-        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, true);
+        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, true, false);
         let (new_op2, moved_colored_program) =
-            color_x86_operand($o2, $a, $b, moved_colored_program, true);
+            color_x86_operand($o2, $a, $b, moved_colored_program, true, false);
+        $c = moved_colored_program;
+        $c.blocks
+            .at_mut($b as usize)
+            .insts
+            .push($i(new_op1, new_op2));
+    }};
+}
+
+macro_rules! color_inst_arm_64_regs {
+    ($i:expr, $o1:expr, $a:expr, $b:expr, $c:expr) => {{
+        let (new_op, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false, true);
+        $c = moved_colored_program;
+        $c.blocks.at_mut($b as usize).insts.push($i(new_op));
+    }};
+    ($i:expr, $o1:expr, $o2:expr, $a:expr, $b:expr, $c:expr) => {{
+        let (new_op1, moved_colored_program) = color_x86_operand($o1, $a, $b, $c, false, true);
+        let (new_op2, moved_colored_program) =
+            color_x86_operand($o2, $a, $b, moved_colored_program, false, true);
         $c = moved_colored_program;
         $c.blocks
             .at_mut($b as usize)
@@ -712,7 +730,7 @@ fn color_x86_block<'a>(
                             && !already_seen.at(pid.get_pack_and_pos().0 as usize)
                         {
                             block.insts.push(X86Instruction::Pop(X86Operand::Register(
-                                X86Register::Physical(*pid),
+                                X86Register::Physical(get_64_bits(*pid)),
                             )));
                             already_seen.set(pid.get_pack_and_pos().0 as usize);
                         }
@@ -749,7 +767,7 @@ fn color_x86_block<'a>(
                         {
                             colored_program.blocks.at_mut(block_id as usize).insts.push(
                                 X86Instruction::Push(X86Operand::Register(X86Register::Physical(
-                                    pid,
+                                    get_64_bits(pid),
                                 ))),
                             );
                             already_seen.set(pid.get_pack_and_pos().0 as usize);
@@ -799,7 +817,7 @@ fn color_x86_block<'a>(
                         {
                             colored_program.blocks.at_mut(block_id as usize).insts.push(
                                 X86Instruction::Pop(X86Operand::Register(X86Register::Physical(
-                                    pid,
+                                    get_64_bits(pid),
                                 ))),
                             );
                             already_seen.set(pid.get_pack_and_pos().0 as usize);
@@ -844,7 +862,7 @@ fn color_x86_block<'a>(
             X86Instruction::Not(op) => {
                 color_inst_arm!(X86Instruction::Not, op, coloring, block_id, colored_program)
             }
-            X86Instruction::Push(op) => color_inst_arm!(
+            X86Instruction::Push(op) => color_inst_arm_64_regs!(
                 X86Instruction::Push,
                 op,
                 coloring,
@@ -852,7 +870,13 @@ fn color_x86_block<'a>(
                 colored_program
             ),
             X86Instruction::Pop(op) => {
-                color_inst_arm!(X86Instruction::Pop, op, coloring, block_id, colored_program)
+                color_inst_arm_64_regs!(
+                    X86Instruction::Pop,
+                    op,
+                    coloring,
+                    block_id,
+                    colored_program
+                )
             }
             X86Instruction::Seta(op) => color_inst_arm_byte_regs!(
                 X86Instruction::Seta,
@@ -978,7 +1002,7 @@ fn color_x86_block<'a>(
                 block_id,
                 colored_program
             ),
-            X86Instruction::Mov(op1, op2) => color_inst_arm!(
+            X86Instruction::Mov(op1, op2) => color_inst_arm_64_regs!(
                 X86Instruction::Mov,
                 op1,
                 op2,
@@ -1046,10 +1070,13 @@ fn color_x86_operand<'a>(
     block_id: X86BlockID,
     colored_program: X86Module<'a>,
     convert_to_byte_regs: bool,
+    convert_to_64_regs: bool,
 ) -> (X86Operand<'a>, X86Module<'a>) {
     let colored_block = colored_program.blocks.at_mut(block_id as usize);
     let conv = if convert_to_byte_regs {
         |reg| get_lowest_byte(reg)
+    } else if convert_to_64_regs {
+        |reg| get_64_bits(reg)
     } else {
         |reg| reg
     };

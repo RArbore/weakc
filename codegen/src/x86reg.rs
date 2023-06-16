@@ -204,6 +204,76 @@ pub fn get_lowest_byte(reg: X86PhysicalRegisterID) -> X86PhysicalRegisterID {
     }
 }
 
+pub fn get_64_bits(reg: X86PhysicalRegisterID) -> X86PhysicalRegisterID {
+    match reg {
+        X86PhysicalRegisterID::RAX
+        | X86PhysicalRegisterID::EAX
+        | X86PhysicalRegisterID::AX
+        | X86PhysicalRegisterID::AL => X86PhysicalRegisterID::RAX,
+        X86PhysicalRegisterID::RBX
+        | X86PhysicalRegisterID::EBX
+        | X86PhysicalRegisterID::BX
+        | X86PhysicalRegisterID::BL => X86PhysicalRegisterID::RBX,
+        X86PhysicalRegisterID::RCX
+        | X86PhysicalRegisterID::ECX
+        | X86PhysicalRegisterID::CX
+        | X86PhysicalRegisterID::CL => X86PhysicalRegisterID::RCX,
+        X86PhysicalRegisterID::RDX
+        | X86PhysicalRegisterID::EDX
+        | X86PhysicalRegisterID::DX
+        | X86PhysicalRegisterID::DL => X86PhysicalRegisterID::RDX,
+        X86PhysicalRegisterID::RSI
+        | X86PhysicalRegisterID::ESI
+        | X86PhysicalRegisterID::SI
+        | X86PhysicalRegisterID::SIL => X86PhysicalRegisterID::RSI,
+        X86PhysicalRegisterID::RDI
+        | X86PhysicalRegisterID::EDI
+        | X86PhysicalRegisterID::DI
+        | X86PhysicalRegisterID::DIL => X86PhysicalRegisterID::RDI,
+        X86PhysicalRegisterID::RSP
+        | X86PhysicalRegisterID::ESP
+        | X86PhysicalRegisterID::SP
+        | X86PhysicalRegisterID::SPL => X86PhysicalRegisterID::RSP,
+        X86PhysicalRegisterID::RBP
+        | X86PhysicalRegisterID::EBP
+        | X86PhysicalRegisterID::BP
+        | X86PhysicalRegisterID::BPL => X86PhysicalRegisterID::RBP,
+        X86PhysicalRegisterID::R8
+        | X86PhysicalRegisterID::R8D
+        | X86PhysicalRegisterID::R8W
+        | X86PhysicalRegisterID::R8B => X86PhysicalRegisterID::R8,
+        X86PhysicalRegisterID::R9
+        | X86PhysicalRegisterID::R9D
+        | X86PhysicalRegisterID::R9W
+        | X86PhysicalRegisterID::R9B => X86PhysicalRegisterID::R9,
+        X86PhysicalRegisterID::R10
+        | X86PhysicalRegisterID::R10D
+        | X86PhysicalRegisterID::R10W
+        | X86PhysicalRegisterID::R10B => X86PhysicalRegisterID::R10,
+        X86PhysicalRegisterID::R11
+        | X86PhysicalRegisterID::R11D
+        | X86PhysicalRegisterID::R11W
+        | X86PhysicalRegisterID::R11B => X86PhysicalRegisterID::R11,
+        X86PhysicalRegisterID::R12
+        | X86PhysicalRegisterID::R12D
+        | X86PhysicalRegisterID::R12W
+        | X86PhysicalRegisterID::R12B => X86PhysicalRegisterID::R12,
+        X86PhysicalRegisterID::R13
+        | X86PhysicalRegisterID::R13D
+        | X86PhysicalRegisterID::R13W
+        | X86PhysicalRegisterID::R13B => X86PhysicalRegisterID::R13,
+        X86PhysicalRegisterID::R14
+        | X86PhysicalRegisterID::R14D
+        | X86PhysicalRegisterID::R14W
+        | X86PhysicalRegisterID::R14B => X86PhysicalRegisterID::R14,
+        X86PhysicalRegisterID::R15
+        | X86PhysicalRegisterID::R15D
+        | X86PhysicalRegisterID::R15W
+        | X86PhysicalRegisterID::R15B => X86PhysicalRegisterID::R15,
+        _ => panic!("PANIC: Can only get full 64 bits of fixed point registers."),
+    }
+}
+
 pub fn map_num_and_type_to_reg(num: i32, ty: X86VirtualRegisterType) -> X86PhysicalRegisterID {
     match (num, ty) {
         (0, X86VirtualRegisterType::Fixed32) => X86PhysicalRegisterID::EAX,
