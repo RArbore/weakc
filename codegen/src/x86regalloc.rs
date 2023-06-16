@@ -115,14 +115,14 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
         let vid_types = get_vid_types(func_blocks, bump, program.func_entries.at(i).1);
         let (graph, liveness) =
             build_interference_graph(func_blocks, bump, program.func_entries.at(i).1, vid_types);
-        _write_dot_interference_graph(
+        /*_write_dot_interference_graph(
             program
                 .blocks
                 .at(program.func_entries.at(i).0 as usize)
                 .label,
             graph,
             program.func_entries.at(i).1,
-        );
+        );*/
         let coloring =
             color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
         println!("{:?}", coloring);
@@ -603,6 +603,15 @@ fn color_x86_module<'a>(
         } else {
             program.func_entries.at(i + 1).0
         };
+        for j in entry_block..next_entry_block {
+            let block = program.blocks.at(j as usize);
+            colored_program.blocks.push(X86Block {
+                label: block.label,
+                insts: bump.create_list(),
+                id: block.id,
+                successors: block.successors,
+            });
+        }
         for color in *coloring {
             let entry_block = colored_program.blocks.at_mut(entry_block as usize);
             if let X86Color::Register(pid) = color {
@@ -627,7 +636,6 @@ fn color_x86_module<'a>(
                 colored_program,
                 liveness,
                 base_statement,
-                bump,
             );
             base_statement += program.blocks.at(j as usize).insts.len();
         }
@@ -681,16 +689,8 @@ fn color_x86_block<'a>(
     mut colored_program: X86Module<'a>,
     liveness: &'a bump::Bitset<'a>,
     base_statement: usize,
-    bump: &'a bump::BumpAllocator,
 ) -> X86Module<'a> {
-    assert_eq!(colored_program.blocks.len() as u32, block_id);
     let block = program.blocks.at(block_id as usize);
-    colored_program.blocks.push(X86Block {
-        label: block.label,
-        insts: bump.create_list(),
-        id: block.id,
-        successors: block.successors,
-    });
     let mut statement_counter = base_statement;
     for i in 0..block.insts.len() {
         match block.insts.at(i) {
