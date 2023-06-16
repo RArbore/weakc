@@ -1,6 +1,7 @@
 *.s
 *.sh
 *.dot
+*.out
 
 # Added by cargo
 

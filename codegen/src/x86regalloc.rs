@@ -112,7 +112,7 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
             );
         }
         let vid_types = get_vid_types(func_blocks, bump, program.func_entries.at(i).1);
-        let graph =
+        let (graph, liveness) =
             build_interference_graph(func_blocks, bump, program.func_entries.at(i).1, vid_types);
         _write_dot_interference_graph(
             program
@@ -122,8 +122,13 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
             graph,
             program.func_entries.at(i).1,
         );
-        let coloring =
-            color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
+        let coloring = color_interference_graph(
+            graph,
+            bump,
+            program.func_entries.at(i).1,
+            vid_types,
+            liveness,
+        );
         println!("{:?}", coloring);
         colorings.push(coloring);
     }
@@ -273,7 +278,7 @@ fn build_interference_graph<'a>(
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
     vid_types: &'a [X86VirtualRegisterType],
-) -> &'a mut bump::Bitset<'a> {
+) -> (&'a mut bump::Bitset<'a>, &'a mut bump::Bitset<'a>) {
     let same_register_space = |vid1: X86VirtualRegisterID, vid2: X86VirtualRegisterID| -> bool {
         match (vid_types[vid1 as usize], vid_types[vid2 as usize]) {
             (X86VirtualRegisterType::Fixed32, X86VirtualRegisterType::Fixed32)
@@ -305,8 +310,10 @@ fn build_interference_graph<'a>(
     let in_sets = unsafe { bump.alloc_slice_raw(function.len()) };
     let out_sets = unsafe { bump.alloc_slice_raw(function.len()) };
 
+    let mut num_statements = 0;
     for i in 0..function.len() {
         let block = function.at(i);
+        num_statements += block.insts.len();
         let def_use_sets = generate_def_use_sets(block, bump, num_virtual_registers);
         def_sets[i] = def_use_sets.0;
         use_sets[i] = def_use_sets.1;
@@ -315,6 +322,7 @@ fn build_interference_graph<'a>(
         out_sets[i].copy(use_sets[i]);
     }
 
+    let liveness = bump.create_bitset(num_virtual_registers as usize * num_statements);
     let scratch_bitset = bump.create_bitset(num_virtual_registers as usize);
     let mut change = true;
     while change {
@@ -352,10 +360,16 @@ fn build_interference_graph<'a>(
 
     let graph_bitset =
         bump.create_bitset(num_virtual_registers as usize * num_virtual_registers as usize);
+    let mut statement_counter = 0;
     for i in 0..function.len() {
         let block = function.at(i);
         scratch_bitset.copy(out_sets[i]);
         for j in (0..block.insts.len()).rev() {
+            for vid in 0..num_virtual_registers as usize {
+                if scratch_bitset.at(vid) {
+                    liveness.set(vid + (statement_counter + j) * num_virtual_registers as usize);
+                }
+            }
             let inst = block.insts.at(j);
             let pack = inst.get_virtual_register_pack();
             let def = match pack {
@@ -415,8 +429,24 @@ fn build_interference_graph<'a>(
                 }
             };
         }
+        statement_counter += block.insts.len();
     }
-    graph_bitset
+    println!("Liveness: {:?}", liveness);
+    let mut statement_counter = 0;
+    for i in 0..function.len() {
+        let block = function.at(i);
+        for j in 0..block.insts.len() {
+            println!("At: {}", block.insts.at(j));
+            for vid in 0..num_virtual_registers as usize {
+                if liveness.at(statement_counter * num_virtual_registers as usize + vid) {
+                    println!("Live: {}", vid);
+                }
+            }
+            println!("");
+            statement_counter += 1;
+        }
+    }
+    (graph_bitset, liveness)
 }
 
 fn color_interference_graph<'a>(
@@ -424,6 +454,7 @@ fn color_interference_graph<'a>(
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
     vid_types: &'a [X86VirtualRegisterType],
+    liveness: &'a bump::Bitset<'a>,
 ) -> &'a [X86Color] {
     let colors: &mut [X86Color] = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
     let removed: &mut [bool] = bump.alloc_slice_filled(&false, num_virtual_registers as usize);
