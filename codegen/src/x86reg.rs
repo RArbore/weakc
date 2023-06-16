@@ -286,6 +286,10 @@ pub enum X86PhysicalRegisterUsageBit {
 pub type X86PhysicalRegisterUsage = u32;
 
 impl X86PhysicalRegisterID {
+    pub fn is_floating(&self) -> bool {
+        self.get_pack_and_pos().0 >= 16
+    }
+
     fn get_pack_and_pos(&self) -> (i32, i32) {
         match self {
             X86PhysicalRegisterID::RAX => (0, 0),

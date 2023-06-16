@@ -594,6 +594,8 @@ fn color_x86_module<'a>(
         colored_program.floats.push(*program.floats.at(i));
     }
     for i in 0..program.func_entries.len() {
+        let coloring = colorings.at(i);
+        let liveness = liveness_lists.at(i);
         let num_blocks = program.blocks.len() as u32;
         let entry_block = program.func_entries.at(i).0;
         let next_entry_block = if i == program.func_entries.len() - 1 {
@@ -601,14 +603,45 @@ fn color_x86_module<'a>(
         } else {
             program.func_entries.at(i + 1).0
         };
+        for color in *coloring {
+            let entry_block = colored_program.blocks.at_mut(entry_block as usize);
+            if let X86Color::Register(pid) = color {
+                if (pid.get_usage()
+                    & X86PhysicalRegisterUsageBit::FixedCalleeSaved as X86PhysicalRegisterUsage)
+                    != 0
+                {
+                    entry_block
+                        .insts
+                        .push(X86Instruction::Push(X86Operand::Register(
+                            X86Register::Physical(*pid),
+                        )));
+                } else if (pid.get_usage()
+                    & X86PhysicalRegisterUsageBit::FloatingCallerSaved as X86PhysicalRegisterUsage)
+                    == 0
+                    && pid.is_floating()
+                {
+                    entry_block.insts.push(X86Instruction::Sub(
+                        X86Operand::Register(X86Register::Physical(X86PhysicalRegisterID::RSP)),
+                        X86Operand::Immediate(8),
+                    ));
+                    entry_block.insts.push(X86Instruction::Movsd(
+                        X86Operand::MemoryOffsetConstant(
+                            X86Register::Physical(X86PhysicalRegisterID::RSP),
+                            0,
+                        ),
+                        X86Operand::Register(X86Register::Physical(*pid)),
+                    ));
+                }
+            }
+        }
         let mut base_statement = 0;
         for j in entry_block..next_entry_block {
             colored_program = color_x86_block(
                 program,
-                colorings.at(i),
+                coloring,
                 j,
                 colored_program,
-                liveness_lists.at(i),
+                liveness,
                 base_statement,
                 bump,
             );
@@ -677,11 +710,46 @@ fn color_x86_block<'a>(
     let mut statement_counter = base_statement;
     for i in 0..block.insts.len() {
         match block.insts.at(i) {
-            X86Instruction::Ret => colored_program
-                .blocks
-                .at_mut(block_id as usize)
-                .insts
-                .push(X86Instruction::Ret),
+            X86Instruction::Ret => {
+                for color in coloring {
+                    let block = colored_program.blocks.at_mut(block_id as usize);
+                    if let X86Color::Register(pid) = color {
+                        if (pid.get_usage()
+                            & X86PhysicalRegisterUsageBit::FixedCalleeSaved
+                                as X86PhysicalRegisterUsage)
+                            != 0
+                        {
+                            block.insts.push(X86Instruction::Pop(X86Operand::Register(
+                                X86Register::Physical(*pid),
+                            )));
+                        } else if (pid.get_usage()
+                            & X86PhysicalRegisterUsageBit::FloatingCallerSaved
+                                as X86PhysicalRegisterUsage)
+                            == 0
+                            && pid.is_floating()
+                        {
+                            block.insts.push(X86Instruction::Movsd(
+                                X86Operand::Register(X86Register::Physical(*pid)),
+                                X86Operand::MemoryOffsetConstant(
+                                    X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                    0,
+                                ),
+                            ));
+                            block.insts.push(X86Instruction::Add(
+                                X86Operand::Register(X86Register::Physical(
+                                    X86PhysicalRegisterID::RSP,
+                                )),
+                                X86Operand::Immediate(8),
+                            ));
+                        }
+                    }
+                }
+                colored_program
+                    .blocks
+                    .at_mut(block_id as usize)
+                    .insts
+                    .push(X86Instruction::Ret);
+            }
             X86Instruction::Nop => colored_program
                 .blocks
                 .at_mut(block_id as usize)
