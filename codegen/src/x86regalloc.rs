@@ -97,6 +97,7 @@ pub fn x86regnorm<'a>(program: X86Module<'a>, bump: &'a bump::BumpAllocator) -> 
 
 pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator) -> X86Module<'a> {
     let colorings = bump.create_list();
+    let liveness_lists = bump.create_list();
     for i in 0..program.func_entries.len() {
         let num_blocks = if i < program.func_entries.len() - 1 {
             program.func_entries.at(i + 1).0 - program.func_entries.at(i).0
@@ -122,17 +123,13 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
             graph,
             program.func_entries.at(i).1,
         );
-        let coloring = color_interference_graph(
-            graph,
-            bump,
-            program.func_entries.at(i).1,
-            vid_types,
-            liveness,
-        );
+        let coloring =
+            color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
         println!("{:?}", coloring);
         colorings.push(coloring);
+        liveness_lists.push(liveness);
     }
-    color_x86_module(program, colorings, bump)
+    color_x86_module(program, colorings, liveness_lists, bump)
 }
 
 fn post_order_traversal<'a>(
@@ -454,7 +451,6 @@ fn color_interference_graph<'a>(
     bump: &'a bump::BumpAllocator,
     num_virtual_registers: u32,
     vid_types: &'a [X86VirtualRegisterType],
-    liveness: &'a bump::Bitset<'a>,
 ) -> &'a [X86Color] {
     let colors: &mut [X86Color] = unsafe { bump.alloc_slice_raw(num_virtual_registers as usize) };
     let removed: &mut [bool] = bump.alloc_slice_filled(&false, num_virtual_registers as usize);
@@ -575,6 +571,7 @@ fn reg_order_for_type(ty: X86VirtualRegisterType) -> &'static [X86PhysicalRegist
 fn color_x86_module<'a>(
     program: &'a X86Module<'a>,
     colorings: &'a bump::List<'a, &'a [X86Color]>,
+    liveness_lists: &'a bump::List<'a, &'a mut bump::Bitset<'a>>,
     bump: &'a bump::BumpAllocator,
 ) -> X86Module<'a> {
     assert_eq!(program.func_entries.len(), colorings.len());
@@ -604,8 +601,18 @@ fn color_x86_module<'a>(
         } else {
             program.func_entries.at(i + 1).0
         };
+        let mut base_statement = 0;
         for j in entry_block..next_entry_block {
-            colored_program = color_x86_block(program, colorings.at(i), j, colored_program, bump);
+            colored_program = color_x86_block(
+                program,
+                colorings.at(i),
+                j,
+                colored_program,
+                liveness_lists.at(i),
+                base_statement,
+                bump,
+            );
+            base_statement += program.blocks.at(j as usize).insts.len();
         }
     }
     colored_program
@@ -655,6 +662,8 @@ fn color_x86_block<'a>(
     coloring: &'a [X86Color],
     block_id: X86BlockID,
     mut colored_program: X86Module<'a>,
+    liveness: &'a bump::Bitset<'a>,
+    base_statement: usize,
     bump: &'a bump::BumpAllocator,
 ) -> X86Module<'a> {
     assert_eq!(colored_program.blocks.len() as u32, block_id);
@@ -665,6 +674,7 @@ fn color_x86_block<'a>(
         id: block.id,
         successors: block.successors,
     });
+    let mut statement_counter = base_statement;
     for i in 0..block.insts.len() {
         match block.insts.at(i) {
             X86Instruction::Ret => colored_program
@@ -687,11 +697,47 @@ fn color_x86_block<'a>(
                 .at_mut(block_id as usize)
                 .insts
                 .push(X86Instruction::Jnz(label)),
-            X86Instruction::Call(label) => colored_program
-                .blocks
-                .at_mut(block_id as usize)
-                .insts
-                .push(X86Instruction::Call(label)),
+            X86Instruction::Call(label) => {
+                for vid in 0..coloring.len() {
+                    let liveness_idx = statement_counter * coloring.len() + vid;
+                    if let X86Color::Register(pid) = coloring[vid] {
+                        if liveness.at(liveness_idx)
+                            && (pid.get_usage()
+                                & X86PhysicalRegisterUsageBit::FixedCallerSaved
+                                    as X86PhysicalRegisterUsage)
+                                != 0
+                        {
+                            colored_program.blocks.at_mut(block_id as usize).insts.push(
+                                X86Instruction::Push(X86Operand::Register(X86Register::Physical(
+                                    pid,
+                                ))),
+                            );
+                        }
+                    }
+                }
+                colored_program
+                    .blocks
+                    .at_mut(block_id as usize)
+                    .insts
+                    .push(X86Instruction::Call(label));
+                for vid in 0..coloring.len() {
+                    let liveness_idx = statement_counter * coloring.len() + vid;
+                    if let X86Color::Register(pid) = coloring[vid] {
+                        if liveness.at(liveness_idx)
+                            && (pid.get_usage()
+                                & X86PhysicalRegisterUsageBit::FixedCallerSaved
+                                    as X86PhysicalRegisterUsage)
+                                != 0
+                        {
+                            colored_program.blocks.at_mut(block_id as usize).insts.push(
+                                X86Instruction::Pop(X86Operand::Register(X86Register::Physical(
+                                    pid,
+                                ))),
+                            );
+                        }
+                    }
+                }
+            }
             X86Instruction::Inc(op) => {
                 color_inst_arm!(X86Instruction::Inc, op, coloring, block_id, colored_program)
             }
@@ -895,6 +941,7 @@ fn color_x86_block<'a>(
                 colored_program
             ),
         }
+        statement_counter += 1;
     }
     colored_program
 }
