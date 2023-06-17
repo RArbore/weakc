@@ -285,15 +285,31 @@ impl<'a> X86GenContext<'a> {
                                 self.mir_to_x86_virt_reg(*dst_reg),
                             )));
                         }
-                        ir::MIRUnaryOp::Negate => {
-                            self.x86gen_inst(X86Instruction::Mov(
-                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
-                                X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
-                            ));
-                            self.x86gen_inst(X86Instruction::Neg(X86Operand::Register(
-                                self.mir_to_x86_virt_reg(*dst_reg),
-                            )));
-                        }
+                        ir::MIRUnaryOp::Negate => match dst_reg.1 {
+                            ir::MIRType::Real => {
+                                self.x86gen_inst(X86Instruction::Movsd(
+                                    X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                    X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                                ));
+                                let float_id = self.record_float(-1.0);
+                                self.x86gen_inst(X86Instruction::Mulsd(
+                                    X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                    X86Operand::MemoryLabel(
+                                        X86Register::Physical(X86PhysicalRegisterID::RIP),
+                                        self.weak_float_labels.at(float_id),
+                                    ),
+                                ));
+                            }
+                            _ => {
+                                self.x86gen_inst(X86Instruction::Mov(
+                                    X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                    X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
+                                ));
+                                self.x86gen_inst(X86Instruction::Neg(X86Operand::Register(
+                                    self.mir_to_x86_virt_reg(*dst_reg),
+                                )));
+                            }
+                        },
                         ir::MIRUnaryOp::Round => {
                             self.x86gen_inst(X86Instruction::Cvttsd2si(
                                 X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
