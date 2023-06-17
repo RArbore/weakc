@@ -126,7 +126,7 @@ impl BumpAllocator {
         slice::from_raw_parts_mut(alloc, len)
     }
 
-    pub fn alloc_slice_filled<'a, 'b, T: Sized + Copy>(
+    pub fn alloc_slice_filled<'a, 'b, T: Sized + Clone>(
         &'a self,
         replicate: &T,
         len: usize,
@@ -135,7 +135,7 @@ impl BumpAllocator {
         let alloc = self.alloc_impl(layout.size() * len, layout.align()) as *mut T;
         unsafe {
             for i in 0..len {
-                alloc.offset(i as isize).write(*replicate);
+                alloc.offset(i as isize).write(replicate.clone());
             }
             slice::from_raw_parts_mut(alloc, len)
         }

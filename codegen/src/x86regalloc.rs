@@ -594,6 +594,8 @@ fn color_x86_module<'a>(
         colored_program.floats.push(*program.floats.at(i));
     }
     let mut already_seen = bump.create_bitset(X86_NUM_ALLOC_PHYSICAL_REGISTERS);
+    let mut insts_to_add_in_reverse =
+        bump.alloc_slice_filled(&X86Instruction::Nop, X86_NUM_ALLOC_PHYSICAL_REGISTERS);
     for i in 0..program.func_entries.len() {
         let coloring = colorings.at(i);
         let liveness = liveness_lists.at(i);
@@ -633,7 +635,7 @@ fn color_x86_module<'a>(
         }
         let mut base_statement = 0;
         for j in entry_block..next_entry_block {
-            (colored_program, already_seen) = color_x86_block(
+            (colored_program, already_seen, insts_to_add_in_reverse) = color_x86_block(
                 program,
                 coloring,
                 j,
@@ -641,6 +643,7 @@ fn color_x86_module<'a>(
                 liveness,
                 base_statement,
                 already_seen,
+                insts_to_add_in_reverse,
             );
             base_statement += program.blocks.at(j as usize).insts.len();
         }
@@ -713,7 +716,12 @@ fn color_x86_block<'a>(
     liveness: &'a bump::Bitset<'a>,
     base_statement: usize,
     already_seen: &'a mut bump::Bitset<'a>,
-) -> (X86Module<'a>, &'a mut bump::Bitset<'a>) {
+    insts_to_add_in_reverse: &'a mut [X86Instruction<'a>],
+) -> (
+    X86Module<'a>,
+    &'a mut bump::Bitset<'a>,
+    &'a mut [X86Instruction<'a>],
+) {
     let block = program.blocks.at(block_id as usize);
     let mut statement_counter = base_statement;
     for i in 0..block.insts.len() {
@@ -721,6 +729,7 @@ fn color_x86_block<'a>(
             X86Instruction::Ret => {
                 let block = colored_program.blocks.at_mut(block_id as usize);
                 already_seen.clear();
+                let mut num_insts = 0;
                 for color in coloring {
                     if let X86Color::Register(pid) = color {
                         if (pid.get_usage()
@@ -729,12 +738,16 @@ fn color_x86_block<'a>(
                             != 0
                             && !already_seen.at(pid.get_pack_and_pos().0 as usize)
                         {
-                            block.insts.push(X86Instruction::Pop(X86Operand::Register(
-                                X86Register::Physical(get_64_bits(*pid)),
-                            )));
+                            insts_to_add_in_reverse[num_insts] = X86Instruction::Pop(
+                                X86Operand::Register(X86Register::Physical(get_64_bits(*pid))),
+                            );
+                            num_insts += 1;
                             already_seen.set(pid.get_pack_and_pos().0 as usize);
                         }
                     }
+                }
+                for inst in insts_to_add_in_reverse[0..num_insts].iter().rev() {
+                    block.insts.push(inst.clone());
                 }
                 block.insts.push(X86Instruction::Ret);
             }
@@ -805,6 +818,7 @@ fn color_x86_block<'a>(
                     .insts
                     .push(X86Instruction::Call(label));
                 already_seen.clear();
+                let mut num_insts = 0;
                 for vid in 0..coloring.len() {
                     let liveness_idx = statement_counter * coloring.len() + vid;
                     if let X86Color::Register(pid) = coloring[vid] {
@@ -815,11 +829,10 @@ fn color_x86_block<'a>(
                                 != 0
                             && !already_seen.at(pid.get_pack_and_pos().0 as usize)
                         {
-                            colored_program.blocks.at_mut(block_id as usize).insts.push(
-                                X86Instruction::Pop(X86Operand::Register(X86Register::Physical(
-                                    get_64_bits(pid),
-                                ))),
+                            insts_to_add_in_reverse[num_insts] = X86Instruction::Pop(
+                                X86Operand::Register(X86Register::Physical(get_64_bits(pid))),
                             );
+                            num_insts += 1;
                             already_seen.set(pid.get_pack_and_pos().0 as usize);
                         } else if liveness.at(liveness_idx)
                             && (pid.get_usage()
@@ -828,26 +841,30 @@ fn color_x86_block<'a>(
                                 != 0
                             && !already_seen.at(pid.get_pack_and_pos().0 as usize)
                         {
-                            colored_program.blocks.at_mut(block_id as usize).insts.push(
-                                X86Instruction::Movsd(
-                                    X86Operand::Register(X86Register::Physical(pid)),
-                                    X86Operand::MemoryOffsetConstant(
-                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
-                                        0,
-                                    ),
+                            insts_to_add_in_reverse[num_insts] = X86Instruction::Add(
+                                X86Operand::Register(X86Register::Physical(
+                                    X86PhysicalRegisterID::RSP,
+                                )),
+                                X86Operand::Immediate(8),
+                            );
+                            insts_to_add_in_reverse[num_insts + 1] = X86Instruction::Movsd(
+                                X86Operand::Register(X86Register::Physical(pid)),
+                                X86Operand::MemoryOffsetConstant(
+                                    X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                    0,
                                 ),
                             );
-                            colored_program.blocks.at_mut(block_id as usize).insts.push(
-                                X86Instruction::Add(
-                                    X86Operand::Register(X86Register::Physical(
-                                        X86PhysicalRegisterID::RSP,
-                                    )),
-                                    X86Operand::Immediate(8),
-                                ),
-                            );
+                            num_insts += 2;
                             already_seen.set(pid.get_pack_and_pos().0 as usize);
                         }
                     }
+                }
+                for inst in insts_to_add_in_reverse[0..num_insts].iter().rev() {
+                    colored_program
+                        .blocks
+                        .at_mut(block_id as usize)
+                        .insts
+                        .push(inst.clone());
                 }
             }
             X86Instruction::Inc(op) => {
@@ -1061,7 +1078,7 @@ fn color_x86_block<'a>(
         }
         statement_counter += 1;
     }
-    (colored_program, already_seen)
+    (colored_program, already_seen, insts_to_add_in_reverse)
 }
 
 fn color_x86_operand<'a>(
