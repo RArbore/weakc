@@ -95,7 +95,16 @@ pub enum X86Instruction<'a> {
     Jnz(&'a [u8]),
     Call(&'a [u8]),
     Ret,
-    Nop,
+    Nop(X86SpecialMarker),
+}
+
+#[derive(Debug, PartialEq, Clone, Copy)]
+pub enum X86SpecialMarker {
+    ActuallyNop,
+    BeginningCall(Option<X86VirtualRegisterID>),
+    EndingCall(Option<X86VirtualRegisterID>),
+    BeginningFunction,
+    EndingFunction,
 }
 
 #[derive(Debug, PartialEq, Clone, Copy)]
@@ -332,7 +341,7 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Jnz(_)
             | X86Instruction::Call(_)
             | X86Instruction::Ret
-            | X86Instruction::Nop => X86VirtualRegisterPack::Zero,
+            | X86Instruction::Nop(_) => X86VirtualRegisterPack::Zero,
         }
     }
 
@@ -376,7 +385,7 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Jnz(_)
             | X86Instruction::Call(_)
             | X86Instruction::Ret
-            | X86Instruction::Nop => {}
+            | X86Instruction::Nop(_) => {}
         }
     }
 }
@@ -446,7 +455,7 @@ impl<'a> fmt::Display for X86Instruction<'a> {
                 str::from_utf8(label).expect("PANIC: Label name not convertable to Rust str.")
             ),
             X86Instruction::Ret => write!(f, "ret"),
-            X86Instruction::Nop => write!(f, "nop"),
+            X86Instruction::Nop(_) => write!(f, "nop"),
         }?;
         Ok(())
     }

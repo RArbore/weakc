@@ -587,6 +587,13 @@ impl<'a> X86GenContext<'a> {
                     ));
                 }
                 ir::MIRInstruction::Call(ret, (_, label), args) => {
+                    self.x86gen_inst(X86Instruction::Nop(X86SpecialMarker::BeginningCall(
+                        if let Some(ret) = ret {
+                            Some(ret.0)
+                        } else {
+                            None
+                        },
+                    )));
                     let mut num_pushed_args = 0;
                     let mut num_fixed_args = 0;
                     let mut num_floating_args = 0;
@@ -694,12 +701,20 @@ impl<'a> X86GenContext<'a> {
                                 X86Operand::Register(self.mir_to_x86_virt_reg(*ret)),
                                 Self::xmm0_operand(),
                             ));
+                            self.x86gen_inst(X86Instruction::Nop(X86SpecialMarker::EndingCall(
+                                Some(ret.0),
+                            )));
                         } else {
                             self.x86gen_inst(X86Instruction::Mov(
                                 X86Operand::Register(self.mir_to_x86_virt_reg(*ret)),
                                 Self::rax_operand(),
                             ));
+                            self.x86gen_inst(X86Instruction::Nop(X86SpecialMarker::EndingCall(
+                                Some(ret.0),
+                            )));
                         }
+                    } else {
+                        self.x86gen_inst(X86Instruction::Nop(X86SpecialMarker::EndingCall(None)));
                     }
                 }
                 ir::MIRInstruction::Return(ret_val) => {
@@ -781,6 +796,7 @@ impl<'a> X86GenContext<'a> {
     }
 
     fn x86gen_function_prologue(&mut self, func: &'a ir::MIRFunction<'a>, label: &'a [u8]) {
+        self.x86gen_inst(X86Instruction::Nop(X86SpecialMarker::BeginningFunction));
         self.x86gen_inst(X86Instruction::Sub(
             Self::rsp_operand(),
             X86Operand::Immediate(func.naive_stack_vars_size() as u64),
@@ -885,5 +901,6 @@ impl<'a> X86GenContext<'a> {
             Self::rsp_operand(),
             X86Operand::Immediate(func.naive_stack_vars_size() as u64),
         ));
+        self.x86gen_inst(X86Instruction::Nop(X86SpecialMarker::EndingFunction));
     }
 }

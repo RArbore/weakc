@@ -594,8 +594,10 @@ fn color_x86_module<'a>(
         colored_program.floats.push(*program.floats.at(i));
     }
     let mut already_seen = bump.create_bitset(X86_NUM_ALLOC_PHYSICAL_REGISTERS);
-    let mut insts_to_add_in_reverse =
-        bump.alloc_slice_filled(&X86Instruction::Nop, X86_NUM_ALLOC_PHYSICAL_REGISTERS);
+    let mut insts_to_add_in_reverse = bump.alloc_slice_filled(
+        &X86Instruction::Nop(X86SpecialMarker::ActuallyNop),
+        X86_NUM_ALLOC_PHYSICAL_REGISTERS,
+    );
     for i in 0..program.func_entries.len() {
         let coloring = colorings.at(i);
         let liveness = liveness_lists.at(i);
@@ -614,24 +616,6 @@ fn color_x86_module<'a>(
                 id: block.id,
                 successors: block.successors,
             });
-        }
-        already_seen.clear();
-        for color in *coloring {
-            let entry_block = colored_program.blocks.at_mut(entry_block as usize);
-            if let X86Color::Register(pid) = color {
-                if (pid.get_usage()
-                    & X86PhysicalRegisterUsageBit::FixedCalleeSaved as X86PhysicalRegisterUsage)
-                    != 0
-                    && !already_seen.at(pid.get_pack_and_pos().0 as usize)
-                {
-                    entry_block
-                        .insts
-                        .push(X86Instruction::Push(X86Operand::Register(
-                            X86Register::Physical(get_64_bits(*pid)),
-                        )));
-                    already_seen.set(pid.get_pack_and_pos().0 as usize);
-                }
-            }
         }
         let mut base_statement = 0;
         for j in entry_block..next_entry_block {
@@ -723,39 +707,199 @@ fn color_x86_block<'a>(
     &'a mut [X86Instruction<'a>],
 ) {
     let block = program.blocks.at(block_id as usize);
-    let mut statement_counter = base_statement;
+    let mut call_statement_idx = base_statement;
     for i in 0..block.insts.len() {
         match block.insts.at(i) {
             X86Instruction::Ret => {
                 let block = colored_program.blocks.at_mut(block_id as usize);
-                already_seen.clear();
-                let mut num_insts = 0;
-                for color in coloring {
-                    if let X86Color::Register(pid) = color {
-                        if (pid.get_usage()
-                            & X86PhysicalRegisterUsageBit::FixedCalleeSaved
-                                as X86PhysicalRegisterUsage)
-                            != 0
-                            && !already_seen.at(pid.get_pack_and_pos().0 as usize)
-                        {
-                            insts_to_add_in_reverse[num_insts] = X86Instruction::Pop(
-                                X86Operand::Register(X86Register::Physical(get_64_bits(*pid))),
+                block.insts.push(X86Instruction::Ret);
+            }
+            X86Instruction::Nop(marker) => match marker {
+                X86SpecialMarker::ActuallyNop => {}
+                X86SpecialMarker::BeginningCall(ret_id) => {
+                    for j in i..block.insts.len() {
+                        if let X86Instruction::Call(_) = block.insts.at(j) {
+                            call_statement_idx = base_statement + j;
+                            break;
+                        }
+                        if j + 1 == block.insts.len() {
+                            println!("{:?}", block);
+                            println!("{:?}", i);
+                            println!("{:?}", block.insts.at(i));
+                            panic!(
+                                "PANIC: Couldn't find x86 call instruction for BeginningCall nop."
                             );
-                            num_insts += 1;
-                            already_seen.set(pid.get_pack_and_pos().0 as usize);
+                        }
+                    }
+                    already_seen.clear();
+                    for vid in 0..coloring.len() {
+                        if let Some(ret_id) = ret_id {
+                            if coloring[vid] == coloring[*ret_id as usize] {
+                                continue;
+                            }
+                        }
+                        let liveness_idx = call_statement_idx * coloring.len() + vid;
+                        if let X86Color::Register(pid) = coloring[vid] {
+                            if liveness.at(liveness_idx)
+                                && (pid.get_usage()
+                                    & X86PhysicalRegisterUsageBit::FixedCallerSaved
+                                        as X86PhysicalRegisterUsage)
+                                    != 0
+                                && !already_seen.at(pid.get_pack_and_pos().0 as usize)
+                            {
+                                colored_program.blocks.at_mut(block_id as usize).insts.push(
+                                    X86Instruction::Push(X86Operand::Register(
+                                        X86Register::Physical(get_64_bits(pid)),
+                                    )),
+                                );
+                                already_seen.set(pid.get_pack_and_pos().0 as usize);
+                                println!(
+                                    "For call at {:?}, we are saving {:?}.",
+                                    call_statement_idx, pid
+                                );
+                            } else if liveness.at(liveness_idx)
+                                && (pid.get_usage()
+                                    & X86PhysicalRegisterUsageBit::FloatingCallerSaved
+                                        as X86PhysicalRegisterUsage)
+                                    != 0
+                                && !already_seen.at(pid.get_pack_and_pos().0 as usize)
+                            {
+                                colored_program.blocks.at_mut(block_id as usize).insts.push(
+                                    X86Instruction::Sub(
+                                        X86Operand::Register(X86Register::Physical(
+                                            X86PhysicalRegisterID::RSP,
+                                        )),
+                                        X86Operand::Immediate(8),
+                                    ),
+                                );
+                                colored_program.blocks.at_mut(block_id as usize).insts.push(
+                                    X86Instruction::Movsd(
+                                        X86Operand::MemoryOffsetConstant(
+                                            X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                            0,
+                                        ),
+                                        X86Operand::Register(X86Register::Physical(pid)),
+                                    ),
+                                );
+                                already_seen.set(pid.get_pack_and_pos().0 as usize);
+                                println!(
+                                    "For call at {:?}, we are saving {:?}.",
+                                    call_statement_idx, pid
+                                );
+                            }
                         }
                     }
                 }
-                for inst in insts_to_add_in_reverse[0..num_insts].iter().rev() {
-                    block.insts.push(inst.clone());
+                X86SpecialMarker::EndingCall(ret_id) => {
+                    already_seen.clear();
+                    let mut num_insts = 0;
+                    for vid in 0..coloring.len() {
+                        if let Some(ret_id) = ret_id {
+                            if coloring[vid] == coloring[*ret_id as usize] {
+                                continue;
+                            }
+                        }
+                        let liveness_idx = call_statement_idx * coloring.len() + vid;
+                        if let X86Color::Register(pid) = coloring[vid] {
+                            if liveness.at(liveness_idx)
+                                && (pid.get_usage()
+                                    & X86PhysicalRegisterUsageBit::FixedCallerSaved
+                                        as X86PhysicalRegisterUsage)
+                                    != 0
+                                && !already_seen.at(pid.get_pack_and_pos().0 as usize)
+                            {
+                                insts_to_add_in_reverse[num_insts] = X86Instruction::Pop(
+                                    X86Operand::Register(X86Register::Physical(get_64_bits(pid))),
+                                );
+                                num_insts += 1;
+                                already_seen.set(pid.get_pack_and_pos().0 as usize);
+                                println!(
+                                    "For call at {:?}, we are reloading {:?}.",
+                                    call_statement_idx, pid
+                                );
+                            } else if liveness.at(liveness_idx)
+                                && (pid.get_usage()
+                                    & X86PhysicalRegisterUsageBit::FloatingCallerSaved
+                                        as X86PhysicalRegisterUsage)
+                                    != 0
+                                && !already_seen.at(pid.get_pack_and_pos().0 as usize)
+                            {
+                                insts_to_add_in_reverse[num_insts] = X86Instruction::Add(
+                                    X86Operand::Register(X86Register::Physical(
+                                        X86PhysicalRegisterID::RSP,
+                                    )),
+                                    X86Operand::Immediate(8),
+                                );
+                                insts_to_add_in_reverse[num_insts + 1] = X86Instruction::Movsd(
+                                    X86Operand::Register(X86Register::Physical(pid)),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
+                                );
+                                num_insts += 2;
+                                already_seen.set(pid.get_pack_and_pos().0 as usize);
+                                println!(
+                                    "For call at {:?}, we are reloading {:?}.",
+                                    call_statement_idx, pid
+                                );
+                            }
+                        }
+                    }
+                    for inst in insts_to_add_in_reverse[0..num_insts].iter().rev() {
+                        colored_program
+                            .blocks
+                            .at_mut(block_id as usize)
+                            .insts
+                            .push(inst.clone());
+                    }
                 }
-                block.insts.push(X86Instruction::Ret);
-            }
-            X86Instruction::Nop => colored_program
-                .blocks
-                .at_mut(block_id as usize)
-                .insts
-                .push(X86Instruction::Nop),
+                X86SpecialMarker::BeginningFunction => {
+                    already_seen.clear();
+                    for color in coloring {
+                        let entry_block = colored_program.blocks.at_mut(block_id as usize);
+                        if let X86Color::Register(pid) = color {
+                            if (pid.get_usage()
+                                & X86PhysicalRegisterUsageBit::FixedCalleeSaved
+                                    as X86PhysicalRegisterUsage)
+                                != 0
+                                && !already_seen.at(pid.get_pack_and_pos().0 as usize)
+                            {
+                                entry_block
+                                    .insts
+                                    .push(X86Instruction::Push(X86Operand::Register(
+                                        X86Register::Physical(get_64_bits(*pid)),
+                                    )));
+                                already_seen.set(pid.get_pack_and_pos().0 as usize);
+                            }
+                        }
+                    }
+                }
+                X86SpecialMarker::EndingFunction => {
+                    let block = colored_program.blocks.at_mut(block_id as usize);
+                    already_seen.clear();
+                    let mut num_insts = 0;
+                    for color in coloring {
+                        if let X86Color::Register(pid) = color {
+                            if (pid.get_usage()
+                                & X86PhysicalRegisterUsageBit::FixedCalleeSaved
+                                    as X86PhysicalRegisterUsage)
+                                != 0
+                                && !already_seen.at(pid.get_pack_and_pos().0 as usize)
+                            {
+                                insts_to_add_in_reverse[num_insts] = X86Instruction::Pop(
+                                    X86Operand::Register(X86Register::Physical(get_64_bits(*pid))),
+                                );
+                                num_insts += 1;
+                                already_seen.set(pid.get_pack_and_pos().0 as usize);
+                            }
+                        }
+                    }
+                    for inst in insts_to_add_in_reverse[0..num_insts].iter().rev() {
+                        block.insts.push(inst.clone());
+                    }
+                }
+            },
             X86Instruction::Jmp(label) => colored_program
                 .blocks
                 .at_mut(block_id as usize)
@@ -767,105 +911,11 @@ fn color_x86_block<'a>(
                 .insts
                 .push(X86Instruction::Jnz(label)),
             X86Instruction::Call(label) => {
-                already_seen.clear();
-                for vid in 0..coloring.len() {
-                    let liveness_idx = statement_counter * coloring.len() + vid;
-                    if let X86Color::Register(pid) = coloring[vid] {
-                        if liveness.at(liveness_idx)
-                            && (pid.get_usage()
-                                & X86PhysicalRegisterUsageBit::FixedCallerSaved
-                                    as X86PhysicalRegisterUsage)
-                                != 0
-                            && !already_seen.at(pid.get_pack_and_pos().0 as usize)
-                        {
-                            colored_program.blocks.at_mut(block_id as usize).insts.push(
-                                X86Instruction::Push(X86Operand::Register(X86Register::Physical(
-                                    get_64_bits(pid),
-                                ))),
-                            );
-                            already_seen.set(pid.get_pack_and_pos().0 as usize);
-                        } else if liveness.at(liveness_idx)
-                            && (pid.get_usage()
-                                & X86PhysicalRegisterUsageBit::FloatingCallerSaved
-                                    as X86PhysicalRegisterUsage)
-                                != 0
-                            && !already_seen.at(pid.get_pack_and_pos().0 as usize)
-                        {
-                            colored_program.blocks.at_mut(block_id as usize).insts.push(
-                                X86Instruction::Sub(
-                                    X86Operand::Register(X86Register::Physical(
-                                        X86PhysicalRegisterID::RSP,
-                                    )),
-                                    X86Operand::Immediate(8),
-                                ),
-                            );
-                            colored_program.blocks.at_mut(block_id as usize).insts.push(
-                                X86Instruction::Movsd(
-                                    X86Operand::MemoryOffsetConstant(
-                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
-                                        0,
-                                    ),
-                                    X86Operand::Register(X86Register::Physical(pid)),
-                                ),
-                            );
-                            already_seen.set(pid.get_pack_and_pos().0 as usize);
-                        }
-                    }
-                }
                 colored_program
                     .blocks
                     .at_mut(block_id as usize)
                     .insts
                     .push(X86Instruction::Call(label));
-                already_seen.clear();
-                let mut num_insts = 0;
-                for vid in 0..coloring.len() {
-                    let liveness_idx = statement_counter * coloring.len() + vid;
-                    if let X86Color::Register(pid) = coloring[vid] {
-                        if liveness.at(liveness_idx)
-                            && (pid.get_usage()
-                                & X86PhysicalRegisterUsageBit::FixedCallerSaved
-                                    as X86PhysicalRegisterUsage)
-                                != 0
-                            && !already_seen.at(pid.get_pack_and_pos().0 as usize)
-                        {
-                            insts_to_add_in_reverse[num_insts] = X86Instruction::Pop(
-                                X86Operand::Register(X86Register::Physical(get_64_bits(pid))),
-                            );
-                            num_insts += 1;
-                            already_seen.set(pid.get_pack_and_pos().0 as usize);
-                        } else if liveness.at(liveness_idx)
-                            && (pid.get_usage()
-                                & X86PhysicalRegisterUsageBit::FloatingCallerSaved
-                                    as X86PhysicalRegisterUsage)
-                                != 0
-                            && !already_seen.at(pid.get_pack_and_pos().0 as usize)
-                        {
-                            insts_to_add_in_reverse[num_insts] = X86Instruction::Add(
-                                X86Operand::Register(X86Register::Physical(
-                                    X86PhysicalRegisterID::RSP,
-                                )),
-                                X86Operand::Immediate(8),
-                            );
-                            insts_to_add_in_reverse[num_insts + 1] = X86Instruction::Movsd(
-                                X86Operand::Register(X86Register::Physical(pid)),
-                                X86Operand::MemoryOffsetConstant(
-                                    X86Register::Physical(X86PhysicalRegisterID::RSP),
-                                    0,
-                                ),
-                            );
-                            num_insts += 2;
-                            already_seen.set(pid.get_pack_and_pos().0 as usize);
-                        }
-                    }
-                }
-                for inst in insts_to_add_in_reverse[0..num_insts].iter().rev() {
-                    colored_program
-                        .blocks
-                        .at_mut(block_id as usize)
-                        .insts
-                        .push(inst.clone());
-                }
             }
             X86Instruction::Inc(op) => {
                 color_inst_arm!(X86Instruction::Inc, op, coloring, block_id, colored_program)
@@ -1076,7 +1126,6 @@ fn color_x86_block<'a>(
                 colored_program
             ),
         }
-        statement_counter += 1;
     }
     (colored_program, already_seen, insts_to_add_in_reverse)
 }
