@@ -536,10 +536,6 @@ impl<'a> X86GenContext<'a> {
                         X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
                         X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
                     ));
-                    self.x86gen_inst(X86Instruction::Lea(
-                        X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
-                        X86Operand::MemoryOffsetConstant(self.mir_to_x86_virt_reg(*offset_reg), 0),
-                    ));
                 }
                 ir::MIRInstruction::Load(dst_reg, src_reg) => match dst_reg.1 {
                     ir::MIRType::Real => {
