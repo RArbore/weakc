@@ -125,7 +125,6 @@ pub fn x86regalloc<'a>(program: &'a X86Module<'a>, bump: &'a bump::BumpAllocator
         );*/
         let coloring =
             color_interference_graph(graph, bump, program.func_entries.at(i).1, vid_types);
-        println!("{:?}", coloring);
         colorings.push(coloring);
         liveness_lists.push(liveness);
     }
@@ -296,11 +295,6 @@ fn build_interference_graph<'a>(
         bump.create_list(),
     );
     let base_block_id = function.at(0).id;
-    println!("{}", core::str::from_utf8(function.at(0).label).unwrap());
-    println!(
-        "Here's the function in post-order: {:?}",
-        post_order_function
-    );
 
     let def_sets = unsafe { bump.alloc_slice_raw(function.len()) };
     let use_sets = unsafe { bump.alloc_slice_raw(function.len()) };
@@ -346,13 +340,6 @@ fn build_interference_graph<'a>(
             }
             in_sets[i].copy(scratch_bitset);
         }
-    }
-
-    for i in 0..function.len() {
-        let block = function.at(i);
-        println!("{}", core::str::from_utf8(block.label).unwrap());
-        println!("In: {:?}", in_sets[i as usize]);
-        println!("Out: {:?}", out_sets[i as usize]);
     }
 
     let graph_bitset =
@@ -427,21 +414,6 @@ fn build_interference_graph<'a>(
             };
         }
         statement_counter += block.insts.len();
-    }
-    println!("Liveness: {:?}", liveness);
-    let mut statement_counter = 0;
-    for i in 0..function.len() {
-        let block = function.at(i);
-        for j in 0..block.insts.len() {
-            println!("At: {}", block.insts.at(j));
-            for vid in 0..num_virtual_registers as usize {
-                if liveness.at(statement_counter * num_virtual_registers as usize + vid) {
-                    println!("Live: {}", vid);
-                }
-            }
-            println!("");
-            statement_counter += 1;
-        }
     }
     (graph_bitset, liveness)
 }
@@ -723,25 +695,10 @@ fn color_x86_block<'a>(
                             break;
                         }
                         if j + 1 == block.insts.len() {
-                            println!("{:?}", block);
-                            println!("{:?}", i);
-                            println!("{:?}", block.insts.at(i));
                             panic!(
                                 "PANIC: Couldn't find x86 call instruction for BeginningCall nop."
                             );
                         }
-                    }
-                    let block = program.blocks.at(block_id as usize);
-                    let inst = block.insts.at(call_statement_idx - base_statement + 1);
-                    if let (
-                        X86Instruction::Mov(X86Operand::Register(X86Register::Virtual(id, _)), _),
-                        Some(ret_id),
-                    ) = (inst, ret_id)
-                    {
-                        println!(
-                            "Here's the VID in the mov: {:?}   Here's the VID it was: {:?}",
-                            id, ret_id
-                        );
                     }
                     already_seen.clear();
                     for vid in 0..coloring.len() {
@@ -765,10 +722,6 @@ fn color_x86_block<'a>(
                                     )),
                                 );
                                 already_seen.set(pid.get_pack_and_pos().0 as usize);
-                                println!(
-                                    "For call at {:?}, we are saving {:?}.",
-                                    call_statement_idx, pid
-                                );
                             } else if liveness.at(liveness_idx)
                                 && (pid.get_usage()
                                     & X86PhysicalRegisterUsageBit::FloatingCallerSaved
@@ -794,10 +747,6 @@ fn color_x86_block<'a>(
                                     ),
                                 );
                                 already_seen.set(pid.get_pack_and_pos().0 as usize);
-                                println!(
-                                    "For call at {:?}, we are saving {:?}.",
-                                    call_statement_idx, pid
-                                );
                             }
                         }
                     }
@@ -825,10 +774,6 @@ fn color_x86_block<'a>(
                                 );
                                 num_insts += 1;
                                 already_seen.set(pid.get_pack_and_pos().0 as usize);
-                                println!(
-                                    "For call at {:?}, we are reloading {:?}.",
-                                    call_statement_idx, pid
-                                );
                             } else if liveness.at(liveness_idx)
                                 && (pid.get_usage()
                                     & X86PhysicalRegisterUsageBit::FloatingCallerSaved
@@ -851,10 +796,6 @@ fn color_x86_block<'a>(
                                 );
                                 num_insts += 2;
                                 already_seen.set(pid.get_pack_and_pos().0 as usize);
-                                println!(
-                                    "For call at {:?}, we are reloading {:?}.",
-                                    call_statement_idx, pid
-                                );
                             }
                         }
                     }
