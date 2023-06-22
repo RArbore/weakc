@@ -731,6 +731,18 @@ fn color_x86_block<'a>(
                             );
                         }
                     }
+                    let block = program.blocks.at(block_id as usize);
+                    let inst = block.insts.at(call_statement_idx - base_statement + 1);
+                    if let (
+                        X86Instruction::Mov(X86Operand::Register(X86Register::Virtual(id, _)), _),
+                        Some(ret_id),
+                    ) = (inst, ret_id)
+                    {
+                        println!(
+                            "Here's the VID in the mov: {:?}   Here's the VID it was: {:?}",
+                            id, ret_id
+                        );
+                    }
                     already_seen.clear();
                     for vid in 0..coloring.len() {
                         if let Some(ret_id) = ret_id {

@@ -381,6 +381,10 @@ impl<'a> X86Instruction<'a> {
             | X86Instruction::Pop(op) => {
                 op.map_virtual_registers(map);
             }
+            X86Instruction::Nop(X86SpecialMarker::BeginningCall(Some(ret_id)))
+            | X86Instruction::Nop(X86SpecialMarker::EndingCall(Some(ret_id))) => {
+                *ret_id = map[*ret_id as usize];
+            }
             X86Instruction::Jmp(_)
             | X86Instruction::Jnz(_)
             | X86Instruction::Call(_)
