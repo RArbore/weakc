@@ -117,6 +117,11 @@ pub const MIR_EXTERNAL_FUNCTION_RT_SHAPED_AS: MIRExternalFunction = (
     ),
 );
 
+pub const MIR_EXTERNAL_FUNCTION_RT_COPY_TENSOR: MIRExternalFunction = (
+    (MIR_EXTERNAL_FUNCTION_ID, b"@rt_copy_tensor"),
+    (&[MIRType::Pointer], Some(MIRType::Pointer)),
+);
+
 pub const MIR_EXTERNAL_FUNCTION_RT_MATMUL: MIRExternalFunction = (
     (MIR_EXTERNAL_FUNCTION_ID, b"@rt_matmul"),
     (

@@ -130,3 +130,17 @@ tensor_t *rt_shaped_as(const tensor_t *a, const tensor_t *b) {
     memcpy(r->elements, a->elements, num_elements_b * sizeof(double));
     return r;
 }
+
+tensor_t *rt_copy_tensor(const tensor_t *a) {
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = a->num_dims;
+    r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
+    size_t num_elements_a = 1;
+    for (uint32_t i = 0; i < a->num_dims; ++i) {
+	r->dim_sizes[i] = a->dim_sizes[i];
+	num_elements_a *= a->dim_sizes[i];
+    }
+    r->elements = malloc(num_elements_a * sizeof(double));
+    memcpy(r->elements, a->elements, num_elements_a * sizeof(double));
+    return r;
+}
