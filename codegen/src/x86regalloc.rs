@@ -494,7 +494,7 @@ const FIXED32_REG_ORDER: [X86PhysicalRegisterID; 16] = [
     X86PhysicalRegisterID::R15D,
 ];
 
-const FIXED64_REG_ORDER: [X86PhysicalRegisterID; 16] = [
+const FIXED64_REG_ORDER: [X86PhysicalRegisterID; 15] = [
     X86PhysicalRegisterID::RAX,
     X86PhysicalRegisterID::RBX,
     X86PhysicalRegisterID::RCX,
@@ -510,7 +510,6 @@ const FIXED64_REG_ORDER: [X86PhysicalRegisterID; 16] = [
     X86PhysicalRegisterID::R12,
     X86PhysicalRegisterID::R13,
     X86PhysicalRegisterID::R14,
-    X86PhysicalRegisterID::R15,
 ];
 
 const FLOAT64_REG_ORDER: [X86PhysicalRegisterID; 16] = [
