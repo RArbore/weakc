@@ -128,9 +128,15 @@ tensor_t *rt_shaped_as(const tensor_t *a, const tensor_t *b) {
     for (uint32_t i = 0; i < a->num_dims; ++i) {
 	num_elements_a *= a->dim_sizes[i];
     }
-    rt_assert(num_elements_a == num_elements_b);
+    rt_assert(num_elements_a == 1 || num_elements_a == num_elements_b);
     r->elements = malloc(num_elements_b * sizeof(double));
-    memcpy(r->elements, a->elements, num_elements_b * sizeof(double));
+    if (num_elements_a == 1) {
+	for (size_t i = 0; i < num_elements_b; ++i) {
+	    r->elements[i] = a->elements[0];
+	}
+    } else {
+	memcpy(r->elements, a->elements, num_elements_b * sizeof(double));
+    }
     return r;
 }
 
@@ -164,6 +170,131 @@ tensor_t *rt_matmul(const tensor_t *a, const tensor_t *b) {
 		r->elements[i * b->dim_sizes[1] + k] += a->elements[i * a->dim_sizes[1] + j] * b->elements[j * b->dim_sizes[1] + k];
 	    }
 	}
+    }
+    return r;
+}
+
+tensor_t *rt_add_tensors(const tensor_t *a, const tensor_t *b) {
+    rt_assert(a->num_dims == b->num_dims);
+    size_t num_elements = 1;
+    for (uint32_t i = 0; i + a->num_dims; ++i) {
+	rt_assert(a->dim_sizes[i] == b->dim_sizes[i]);
+	num_elements *= a->dim_sizes[i];
+    }
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = a->num_dims;
+    r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
+    memcpy(r->dim_sizes, a->dim_sizes, r->num_dims * sizeof(uint32_t));
+    r->elements = malloc(num_elements * sizeof(double));
+    for (size_t i = 0; i < num_elements; ++i) {
+	r->elements[i] = a->elements[i] + b->elements[i];
+    }
+    return r;
+}
+
+tensor_t *rt_subtract_tensors(const tensor_t *a, const tensor_t *b) {
+    rt_assert(a->num_dims == b->num_dims);
+    size_t num_elements = 1;
+    for (uint32_t i = 0; i + a->num_dims; ++i) {
+	rt_assert(a->dim_sizes[i] == b->dim_sizes[i]);
+	num_elements *= a->dim_sizes[i];
+    }
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = a->num_dims;
+    r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
+    memcpy(r->dim_sizes, a->dim_sizes, r->num_dims * sizeof(uint32_t));
+    r->elements = malloc(num_elements * sizeof(double));
+    for (size_t i = 0; i < num_elements; ++i) {
+	r->elements[i] = a->elements[i] - b->elements[i];
+    }
+    return r;
+}
+
+tensor_t *rt_multiply_tensors(const tensor_t *a, const tensor_t *b) {
+    rt_assert(a->num_dims == b->num_dims);
+    size_t num_elements = 1;
+    for (uint32_t i = 0; i + a->num_dims; ++i) {
+	rt_assert(a->dim_sizes[i] == b->dim_sizes[i]);
+	num_elements *= a->dim_sizes[i];
+    }
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = a->num_dims;
+    r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
+    memcpy(r->dim_sizes, a->dim_sizes, r->num_dims * sizeof(uint32_t));
+    r->elements = malloc(num_elements * sizeof(double));
+    for (size_t i = 0; i < num_elements; ++i) {
+	r->elements[i] = a->elements[i] * b->elements[i];
+    }
+    return r;
+}
+
+tensor_t *rt_divide_tensors(const tensor_t *a, const tensor_t *b) {
+    rt_assert(a->num_dims == b->num_dims);
+    size_t num_elements = 1;
+    for (uint32_t i = 0; i + a->num_dims; ++i) {
+	rt_assert(a->dim_sizes[i] == b->dim_sizes[i]);
+	num_elements *= a->dim_sizes[i];
+    }
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = a->num_dims;
+    r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
+    memcpy(r->dim_sizes, a->dim_sizes, r->num_dims * sizeof(uint32_t));
+    r->elements = malloc(num_elements * sizeof(double));
+    for (size_t i = 0; i < num_elements; ++i) {
+	r->elements[i] = a->elements[i] / b->elements[i];
+    }
+    return r;
+}
+
+tensor_t *rt_power_tensors(const tensor_t *a, const tensor_t *b) {
+    rt_assert(a->num_dims == b->num_dims);
+    size_t num_elements = 1;
+    for (uint32_t i = 0; i + a->num_dims; ++i) {
+	rt_assert(a->dim_sizes[i] == b->dim_sizes[i]);
+	num_elements *= a->dim_sizes[i];
+    }
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = a->num_dims;
+    r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
+    memcpy(r->dim_sizes, a->dim_sizes, r->num_dims * sizeof(uint32_t));
+    r->elements = malloc(num_elements * sizeof(double));
+    for (size_t i = 0; i < num_elements; ++i) {
+	r->elements[i] = pow(a->elements[i], b->elements[i]);
+    }
+    return r;
+}
+
+int rt_not_equals_tensors(const tensor_t *a, const tensor_t *b) {
+    if (a->num_dims != b->num_dims) {
+	return 1;
+    }
+    size_t num_elements = 1;
+    for (uint32_t i = 0; i < a->num_dims; ++i) {
+	if (a->dim_sizes[i] != b->dim_sizes[i]) {
+	    return 1;
+	}
+	num_elements *= a->dim_sizes[i];
+    }
+    for (size_t i = 0; i < num_elements; ++i) {
+	if (a->elements[i] != b->elements[i]) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+
+int rt_equals_equals_tensors(const tensor_t *a, const tensor_t *b) {
+    return !rt_not_equals_tensors(a, b);
+}
+
+tensor_t *rt_shape_of_tensor(const tensor_t *a) {
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = 1;
+    r->dim_sizes = malloc(sizeof(uint32_t));
+    r->dim_sizes[0] = a->num_dims;
+    r->elements = malloc(a->num_dims * sizeof(double));
+    for (uint32_t i = 0; i < a->num_dims; ++i) {
+	r->elements[i] = (double) a->dim_sizes[i];
     }
     return r;
 }
