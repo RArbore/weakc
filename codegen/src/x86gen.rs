@@ -281,9 +281,10 @@ impl<'a> X86GenContext<'a> {
                                 X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
                                 X86Operand::Register(self.mir_to_x86_virt_reg(*src_reg)),
                             ));
-                            self.x86gen_inst(X86Instruction::Not(X86Operand::Register(
-                                self.mir_to_x86_virt_reg(*dst_reg),
-                            )));
+                            self.x86gen_inst(X86Instruction::Sub(
+                                X86Operand::Register(self.mir_to_x86_virt_reg(*dst_reg)),
+                                X86Operand::Immediate(1),
+                            ));
                         }
                         ir::MIRUnaryOp::Negate => match dst_reg.1 {
                             ir::MIRType::Real => {
