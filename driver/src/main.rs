@@ -148,8 +148,9 @@ fn main() {
                 let bump = bump::BumpAllocator::new();
                 let tokens = parse::lex(&program, &bump)
                     .expect("PANIC: Something went wrong during lexing.");
-                let (ast, _) = parse::parse_program(&tokens, &bump)
+                let (ast, rest) = parse::parse_program(&tokens, &bump)
                     .expect("PANIC: Something went wrong during parsing.");
+                assert!(rest.len() == 0, "PANIC: Couldn't parse all tokens.");
                 let typed_program = semant::typecheck_program(ast, &bump)
                     .expect("PANIC: Something went wrong during typechecking.");
                 let hir_program = ir::hirgen(&typed_program, &bump);
