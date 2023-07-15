@@ -12,7 +12,6 @@
  * along with weakc. If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <assert.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -32,7 +31,11 @@ void rt_memcpy(char *restrict dst, const char *restrict src, size_t size) {
 }
 
 void rt_assert(int cond) {
-    assert(cond);
+    if (!cond) {
+	printf("ASSERT FAIL\n");
+	__builtin_trap();
+	exit(1);
+    }
 }
 
 void *rt_malloc(size_t size) {
@@ -103,7 +106,7 @@ void *rt_line() {
     char *line = NULL;
     size_t size;
     ssize_t code = getline(&line, &size, stdin);
-    assert(code != -1);
+    rt_assert(code != -1);
     return line;
 }
 
@@ -113,7 +116,7 @@ double rt_power_reals(double a, double b) {
 
 tensor_t *rt_shaped_as(const tensor_t *a, const tensor_t *b) {
     tensor_t *r = malloc(sizeof(tensor_t));
-    assert(b->num_dims == 1);
+    rt_assert(b->num_dims == 1);
     r->num_dims = b->dim_sizes[0];
     r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
     size_t num_elements_b = 1;
@@ -123,9 +126,9 @@ tensor_t *rt_shaped_as(const tensor_t *a, const tensor_t *b) {
     }
     size_t num_elements_a = 1;
     for (uint32_t i = 0; i < a->num_dims; ++i) {
-	num_elements_b *= a->dim_sizes[i];
+	num_elements_a *= a->dim_sizes[i];
     }
-    assert(num_elements_a == num_elements_b);
+    rt_assert(num_elements_a == num_elements_b);
     r->elements = malloc(num_elements_b * sizeof(double));
     memcpy(r->elements, a->elements, num_elements_b * sizeof(double));
     return r;
@@ -142,5 +145,25 @@ tensor_t *rt_copy_tensor(const tensor_t *a) {
     }
     r->elements = malloc(num_elements_a * sizeof(double));
     memcpy(r->elements, a->elements, num_elements_a * sizeof(double));
+    return r;
+}
+
+tensor_t *rt_matmul(const tensor_t *a, const tensor_t *b) {
+    rt_assert(a->num_dims == 2);
+    rt_assert(b->num_dims == 2);
+    rt_assert(a->dim_sizes[1] == b->dim_sizes[0]);
+    tensor_t *r = malloc(sizeof(tensor_t));
+    r->num_dims = 2;
+    r->dim_sizes = malloc(2 * sizeof(uint32_t));
+    r->dim_sizes[0] = a->dim_sizes[0];
+    r->dim_sizes[1] = b->dim_sizes[1];
+    r->elements = calloc(a->dim_sizes[0] * b->dim_sizes[1], sizeof(double));
+    for (uint32_t i = 0; i < a->dim_sizes[0]; ++i) {
+	for (uint32_t j = 0; j < a->dim_sizes[1]; ++j) {
+	    for (uint32_t k = 0; k < b->dim_sizes[1]; ++k) {
+		r->elements[i * b->dim_sizes[1] + k] += a->elements[i * a->dim_sizes[1] + j] * b->elements[j * b->dim_sizes[1] + k];
+	    }
+	}
+    }
     return r;
 }
