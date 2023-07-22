@@ -24,15 +24,6 @@ typedef struct tensor {
     double *elements;
 } tensor_t;
 
-void rt_memcpy(char *restrict dst, const char *restrict src, size_t size) {
-#ifdef RT_TRACE
-    printf("%s\n", __FUNCTION__);
-#endif
-    for (size_t i = 0; i < size; ++i) {
-	dst[i] = src[i];
-    }
-}
-
 void rt_assert(int cond) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
@@ -41,6 +32,17 @@ void rt_assert(int cond) {
 	printf("ASSERT FAIL\n");
 	__builtin_trap();
 	exit(1);
+    }
+}
+
+void rt_memcpy(char *restrict dst, const char *restrict src, size_t size) {
+#ifdef RT_TRACE
+    printf("%s\n", __FUNCTION__);
+#endif
+    rt_assert(dst != NULL);
+    rt_assert(src != NULL);
+    for (size_t i = 0; i < size; ++i) {
+	dst[i] = src[i];
     }
 }
 
@@ -70,6 +72,7 @@ void rt_print_string(const char *val) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(val != NULL);
     printf("%s\n", val);
 }
 
@@ -112,6 +115,7 @@ void rt_print_tensor(const tensor_t *val) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(val != NULL);
     printf("[");
     size_t total_size = 1;
     for (unsigned i = 0; i < val->num_dims; ++i) {
@@ -160,6 +164,8 @@ tensor_t *rt_shaped_as(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     tensor_t *r = malloc(sizeof(tensor_t));
     rt_assert(b->num_dims == 1);
     r->num_dims = b->dim_sizes[0];
@@ -190,6 +196,7 @@ tensor_t *rt_copy_tensor(const tensor_t *a) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
     tensor_t *r = malloc(sizeof(tensor_t));
     r->num_dims = a->num_dims;
     r->dim_sizes = malloc(r->num_dims * sizeof(uint32_t));
@@ -207,6 +214,8 @@ tensor_t *rt_matmul(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     rt_assert(a->num_dims == 2);
     rt_assert(b->num_dims == 2);
     rt_assert(a->dim_sizes[1] == b->dim_sizes[0]);
@@ -230,6 +239,8 @@ tensor_t *rt_add_tensors(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     rt_assert(a->num_dims == b->num_dims);
     size_t num_elements = 1;
     for (uint32_t i = 0; i + a->num_dims; ++i) {
@@ -251,6 +262,8 @@ tensor_t *rt_subtract_tensors(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     rt_assert(a->num_dims == b->num_dims);
     size_t num_elements = 1;
     for (uint32_t i = 0; i + a->num_dims; ++i) {
@@ -269,6 +282,11 @@ tensor_t *rt_subtract_tensors(const tensor_t *a, const tensor_t *b) {
 }
 
 tensor_t *rt_multiply_tensors(const tensor_t *a, const tensor_t *b) {
+#ifdef RT_TRACE
+    printf("%s\n", __FUNCTION__);
+#endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     rt_assert(a->num_dims == b->num_dims);
     size_t num_elements = 1;
     for (uint32_t i = 0; i + a->num_dims; ++i) {
@@ -290,6 +308,8 @@ tensor_t *rt_divide_tensors(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     rt_assert(a->num_dims == b->num_dims);
     size_t num_elements = 1;
     for (uint32_t i = 0; i + a->num_dims; ++i) {
@@ -311,6 +331,8 @@ tensor_t *rt_power_tensors(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     rt_assert(a->num_dims == b->num_dims);
     size_t num_elements = 1;
     for (uint32_t i = 0; i + a->num_dims; ++i) {
@@ -332,6 +354,8 @@ int rt_not_equals_tensors(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     if (a->num_dims != b->num_dims) {
 	return 1;
     }
@@ -354,6 +378,8 @@ int rt_equals_equals_tensors(const tensor_t *a, const tensor_t *b) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
+    rt_assert(b != NULL);
     return !rt_not_equals_tensors(a, b);
 }
 
@@ -361,6 +387,7 @@ tensor_t *rt_shape_of_tensor(const tensor_t *a) {
 #ifdef RT_TRACE
     printf("%s\n", __FUNCTION__);
 #endif
+    rt_assert(a != NULL);
     tensor_t *r = malloc(sizeof(tensor_t));
     r->num_dims = 1;
     r->dim_sizes = malloc(sizeof(uint32_t));

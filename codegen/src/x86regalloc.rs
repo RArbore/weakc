@@ -475,8 +475,7 @@ fn color_interference_graph<'a>(
     colors
 }
 
-const FIXED32_REG_ORDER: [X86PhysicalRegisterID; 16] = [
-    X86PhysicalRegisterID::EAX,
+const FIXED32_REG_ORDER: [X86PhysicalRegisterID; 14] = [
     X86PhysicalRegisterID::EBX,
     X86PhysicalRegisterID::ECX,
     X86PhysicalRegisterID::EDX,
@@ -491,11 +490,9 @@ const FIXED32_REG_ORDER: [X86PhysicalRegisterID; 16] = [
     X86PhysicalRegisterID::R12D,
     X86PhysicalRegisterID::R13D,
     X86PhysicalRegisterID::R14D,
-    X86PhysicalRegisterID::R15D,
 ];
 
-const FIXED64_REG_ORDER: [X86PhysicalRegisterID; 15] = [
-    X86PhysicalRegisterID::RAX,
+const FIXED64_REG_ORDER: [X86PhysicalRegisterID; 14] = [
     X86PhysicalRegisterID::RBX,
     X86PhysicalRegisterID::RCX,
     X86PhysicalRegisterID::RDX,
