@@ -594,6 +594,39 @@ impl<'a> X86GenContext<'a> {
                     let mut num_pushed_args = 0;
                     let mut num_fixed_args = 0;
                     let mut num_floating_args = 0;
+                    let mut last_fixed_reg_arg = 0;
+                    let mut last_floating_reg_arg = 0;
+                    for i in 0..args.len() {
+                        let mir_reg = *args.at(i);
+                        if mir_reg.1 == ir::MIRType::Real && num_floating_args < 8 {
+                            num_floating_args += 1;
+                            last_floating_reg_arg = i;
+                        } else if num_fixed_args < 6 {
+                            num_fixed_args += 1;
+                            last_fixed_reg_arg = i;
+                        }
+                    }
+                    for i in (0..args.len()).rev() {
+                        let mir_reg = *args.at(i);
+                        let virt_reg = self.mir_to_x86_virt_reg(mir_reg);
+                        if mir_reg.1 == ir::MIRType::Real && i <= last_floating_reg_arg {
+                            self.x86gen_inst(X86Instruction::Sub(
+                                Self::rsp_operand(),
+                                X86Operand::Immediate(8),
+                            ));
+                            self.x86gen_inst(X86Instruction::Movsd(
+                                X86Operand::MemoryOffsetConstant(
+                                    X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                    0,
+                                ),
+                                X86Operand::Register(virt_reg),
+                            ));
+                        } else if i <= last_fixed_reg_arg {
+                            self.x86gen_inst(X86Instruction::Push(X86Operand::Register(virt_reg)));
+                        }
+                    }
+                    num_fixed_args = 0;
+                    num_floating_args = 0;
                     for i in 0..args.len() {
                         let mir_reg = *args.at(i);
                         let virt_reg = self.mir_to_x86_virt_reg(mir_reg);
@@ -601,42 +634,64 @@ impl<'a> X86GenContext<'a> {
                             match num_floating_args {
                                 0 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm0_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 1 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm1_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 2 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm2_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 3 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm3_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 4 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm4_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 5 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm5_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 6 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm6_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 7 => self.x86gen_inst(X86Instruction::Movsd(
                                     Self::xmm7_operand(),
-                                    X86Operand::Register(virt_reg),
+                                    X86Operand::MemoryOffsetConstant(
+                                        X86Register::Physical(X86PhysicalRegisterID::RSP),
+                                        0,
+                                    ),
                                 )),
                                 _ => {
                                     num_pushed_args += 1;
                                     self.x86gen_inst(X86Instruction::Sub(
-                                        X86Operand::Register(X86Register::Physical(
-                                            X86PhysicalRegisterID::RSP,
-                                        )),
+                                        Self::rsp_operand(),
                                         X86Operand::Immediate(8),
                                     ));
                                     self.x86gen_inst(X86Instruction::Movsd(
@@ -648,33 +703,21 @@ impl<'a> X86GenContext<'a> {
                                     ));
                                 }
                             }
+                            if num_floating_args < 8 {
+                                self.x86gen_inst(X86Instruction::Add(
+                                    Self::rsp_operand(),
+                                    X86Operand::Immediate(8),
+                                ));
+                            }
                             num_floating_args += 1;
                         } else {
                             match num_fixed_args {
-                                0 => self.x86gen_inst(X86Instruction::Mov(
-                                    Self::rdi_operand(),
-                                    X86Operand::Register(virt_reg),
-                                )),
-                                1 => self.x86gen_inst(X86Instruction::Mov(
-                                    Self::rsi_operand(),
-                                    X86Operand::Register(virt_reg),
-                                )),
-                                2 => self.x86gen_inst(X86Instruction::Mov(
-                                    Self::rdx_operand(),
-                                    X86Operand::Register(virt_reg),
-                                )),
-                                3 => self.x86gen_inst(X86Instruction::Mov(
-                                    Self::rcx_operand(),
-                                    X86Operand::Register(virt_reg),
-                                )),
-                                4 => self.x86gen_inst(X86Instruction::Mov(
-                                    Self::r8_operand(),
-                                    X86Operand::Register(virt_reg),
-                                )),
-                                5 => self.x86gen_inst(X86Instruction::Mov(
-                                    Self::r9_operand(),
-                                    X86Operand::Register(virt_reg),
-                                )),
+                                0 => self.x86gen_inst(X86Instruction::Pop(Self::rdi_operand())),
+                                1 => self.x86gen_inst(X86Instruction::Pop(Self::rsi_operand())),
+                                2 => self.x86gen_inst(X86Instruction::Pop(Self::rdx_operand())),
+                                3 => self.x86gen_inst(X86Instruction::Pop(Self::rcx_operand())),
+                                4 => self.x86gen_inst(X86Instruction::Pop(Self::r8_operand())),
+                                5 => self.x86gen_inst(X86Instruction::Pop(Self::r9_operand())),
                                 _ => {
                                     num_pushed_args += 1;
                                     self.x86gen_inst(X86Instruction::Push(X86Operand::Register(
