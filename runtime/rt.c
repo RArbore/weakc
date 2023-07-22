@@ -169,6 +169,7 @@ tensor_t *rt_shaped_as(const tensor_t *a, const tensor_t *b) {
 	r->dim_sizes[i] = (uint32_t) b->elements[i];
 	num_elements_b *= r->dim_sizes[i];
     }
+    rt_assert(num_elements_b > 0);
     size_t num_elements_a = 1;
     for (uint32_t i = 0; i < a->num_dims; ++i) {
 	num_elements_a *= a->dim_sizes[i];
